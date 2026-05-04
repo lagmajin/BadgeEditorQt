@@ -19,8 +19,8 @@
 #include <QDragEnterEvent>
 #include <QDropEvent>
 #include <QPushButton>
-#include <ads/DockManager.h>
-#include <ads/DockWidget.h>
+#include <DockManager.h>
+#include <DockWidget.h>
 #include <QFileInfo>
 #include <cmath>
 
