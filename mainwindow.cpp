@@ -185,6 +185,9 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     layoutForm->addRow(m_chkLandscape);
     inspLayout->addWidget(layoutGroup);
 
+    connect(m_comboPaperSize, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this]{ if (!m_isDesigner) setupLayoutMode(); });
+    connect(m_chkLandscape, &QCheckBox::toggled, this, [this]{ if (!m_isDesigner) setupLayoutMode(); });
+
     inspLayout->addStretch();
     scroll->setWidget(m_inspector);
 

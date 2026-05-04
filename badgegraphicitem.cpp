@@ -8,27 +8,30 @@ BadgeGraphicItem::BadgeGraphicItem(const BadgeItem& badge, QGraphicsItem* parent
     : QGraphicsObject(parent), m_badge(badge) {
     setFlags(ItemIsMovable | ItemIsSelectable | ItemSendsGeometryChanges);
     setAcceptHoverEvents(true);
+    setTransformOriginPoint(boundingRect().center());
     loadImage();
 }
 
 QRectF BadgeGraphicItem::boundingRect() const {
     const double mmToPx = 96.0 / 25.4;
-    return QRectF(0, 0, m_badge.widthMm * mmToPx, m_badge.heightMm * mmToPx);
+    double pw = m_badge.widthMm * mmToPx;
+    double ph = m_badge.heightMm * mmToPx;
+    double margin = m_badge.isSelected ? 3.0 : 2.0;
+    return QRectF(-margin, -margin, pw + margin * 2, ph + margin * 2);
 }
 
 void BadgeGraphicItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*, QWidget*) {
-    QRectF r = boundingRect();
+    double mmToPx = 96.0 / 25.4;
+    double pw = m_badge.widthMm * mmToPx;
+    double ph = m_badge.heightMm * mmToPx;
+    double margin = m_badge.isSelected ? 3.0 : 2.0;
+    QRectF r(margin, margin, pw, ph);
     renderCore(painter, r);
     
-    if (m_badge.isSelected) {
-        painter->setPen(QPen(Qt::red, 2));
-        painter->setBrush(Qt::NoBrush);
-        painter->drawRect(r.adjusted(-1, -1, 1, 1));
-    } else {
-        painter->setPen(QPen(Qt::black, 1));
-        painter->setBrush(Qt::NoBrush);
-        painter->drawRect(r);
-    }
+    // Border
+    painter->setPen(QPen(m_badge.isSelected ? Qt::red : Qt::black, m_badge.isSelected ? 2 : 1));
+    painter->setBrush(Qt::NoBrush);
+    painter->drawRect(r);
 }
 
 void BadgeGraphicItem::renderCore(QPainter* painter, const QRectF& r) {
@@ -79,9 +82,10 @@ void BadgeGraphicItem::applyColorCorrection() {
 }
 
 void BadgeGraphicItem::syncFromBadge() {
+    prepareGeometryChange();
+    setTransformOriginPoint(boundingRect().center());
     setPos(m_badge.xMm * 96.0 / 25.4, m_badge.yMm * 96.0 / 25.4);
     setRotation(m_badge.rotation);
-    prepareGeometryChange();
     update();
 }
 
