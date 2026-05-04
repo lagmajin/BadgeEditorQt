@@ -3,6 +3,8 @@
 #include <QWheelEvent>
 #include <QPainter>
 #include <QRandomGenerator>
+#include <QImageReader>
+#include <QSet>
 #include <cmath>
 
 DesignerWidget::DesignerWidget(QWidget* parent) : QGraphicsView(parent) {
@@ -10,6 +12,7 @@ DesignerWidget::DesignerWidget(QWidget* parent) : QGraphicsView(parent) {
     setScene(m_scene);
     setRenderHints(QPainter::Antialiasing | QPainter::SmoothPixmapTransform);
     setDragMode(QGraphicsView::RubberBandDrag);
+    setAcceptDrops(true);
     setTransformationAnchor(QGraphicsView::AnchorUnderMouse);
     setViewportUpdateMode(QGraphicsView::FullViewportUpdate);
     setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
@@ -242,11 +245,21 @@ void DesignerWidget::dragEnterEvent(QDragEnterEvent* event) {
     if (event->mimeData()->hasUrls()) event->acceptProposedAction();
 }
 
+static bool isImageFile(const QString& path) {
+    static const QSet<QString> formats = []{
+        QSet<QString> s;
+        for (const auto& fmt : QImageReader::supportedImageFormats())
+            s.insert(QString::fromUtf8(fmt).toLower());
+        return s;
+    }();
+    QString ext = QFileInfo(path).suffix().toLower();
+    return !ext.isEmpty() && formats.contains(ext);
+}
+
 void DesignerWidget::dropEvent(QDropEvent* event) {
     for (const auto& url : event->mimeData()->urls()) {
         QString path = url.toLocalFile();
-        QString ext = QFileInfo(path).suffix().toLower();
-        if (ext == "png" || ext == "jpg" || ext == "jpeg" || ext == "bmp") {
+        if (isImageFile(path)) {
             BadgeItem b; b.imagePath = path;
             b.label = QFileInfo(path).baseName();
             addBadge(b);

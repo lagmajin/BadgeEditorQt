@@ -368,7 +368,7 @@ void MainWindow::onInspectorChanged() {
 
 void MainWindow::onSetImage() {
     if (m_selected.isEmpty()) return;
-    QString path = QFileDialog::getOpenFileName(this, "画像を選択", QString(), "画像 (*.png *.jpg *.bmp)");
+    QString path = QFileDialog::getOpenFileName(this, "画像を選択", QString(), "すべての画像 (*.png *.jpg *.jpeg *.bmp *.gif *.webp *.tiff *.tif *.svg *.ico);;PNG (*.png);;JPEG (*.jpg *.jpeg)");
     if (path.isEmpty()) return;
     m_selected.first()->badge().imagePath = path;
     m_selected.first()->applyColorCorrection();
