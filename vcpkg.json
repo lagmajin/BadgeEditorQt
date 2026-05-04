@@ -2,6 +2,7 @@
   "name": "badge-editor-qt",
   "version": "1.0.0",
   "dependencies": [
-    "qtbase"
+    "qtbase",
+    "qt-advanced-docking-system"
   ]
 }

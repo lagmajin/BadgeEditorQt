@@ -19,6 +19,8 @@
 #include <QDragEnterEvent>
 #include <QDropEvent>
 #include <QPushButton>
+#include <DockManager.h>
+#include <DockWidget.h>
 #include <QFileInfo>
 #include <cmath>
 
@@ -186,13 +188,22 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     inspLayout->addStretch();
     scroll->setWidget(m_inspector);
 
-    // --- Splitter ---
-    m_splitter = new QSplitter(Qt::Horizontal);
-    m_splitter->addWidget(m_stack);
-    m_splitter->addWidget(scroll);
-    m_splitter->setStretchFactor(0, 3);
-    m_splitter->setStretchFactor(1, 1);
-    setCentralWidget(m_splitter);
+    // --- Docking System ---
+    ads::CDockManager::setConfigFlag(ads::CDockManager::OpaqueSplitterResize, true);
+    ads::CDockManager::setConfigFlag(ads::CDockManager::XmlCompressionEnabled, false);
+    ads::CDockManager::setConfigFlag(ads::CDockManager::FocusHighlighting, true);
+    m_dockManager = new ads::CDockManager(this);
+
+    m_workspaceDock = new ads::CDockWidget("ワークスペース");
+    m_workspaceDock->setWidget(m_stack);
+    m_workspaceDock->setFeature(ads::CDockWidget::DockWidgetClosable, false);
+
+    m_inspectorDock = new ads::CDockWidget("インスペクター");
+    m_inspectorDock->setWidget(scroll);
+    m_inspectorDock->setMinimumSizeHintMode(ads::CDockWidget::MinimumSizeHintFromContent);
+
+    auto* area = m_dockManager->setCentralWidget(m_workspaceDock);
+    m_dockManager->addDockWidget(ads::RightDockWidgetArea, m_inspectorDock, area);
 
     applyTheme(true);
     onModeChanged(true);

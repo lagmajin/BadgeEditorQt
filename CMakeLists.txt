@@ -8,6 +8,7 @@ set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
 find_package(Qt6 REQUIRED COMPONENTS Widgets Core)
+find_package(qtadvanceddocking REQUIRED)
 
 set(SOURCES
     main.cpp
@@ -36,6 +37,6 @@ set(HEADERS
 
 add_executable(BadgeEditorQt ${SOURCES} ${HEADERS})
 
-target_link_libraries(BadgeEditorQt PRIVATE Qt6::Widgets Qt6::Core)
+target_link_libraries(BadgeEditorQt PRIVATE Qt6::Widgets Qt6::Core qtadvanceddocking)
 
 target_include_directories(BadgeEditorQt PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
