@@ -6,10 +6,15 @@
 #include <QGraphicsEllipseItem>
 #include <QGraphicsItemGroup>
 #include <QList>
+#include <QFileInfo>
+#include <QDragEnterEvent>
+#include <QDropEvent>
+#include <QMimeData>
 #include "badgeitem.h"
 #include "badgegraphicitem.h"
 #include "guideitem.h"
 #include "lightingeffect.h"
+#include "imageprocessor.h"
 
 class DesignerWidget : public QGraphicsView {
     Q_OBJECT
@@ -51,6 +56,9 @@ protected:
     void wheelEvent(QWheelEvent* event) override;
     void mousePressEvent(QMouseEvent* event) override;
     void drawBackground(QPainter* painter, const QRectF& rect) override;
+    void drawForeground(QPainter* painter, const QRectF& rect) override;
+    void dragEnterEvent(QDragEnterEvent* event) override;
+    void dropEvent(QDropEvent* event) override;
 
 private:
     QGraphicsScene* m_scene;

@@ -16,14 +16,9 @@ DesignerWidget::DesignerWidget(QWidget* parent) : QGraphicsView(parent) {
     setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
     setBackgroundBrush(Qt::lightGray);
 
-    // Guide circles
+    // Guide circles (drawn in drawForeground, not as scene items)
     m_guideBleed = new GuideItem;
-    m_guideBleed->setStyle(QColor(255, 0, 0), 1.5, {4, 2});
-    m_scene->addItem(m_guideBleed);
-
     m_guideVisible = new GuideItem;
-    m_guideVisible->setStyle(QColor(0, 255, 0), 2.0, {});
-    m_scene->addItem(m_guideVisible);
 
     // Lighting effect
     m_lighting = new LightingEffect(this);
@@ -74,12 +69,7 @@ BadgeGraphicItem* DesignerWidget::selectedGraphic() const {
 
 void DesignerWidget::updateGuides(double badgeSizeMm) {
     m_badgeSizeMm = badgeSizeMm;
-    const double mmToPx = 96.0 / 25.4;
-    double finishPx = badgeSizeMm * mmToPx;
-    double bleedPx = (badgeSizeMm + 3) * mmToPx;
-    double visiblePx = std::max(0.0, (badgeSizeMm - 4)) * mmToPx;
-    m_guideBleed->update(bleedPx / 2, m_guideBleed->isVisible());
-    m_guideVisible->update(visiblePx / 2, m_guideVisible->isVisible());
+    viewport()->update(); // trigger repaint of foreground
 }
 
 void DesignerWidget::setGuidesVisible(bool b) {
@@ -201,15 +191,64 @@ void DesignerWidget::mousePressEvent(QMouseEvent* event) {
 }
 
 void DesignerWidget::drawBackground(QPainter* painter, const QRectF& rect) {
-    // Alpha checkerboard
     const int tileSize = 16;
     QColor c1(255, 255, 255);
     QColor c2(191, 191, 191);
-    painter->fillRect(rect, c1);
-    for (int y = int(rect.top() / tileSize) * tileSize; y < rect.bottom(); y += tileSize) {
-        for (int x = int(rect.left() / tileSize) * tileSize; x < rect.right(); x += tileSize) {
-            if ((x / tileSize + y / tileSize) % 2 == 1)
-                painter->fillRect(x, y, tileSize, tileSize, c2);
+
+    int left = int(rect.left()) - ((int(rect.left()) % tileSize + tileSize) % tileSize);
+    int top = int(rect.top()) - ((int(rect.top()) % tileSize + tileSize) % tileSize);
+
+    for (int y = top; y < int(rect.bottom()); y += tileSize) {
+        for (int x = left; x < int(rect.right()); x += tileSize) {
+            QColor c = ((x / tileSize + y / tileSize) & 1) ? c2 : c1;
+            painter->fillRect(QRect(x, y, tileSize, tileSize), c);
+        }
+    }
+}
+
+void DesignerWidget::drawForeground(QPainter* painter, const QRectF& rect) {
+    Q_UNUSED(rect);
+    // Draw guides at scene center - they follow pan/zoom automatically
+    const double mmToPx = 96.0 / 25.4;
+    double finishPx = m_badgeSizeMm * mmToPx;
+    double bleedPx = (m_badgeSizeMm + 3) * mmToPx;
+    double visiblePx = std::max(0.0, (m_badgeSizeMm - 4)) * mmToPx;
+
+    QPointF center = mapToScene(viewport()->rect().center());
+    double cx = center.x(), cy = center.y();
+
+    // Bleed area (red dashed)
+    if (m_guideBleed->isVisible()) {
+        QPen pen(QColor(255, 0, 0), 1.5);
+        pen.setDashPattern({4, 2});
+        painter->setPen(pen);
+        painter->setBrush(Qt::NoBrush);
+        double rb = bleedPx / 2;
+        painter->drawEllipse(QPointF(cx, cy), rb, rb);
+    }
+
+    // Visible area (green solid)
+    if (m_guideVisible->isVisible()) {
+        QPen pen(QColor(0, 255, 0), 2.0);
+        painter->setPen(pen);
+        painter->setBrush(Qt::NoBrush);
+        double rv = visiblePx / 2;
+        painter->drawEllipse(QPointF(cx, cy), rv, rv);
+    }
+}
+
+void DesignerWidget::dragEnterEvent(QDragEnterEvent* event) {
+    if (event->mimeData()->hasUrls()) event->acceptProposedAction();
+}
+
+void DesignerWidget::dropEvent(QDropEvent* event) {
+    for (const auto& url : event->mimeData()->urls()) {
+        QString path = url.toLocalFile();
+        QString ext = QFileInfo(path).suffix().toLower();
+        if (ext == "png" || ext == "jpg" || ext == "jpeg" || ext == "bmp") {
+            BadgeItem b; b.imagePath = path;
+            b.label = QFileInfo(path).baseName();
+            addBadge(b);
         }
     }
 }
