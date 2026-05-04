@@ -49,6 +49,7 @@ private slots:
     // Inspector
     void onBadgeSelected(BadgeGraphicItem* item);
     void onBadgeDeselected();
+    void onBadgeMoved(BadgeGraphicItem* item);
     void onInspectorChanged();
     void onSetImage();
 

@@ -216,6 +216,7 @@ QVariant BadgeGraphicItem::itemChange(GraphicsItemChange change, const QVariant&
         const double mmToPx = 96.0 / 25.4;
         m_badge.xMm = pos().x() / mmToPx;
         m_badge.yMm = pos().y() / mmToPx;
+        emit badgeMoved(this);
     }
     if (change == ItemSelectedHasChanged) {
         m_badge.isSelected = value.toBool();

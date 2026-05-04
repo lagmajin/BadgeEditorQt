@@ -12,7 +12,7 @@ public:
     LightingOverlayItem(QGraphicsItem* parent = nullptr) : QGraphicsItem(parent) {
         setFlag(ItemIgnoresTransformations, true);
     }
-    QRectF boundingRect() const override { return QRectF(-200, -200, 400, 400); }
+    QRectF boundingRect() const override { return QRectF(-m_radius, -m_radius, m_radius * 2, m_radius * 2); }
     void paint(QPainter* painter, const QStyleOptionGraphicsItem*, QWidget*) override {
         if (!m_enabled) return;
         QRectF r = boundingRect();
@@ -41,10 +41,12 @@ public:
     void setEnabled(bool on) { m_enabled = on; update(); }
     void setAngle(double a) { m_angle = a; update(); }
     void setIntensity(double v) { m_intensity = v; update(); }
+    void setRadius(double r) { prepareGeometryChange(); m_radius = r; update(); }
 private:
     bool m_enabled = false;
     double m_angle = 0;
     double m_intensity = 0.5;
+    double m_radius = 100;
 };
 
 static bool isImageFile(const QString& path) {
@@ -94,6 +96,7 @@ void DesignerWidget::addBadge(const BadgeItem& item) {
     m_graphicItems.append(gi);
     connect(gi, &BadgeGraphicItem::badgeClicked, this, &DesignerWidget::badgeSelected);
     connect(gi, &BadgeGraphicItem::badgeDoubleClicked, this, &DesignerWidget::badgeDoubleClicked);
+    connect(gi, &BadgeGraphicItem::badgeMoved, this, &DesignerWidget::badgeMoved);
 }
 
 void DesignerWidget::removeSelectedBadges() {
@@ -143,8 +146,14 @@ void DesignerWidget::scrollContentsBy(int dx, int dy) {
 }
 
 void DesignerWidget::positionGuideOverlays() {
+    const double mmToPx = 96.0 / 25.4;
+    double finishR = m_badgeSizeMm * mmToPx / 2;
     if (m_glitterGroup) m_glitterGroup->setPos(m_guideSceneCenter);
-    if (m_lightingOverlay) m_lightingOverlay->setPos(m_guideSceneCenter);
+    if (m_lightingOverlay) {
+        m_lightingOverlay->setPos(m_guideSceneCenter);
+        auto* lo = qgraphicsitem_cast<LightingOverlayItem*>(m_lightingOverlay);
+        if (lo) lo->setRadius(finishR);
+    }
 }
 
 void DesignerWidget::setGuidesVisible(bool b) {

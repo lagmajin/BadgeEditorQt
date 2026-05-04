@@ -51,6 +51,7 @@ signals:
     void badgeSelected(BadgeGraphicItem* item);
     void badgeDeselected();
     void badgeDoubleClicked(BadgeGraphicItem* item);
+    void badgeMoved(BadgeGraphicItem* item);
 
 protected:
     void wheelEvent(QWheelEvent* event) override;

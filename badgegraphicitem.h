@@ -23,6 +23,7 @@ public:
 signals:
     void badgeClicked(BadgeGraphicItem* item);
     void badgeDoubleClicked(BadgeGraphicItem* item);
+    void badgeMoved(BadgeGraphicItem* item);
 
 protected:
     void mousePressEvent(QGraphicsSceneMouseEvent* event) override;

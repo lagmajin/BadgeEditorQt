@@ -84,6 +84,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     connect(m_designer, &DesignerWidget::badgeSelected, this, &MainWindow::onBadgeSelected);
     connect(m_designer, &DesignerWidget::badgeDeselected, this, &MainWindow::onBadgeDeselected);
     connect(m_designer, &DesignerWidget::badgeDoubleClicked, this, [this](BadgeGraphicItem*){ onSetImage(); });
+    connect(m_designer, &DesignerWidget::badgeMoved, this, &MainWindow::onBadgeMoved);
     m_designer->updateGuides(57);
     m_stack->addWidget(m_designer);
 
@@ -358,6 +359,15 @@ void MainWindow::onBadgeDeselected() {
     m_propW->setValue(32); m_propH->setValue(32);
     m_propRotation->setValue(0);
     m_propText->clear();
+    m_updatingUI = false;
+}
+
+void MainWindow::onBadgeMoved(BadgeGraphicItem* item) {
+    if (m_selected.isEmpty() || m_selected.first() != item) return;
+    m_updatingUI = true;
+    BadgeItem& b = item->badge();
+    m_propX->setValue(b.xMm);
+    m_propY->setValue(b.yMm);
     m_updatingUI = false;
 }
 
