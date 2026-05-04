@@ -3,6 +3,7 @@
 #include <QPainterPath>
 #include <QGraphicsSceneMouseEvent>
 #include <QGraphicsSceneHoverEvent>
+#include <QGraphicsScene>
 #include <QFileInfo>
 #include <QStyleOptionGraphicsItem>
 #include <QCursor>
