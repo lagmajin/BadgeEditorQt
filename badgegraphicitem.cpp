@@ -2,7 +2,31 @@
 #include "imageprocessor.h"
 #include <QPainterPath>
 #include <QGraphicsSceneMouseEvent>
+#include <QGraphicsSceneHoverEvent>
 #include <QFileInfo>
+#include <QStyleOptionGraphicsItem>
+#include <QCursor>
+
+// --- ResizeHandle: small corner square for resizing ---
+class ResizeHandle : public QGraphicsRectItem {
+public:
+    enum Corner { TL, TR, BL, BR };
+    ResizeHandle(Corner c, QGraphicsItem* parent) : QGraphicsRectItem(parent), m_corner(c) {
+        setRect(-4, -4, 8, 8);
+        setBrush(Qt::white);
+        setPen(QPen(Qt::blue, 1));
+        setFlag(ItemIgnoresTransformations, true);
+        setFlag(ItemIsMovable, false);
+        setAcceptHoverEvents(true);
+        switch (c) {
+            case TL: case BR: setCursor(Qt::SizeFDiagCursor); break;
+            case TR: case BL: setCursor(Qt::SizeBDiagCursor); break;
+        }
+    }
+    Corner corner() const { return m_corner; }
+private:
+    Corner m_corner;
+};
 
 BadgeGraphicItem::BadgeGraphicItem(const BadgeItem& badge, QGraphicsItem* parent)
     : QGraphicsObject(parent), m_badge(badge) {
@@ -10,7 +34,28 @@ BadgeGraphicItem::BadgeGraphicItem(const BadgeItem& badge, QGraphicsItem* parent
     setAcceptHoverEvents(true);
     setTransformOriginPoint(boundingRect().center());
     loadImage();
+    createHandles();
 }
+
+void BadgeGraphicItem::createHandles() {
+    // Remove old handles
+    for (auto* h : m_handles) { if (h->scene()) h->scene()->removeItem(h); delete h; }
+    m_handles.clear();
+    if (!m_badge.isSelected) return;
+    const double mmToPx = 96.0 / 25.4;
+    double pw = m_badge.widthMm * mmToPx;
+    double ph = m_badge.heightMm * mmToPx;
+    double margin = m_badge.isSelected ? 3.0 : 2.0;
+    QPointF corners[4] = {QPointF(-margin, -margin), QPointF(pw+margin, -margin), QPointF(-margin, ph+margin), QPointF(pw+margin, ph+margin)};
+    int types[4] = {0,1,2,3};
+    for (int i = 0; i < 4; ++i) {
+        auto* h = new ResizeHandle(static_cast<ResizeHandle::Corner>(types[i]), this);
+        h->setPos(corners[i]);
+        m_handles.append(h);
+    }
+}
+
+void BadgeGraphicItem::updateHandles() { createHandles(); }
 
 QRectF BadgeGraphicItem::boundingRect() const {
     const double mmToPx = 96.0 / 25.4;
@@ -28,10 +73,12 @@ void BadgeGraphicItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*,
     QRectF r(margin, margin, pw, ph);
     renderCore(painter, r);
     
-    // Border
-    painter->setPen(QPen(m_badge.isSelected ? Qt::red : Qt::black, m_badge.isSelected ? 2 : 1));
-    painter->setBrush(Qt::NoBrush);
-    painter->drawRect(r);
+    // Border (handles are drawn separately as child items)
+    if (m_badge.isSelected) {
+        painter->setPen(QPen(Qt::red, 1));
+        painter->setBrush(Qt::NoBrush);
+        painter->drawRect(r);
+    }
 }
 
 void BadgeGraphicItem::renderCore(QPainter* painter, const QRectF& r) {
@@ -41,6 +88,8 @@ void BadgeGraphicItem::renderCore(QPainter* painter, const QRectF& r) {
         path.addEllipse(r);
         painter->setClipPath(path);
     }
+
+    bool drewAnything = false;
 
     // Render layers
     for (const auto& layer : m_badge.layers) {
@@ -52,35 +101,35 @@ void BadgeGraphicItem::renderCore(QPainter* painter, const QRectF& r) {
             painter->setOpacity(layer.opacity);
             QRectF lr = r.adjusted(layer.offsetX * 96.0 / 25.4, layer.offsetY * 96.0 / 25.4, 0, 0);
             painter->drawPixmap(lr.toRect(), img);
+            drewAnything = true;
         }
     }
 
-    // Fallback to main image if no layers
-    if (m_badge.layers.isEmpty()) {
-        if (!m_processed.isNull()) {
-            painter->drawPixmap(r.toRect(), m_processed);
-        } else if (!m_thumbnail.isNull()) {
-            painter->drawPixmap(r.toRect(), m_thumbnail);
-        } else if (m_badge.imagePath.isEmpty() || !QFileInfo::exists(m_badge.imagePath)) {
-            painter->fillRect(r, QColor(240, 240, 240));
-            QPen dashPen(Qt::lightGray);
-            dashPen.setDashPattern({2, 2});
-            painter->setPen(dashPen);
-            painter->drawEllipse(r);
-            painter->setPen(Qt::gray);
-            painter->setFont(QFont("Arial", 7));
-            painter->drawText(r, Qt::AlignCenter, "Image\nDrop/DoubleClick");
-        } else {
-            painter->drawPixmap(r.toRect(), m_thumbnail);
-        }
-    } else {
-        // Has layers but no main image = empty background
+    // Draw main image (always, behind or in front of layers)
+    if (!m_thumbnail.isNull()) {
+        painter->setOpacity(1.0);
+        painter->drawPixmap(r.toRect(), m_thumbnail);
+        drewAnything = true;
+    }
+
+    // Placeholder if nothing drawn
+    if (!drewAnything) {
+        painter->fillRect(r, QColor(240, 240, 240));
+        QPen dashPen(Qt::lightGray);
+        dashPen.setDashPattern({2, 2});
+        painter->setPen(dashPen);
+        painter->drawEllipse(r.adjusted(2,2,-2,-2));
+        painter->setPen(Qt::gray);
+        painter->setFont(QFont("Arial", 7));
+        painter->drawText(r, Qt::AlignCenter, "Drop image\nor DoubleClick");
     }
 
     if (!m_badge.displayText.isEmpty()) {
         painter->setOpacity(1.0);
         QFont font("Arial", 10);
         painter->setFont(font);
+        painter->setPen(Qt::white);
+        painter->drawText(r.adjusted(1,1,1,1), Qt::AlignCenter, m_badge.displayText);
         painter->setPen(Qt::black);
         painter->drawText(r, Qt::AlignCenter, m_badge.displayText);
     }
@@ -107,6 +156,7 @@ void BadgeGraphicItem::syncFromBadge() {
     setTransformOriginPoint(boundingRect().center());
     setPos(m_badge.xMm * 96.0 / 25.4, m_badge.yMm * 96.0 / 25.4);
     setRotation(m_badge.rotation);
+    updateHandles();
     update();
 }
 
@@ -126,6 +176,12 @@ QVariant BadgeGraphicItem::itemChange(GraphicsItemChange change, const QVariant&
         const double mmToPx = 96.0 / 25.4;
         m_badge.xMm = pos().x() / mmToPx;
         m_badge.yMm = pos().y() / mmToPx;
+    }
+    if (change == ItemSelectedHasChanged) {
+        m_badge.isSelected = value.toBool();
+        updateHandles();
+        prepareGeometryChange();
+        update();
     }
     return QGraphicsObject::itemChange(change, value);
 }

@@ -18,6 +18,7 @@ public:
     const BadgeItem& badge() const { return m_badge; }
     void syncFromBadge();
     void applyColorCorrection();
+    void updateHandles();
 
 signals:
     void badgeClicked(BadgeGraphicItem* item);
@@ -32,8 +33,10 @@ private:
     BadgeItem m_badge;
     QPixmap m_thumbnail;
     QPixmap m_processed;
+    QList<QGraphicsRectItem*> m_handles;
     void loadImage();
     void renderCore(QPainter* painter, const QRectF& rect);
+    void createHandles();
 };
 
 #endif
