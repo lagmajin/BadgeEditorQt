@@ -212,31 +212,45 @@ void DesignerWidget::drawBackground(QPainter* painter, const QRectF& rect) {
 
 void DesignerWidget::drawForeground(QPainter* painter, const QRectF& rect) {
     Q_UNUSED(rect);
-    // Draw guides at scene center - they follow pan/zoom automatically
     const double mmToPx = 96.0 / 25.4;
-    double finishPx = m_badgeSizeMm * mmToPx;
     double bleedPx = (m_badgeSizeMm + 3) * mmToPx;
+    double finishPx = m_badgeSizeMm * mmToPx;
     double visiblePx = std::max(0.0, (m_badgeSizeMm - 4)) * mmToPx;
 
     QPointF center = mapToScene(viewport()->rect().center());
     double cx = center.x(), cy = center.y();
 
-    // Bleed area (red dashed)
+    double rb = bleedPx / 2, rf = finishPx / 2, rv = visiblePx / 2;
+
+    // Hatch fill between bleed and finish circles
+    QPainterPath bleedPath;
+    bleedPath.addEllipse(QPointF(cx, cy), rb, rb);
+    QPainterPath finishPath;
+    finishPath.addEllipse(QPointF(cx, cy), rf, rf);
+    QPainterPath hatchRegion = bleedPath.subtracted(finishPath);
+    QBrush hatchBrush(QColor(255, 128, 128, 80), Qt::BDiagPattern);
+    painter->fillPath(hatchRegion, hatchBrush);
+
+    // Bleed line (red dashed)
     if (m_guideBleed->isVisible()) {
         QPen pen(QColor(255, 0, 0), 1.5);
         pen.setDashPattern({4, 2});
         painter->setPen(pen);
         painter->setBrush(Qt::NoBrush);
-        double rb = bleedPx / 2;
         painter->drawEllipse(QPointF(cx, cy), rb, rb);
     }
+
+    // Finish line (thin solid)
+    QPen finishPen(QColor(255, 0, 0, 180), 0.8);
+    painter->setPen(finishPen);
+    painter->setBrush(Qt::NoBrush);
+    painter->drawEllipse(QPointF(cx, cy), rf, rf);
 
     // Visible area (green solid)
     if (m_guideVisible->isVisible()) {
         QPen pen(QColor(0, 255, 0), 2.0);
         painter->setPen(pen);
         painter->setBrush(Qt::NoBrush);
-        double rv = visiblePx / 2;
         painter->drawEllipse(QPointF(cx, cy), rv, rv);
     }
 }

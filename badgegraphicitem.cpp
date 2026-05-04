@@ -12,21 +12,42 @@
 class ResizeHandle : public QGraphicsRectItem {
 public:
     enum Corner { TL, TR, BL, BR };
-    ResizeHandle(Corner c, QGraphicsItem* parent) : QGraphicsRectItem(parent), m_corner(c) {
-        setRect(-4, -4, 8, 8);
+    ResizeHandle(Corner c, BadgeGraphicItem* parent) : QGraphicsRectItem(parent), m_corner(c), m_badge(parent) {
+        setRect(-6, -6, 12, 12);
         setBrush(Qt::white);
-        setPen(QPen(Qt::blue, 1));
+        setPen(QPen(Qt::blue, 1.5));
         setFlag(ItemIgnoresTransformations, true);
         setFlag(ItemIsMovable, false);
+        setFlag(ItemIsSelectable, false);
         setAcceptHoverEvents(true);
+        setZValue(1000);
         switch (c) {
             case TL: case BR: setCursor(Qt::SizeFDiagCursor); break;
             case TR: case BL: setCursor(Qt::SizeBDiagCursor); break;
         }
     }
     Corner corner() const { return m_corner; }
+protected:
+    void mousePressEvent(QGraphicsSceneMouseEvent* e) override { m_dragging = true; e->accept(); }
+    void mouseMoveEvent(QGraphicsSceneMouseEvent* e) override {
+        if (!m_dragging) return;
+        double dx = e->pos().x() - e->lastPos().x();
+        double dy = e->pos().y() - e->lastPos().y();
+        const double mmToPx = 96.0 / 25.4;
+        BadgeItem& b = m_badge->badge();
+        if (m_corner == TL || m_corner == BL) { b.widthMm -= dx / mmToPx; b.xMm += dx / mmToPx; }
+        else { b.widthMm += dx / mmToPx; }
+        if (m_corner == TL || m_corner == TR) { b.heightMm -= dy / mmToPx; b.yMm += dy / mmToPx; }
+        else { b.heightMm += dy / mmToPx; }
+        if (b.widthMm < 5) b.widthMm = 5;
+        if (b.heightMm < 5) b.heightMm = 5;
+        m_badge->syncFromBadge();
+    }
+    void mouseReleaseEvent(QGraphicsSceneMouseEvent*) override { m_dragging = false; }
 private:
     Corner m_corner;
+    BadgeGraphicItem* m_badge;
+    bool m_dragging = false;
 };
 
 BadgeGraphicItem::BadgeGraphicItem(const BadgeItem& badge, QGraphicsItem* parent)

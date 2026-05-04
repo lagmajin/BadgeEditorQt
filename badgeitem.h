@@ -20,15 +20,15 @@ struct LayerItem {
 };
 
 struct BadgeItem {
-    double widthMm = 32.0;
-    double heightMm = 32.0;
+    double widthMm = 57.0;
+    double heightMm = 57.0;
     double xMm = 10.0;
     double yMm = 10.0;
     double rotation = 0.0;
     QString label;
     QString imagePath;
     QString displayText;
-    bool clipToCircle = true;
+    bool clipToCircle = false;
     double brightness = 0.0;
     double contrast = 0.0;
     double saturation = 0.0;

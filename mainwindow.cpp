@@ -20,6 +20,7 @@
 #include <QDragEnterEvent>
 #include <QDropEvent>
 #include <QPushButton>
+#include <QShortcut>
 #include <DockManager.h>
 #include <DockWidget.h>
 #include <QFileInfo>
@@ -46,6 +47,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     editMenu->addAction("やり直し(&R)", this, &MainWindow::onRedo, QKeySequence::Redo);
     editMenu->addSeparator();
     editMenu->addAction("削除", this, &MainWindow::onDelete, QKeySequence::Delete);
+    new QShortcut(QKeySequence(Qt::Key_Backspace), this, SLOT(onDelete()));
 
     auto* viewMenu = menuBar()->addMenu("表示(&V)");
     viewMenu->addAction("ズームイン", this, [this]{ m_zoomScale *= 1.2; m_zoomLabel->setText(QString::number(m_zoomScale*100,'f',0)+"%"); });
@@ -82,7 +84,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     connect(m_designer, &DesignerWidget::badgeSelected, this, &MainWindow::onBadgeSelected);
     connect(m_designer, &DesignerWidget::badgeDeselected, this, &MainWindow::onBadgeDeselected);
     connect(m_designer, &DesignerWidget::badgeDoubleClicked, this, [this](BadgeGraphicItem*){ onSetImage(); });
-    m_designer->updateGuides(32);
+    m_designer->updateGuides(57);
     m_stack->addWidget(m_designer);
 
     // Layout
@@ -265,7 +267,7 @@ void MainWindow::onNew() {
     m_currentFile.clear();
     while (!m_designer->graphicItems().isEmpty()) { auto* gi = m_designer->graphicItems().first(); m_designer->graphicItems().removeFirst(); gi->scene()->removeItem(gi); delete gi; }
     m_designer->addBadge(BadgeItem{});
-    m_designer->updateGuides(32);
+    m_designer->updateGuides(57);
     updateTitle();
 }
 
