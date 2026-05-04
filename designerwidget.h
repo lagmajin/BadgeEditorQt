@@ -45,6 +45,7 @@ public:
     void regenerateGlitter();
 
     void updateBackground(const QBrush& brush);
+    void setBatchMode(bool on);
 
 signals:
     void badgeSelected(BadgeGraphicItem* item);
@@ -75,6 +76,7 @@ private:
     double m_zoomLevel = 1.0;
     double m_badgeSizeMm = 57.0;
     QPointF m_guideSceneCenter{0, 0};
+    bool m_batchMode = false;
     
     void createGlitter(int pattern);
     QPainterPath createStar(double size);

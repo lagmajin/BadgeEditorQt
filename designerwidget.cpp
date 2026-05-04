@@ -48,14 +48,20 @@ private:
 };
 
 static bool isImageFile(const QString& path) {
-    static const QSet<QString> formats = []{
-        QSet<QString> s;
-        for (const auto& fmt : QImageReader::supportedImageFormats())
-            s.insert(QString::fromUtf8(fmt).toLower());
-        return s;
-    }();
-    QString ext = QFileInfo(path).suffix().toLower();
-    return !ext.isEmpty() && formats.contains(ext);
+    if (!QFileInfo::exists(path)) return false;
+    QImageReader reader(path);
+    if (!reader.canRead()) {
+        // フォールバック: 拡張子チェック
+        static const QSet<QString> formats = []{
+            QSet<QString> s;
+            for (const auto& fmt : QImageReader::supportedImageFormats())
+                s.insert(QString::fromUtf8(fmt).toLower());
+            return s;
+        }();
+        QString ext = QFileInfo(path).suffix().toLower();
+        return !ext.isEmpty() && formats.contains(ext);
+    }
+    return true;
 }
 
 DesignerWidget::DesignerWidget(QWidget* parent) : QGraphicsView(parent) {
@@ -303,7 +309,41 @@ void DesignerWidget::drawForeground(QPainter* painter, const QRectF& rect) {
 
     double rb = bleedPx / 2, rf = finishPx / 2, rv = visiblePx / 2;
 
-    // Hatch fill between bleed and finish circles
+    // バッチモード: ガイドライン外のバッジを暗くする
+    if (m_batchMode) {
+        for (auto* gi : m_graphicItems) {
+            QRectF badgeRect = gi->mapToScene(gi->boundingRect()).boundingRect();
+            QPointF badgeCenter = badgeRect.center();
+            double dist = QLineF(cx, cy, badgeCenter.x(), badgeCenter.y()).length();
+            if (dist > rv + badgeRect.width() / 2) {
+                // バッジが可視エリアの外にある
+                painter->save();
+                QTransform t;
+                t.translate(gi->pos().x(), gi->pos().y());
+                t.rotate(gi->rotation());
+                painter->setTransform(t, true);
+                painter->fillRect(gi->boundingRect(), QColor(0, 0, 0, 80));
+                painter->restore();
+            }
+        }
+    }
+
+    // 1. 全体を暗くするオーバーレイ（後で可視エリアをくり抜く）
+    painter->save();
+    QPainterPath darkOverlay;
+    darkOverlay.addRect(rect);
+    QPainterPath visibleCircle;
+    visibleCircle.addEllipse(QPointF(cx, cy), rv, rv);
+    painter->fillPath(darkOverlay.subtracted(visibleCircle), QColor(0, 0, 0, 60));
+    painter->restore();
+
+    // 2. 可視エリア内に斜線パターン（白ハッチで目立たせる）
+    QPainterPath visiblePath;
+    visiblePath.addEllipse(QPointF(cx, cy), rv, rv);
+    QBrush visibleHatch(QColor(255, 255, 255, 30), Qt::FDiagPattern);
+    painter->fillPath(visiblePath, visibleHatch);
+
+    // 3. bleedとfinishの間にハッチ fill
     QPainterPath bleedPath;
     bleedPath.addEllipse(QPointF(cx, cy), rb, rb);
     QPainterPath finishPath;
@@ -312,7 +352,7 @@ void DesignerWidget::drawForeground(QPainter* painter, const QRectF& rect) {
     QBrush hatchBrush(QColor(255, 128, 128, 80), Qt::BDiagPattern);
     painter->fillPath(hatchRegion, hatchBrush);
 
-    // Bleed line (red dashed)
+    // 4. Bleed line (red dashed)
     if (m_guideBleed->isVisible()) {
         QPen pen(QColor(255, 0, 0), 1.5);
         pen.setDashPattern({4, 2});
@@ -321,13 +361,13 @@ void DesignerWidget::drawForeground(QPainter* painter, const QRectF& rect) {
         painter->drawEllipse(QPointF(cx, cy), rb, rb);
     }
 
-    // Finish line (thin solid)
+    // 5. Finish line (thin solid)
     QPen finishPen(QColor(255, 0, 0, 180), 0.8);
     painter->setPen(finishPen);
     painter->setBrush(Qt::NoBrush);
     painter->drawEllipse(QPointF(cx, cy), rf, rf);
 
-    // Visible area (green solid)
+    // 6. Visible area (green solid)
     if (m_guideVisible->isVisible()) {
         QPen pen(QColor(0, 255, 0), 2.0);
         painter->setPen(pen);
@@ -335,6 +375,8 @@ void DesignerWidget::drawForeground(QPainter* painter, const QRectF& rect) {
         painter->drawEllipse(QPointF(cx, cy), rv, rv);
     }
 }
+
+void DesignerWidget::setBatchMode(bool on) { m_batchMode = on; viewport()->update(); }
 
 void DesignerWidget::dragEnterEvent(QDragEnterEvent* event) {
     if (event->mimeData()->hasUrls()) {
