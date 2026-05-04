@@ -31,14 +31,13 @@ protected:
     void mousePressEvent(QGraphicsSceneMouseEvent* e) override { m_dragging = true; e->accept(); }
     void mouseMoveEvent(QGraphicsSceneMouseEvent* e) override {
         if (!m_dragging) return;
-        double dx = e->pos().x() - e->lastPos().x();
-        double dy = e->pos().y() - e->lastPos().y();
+        QPointF delta = e->scenePos() - e->lastScenePos();
         const double mmToPx = 96.0 / 25.4;
         BadgeItem& b = m_badge->badge();
-        if (m_corner == TL || m_corner == BL) { b.widthMm -= dx / mmToPx; b.xMm += dx / mmToPx; }
-        else { b.widthMm += dx / mmToPx; }
-        if (m_corner == TL || m_corner == TR) { b.heightMm -= dy / mmToPx; b.yMm += dy / mmToPx; }
-        else { b.heightMm += dy / mmToPx; }
+        if (m_corner == TL || m_corner == BL) { b.widthMm -= delta.x() / mmToPx; b.xMm += delta.x() / mmToPx; }
+        else { b.widthMm += delta.x() / mmToPx; }
+        if (m_corner == TL || m_corner == TR) { b.heightMm -= delta.y() / mmToPx; b.yMm += delta.y() / mmToPx; }
+        else { b.heightMm += delta.y() / mmToPx; }
         if (b.widthMm < 5) b.widthMm = 5;
         if (b.heightMm < 5) b.heightMm = 5;
         m_badge->syncFromBadge();

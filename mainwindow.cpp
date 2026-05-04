@@ -113,6 +113,14 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     m_propText = new QLineEdit;
     propForm->addRow("X:", m_propX); propForm->addRow("Y:", m_propY);
     propForm->addRow("幅:", m_propW); propForm->addRow("高さ:", m_propH);
+    // Size preset
+    auto* sizePreset = new QComboBox;
+    sizePreset->addItems({"カスタム", "32mm", "44mm", "57mm", "65mm", "76mm"});
+    propForm->addRow("プリセット:", sizePreset);
+    connect(sizePreset, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int idx){
+        double sizes[] = {0, 32, 44, 57, 65, 76};
+        if (idx > 0) { m_propW->setValue(sizes[idx]); m_propH->setValue(sizes[idx]); }
+    });
     propForm->addRow("回転:", m_propRotation); propForm->addRow("テキスト:", m_propText);
     auto* imgBtn = new QPushButton("画像を変更...");
     connect(imgBtn, &QPushButton::clicked, this, &MainWindow::onSetImage);
@@ -394,6 +402,10 @@ void MainWindow::onLightingSlider() {
 // --- Badge ---
 void MainWindow::onAddBadge() {
     BadgeItem b;
+    QPointF center = m_designer->mapToScene(m_designer->viewport()->rect().center());
+    const double mmToPx = 96.0 / 25.4;
+    b.xMm = center.x() / mmToPx - b.widthMm / 2;
+    b.yMm = center.y() / mmToPx - b.heightMm / 2;
     m_badges.append(b);
     m_designer->addBadge(b);
 }
