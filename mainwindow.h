@@ -16,9 +16,10 @@
 #include "badgeitem.h"
 #include "designerwidget.h"
 
+namespace ads {
 class CDockManager;
 class CDockWidget;
-class CDockAreaWidget;
+}
 
 class BadgeGraphicItem;
 
@@ -80,9 +81,9 @@ private:
     QList<BadgeItem> collectBadges() const;
 
     // UI
-    CDockManager* m_dockManager = nullptr;
-    CDockWidget* m_workspaceDock = nullptr;
-    CDockWidget* m_inspectorDock = nullptr;
+    ads::CDockManager* m_dockManager = nullptr;
+    ads::CDockWidget* m_workspaceDock = nullptr;
+    ads::CDockWidget* m_inspectorDock = nullptr;
     QWidget* m_inspector;
     DesignerWidget* m_designer;
     QGraphicsView* m_layoutView;
