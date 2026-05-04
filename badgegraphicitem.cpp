@@ -1,5 +1,6 @@
 #include "badgegraphicitem.h"
 #include "imageprocessor.h"
+#include "lightingeffect.h"
 #include <QPainterPath>
 #include <QGraphicsSceneMouseEvent>
 #include <QGraphicsSceneHoverEvent>
@@ -33,14 +34,16 @@ protected:
     void mousePressEvent(QGraphicsSceneMouseEvent* e) override { m_dragging = true; m_startPos = e->scenePos(); e->accept(); }
     void mouseMoveEvent(QGraphicsSceneMouseEvent* e) override {
         if (!m_dragging) return;
-        QPointF delta = e->scenePos() - m_startPos;
+        QPointF deltaScene = e->scenePos() - m_startPos;
         m_startPos = e->scenePos();
+        // Transform delta into badge's local coordinate system (account for rotation)
+        QPointF deltaLocal = m_badge->mapFromScene(deltaScene) - m_badge->mapFromScene(QPointF(0, 0));
         const double mmToPx = 96.0 / 25.4;
         BadgeItem& b = m_badge->badge();
-        if (m_corner == TL || m_corner == BL) { b.widthMm -= delta.x() / mmToPx; b.xMm += delta.x() / mmToPx; }
-        else { b.widthMm += delta.x() / mmToPx; }
-        if (m_corner == TL || m_corner == TR) { b.heightMm -= delta.y() / mmToPx; b.yMm += delta.y() / mmToPx; }
-        else { b.heightMm += delta.y() / mmToPx; }
+        if (m_corner == TL || m_corner == BL) { b.widthMm -= deltaLocal.x() / mmToPx; b.xMm += deltaLocal.x() / mmToPx; }
+        else { b.widthMm += deltaLocal.x() / mmToPx; }
+        if (m_corner == TL || m_corner == TR) { b.heightMm -= deltaLocal.y() / mmToPx; b.yMm += deltaLocal.y() / mmToPx; }
+        else { b.heightMm += deltaLocal.y() / mmToPx; }
         if (b.widthMm < 5) b.widthMm = 5;
         if (b.heightMm < 5) b.heightMm = 5;
         m_badge->syncFromBadge();
@@ -57,6 +60,9 @@ BadgeGraphicItem::BadgeGraphicItem(const BadgeItem& badge, QGraphicsItem* parent
     setFlags(ItemIsMovable | ItemIsSelectable | ItemSendsGeometryChanges);
     setAcceptHoverEvents(true);
     setTransformOriginPoint(boundingRect().center());
+    m_lighting = new LightingEffect(this);
+    m_lighting->setEnabled(false);
+    setGraphicsEffect(m_lighting);
     loadImage();
     createHandles();
 }
@@ -212,3 +218,7 @@ QVariant BadgeGraphicItem::itemChange(GraphicsItemChange change, const QVariant&
     }
     return QGraphicsObject::itemChange(change, value);
 }
+
+void BadgeGraphicItem::setLightingEnabled(bool on) { m_lighting->setEnabled(on); }
+void BadgeGraphicItem::setLightAngle(int degrees) { m_lighting->setLightAngle(degrees); }
+void BadgeGraphicItem::setLightIntensity(double val) { m_lighting->setIntensity(val); }

@@ -23,10 +23,7 @@ DesignerWidget::DesignerWidget(QWidget* parent) : QGraphicsView(parent) {
     m_guideBleed = new GuideItem;
     m_guideVisible = new GuideItem;
 
-    // Lighting effect
-    m_lighting = new LightingEffect(this);
-    m_lighting->setEnabled(false);
-    setGraphicsEffect(m_lighting);
+    // Lighting effect is now per-badge
 }
 
 void DesignerWidget::addBadge(const BadgeItem& item) {
@@ -89,9 +86,16 @@ void DesignerWidget::setGuidesVisible(bool b) {
 
 void DesignerWidget::setBleedVisible(bool b) { m_guideBleed->setVisible(b); }
 void DesignerWidget::setVisibleVisible(bool b) { m_guideVisible->setVisible(b); }
-void DesignerWidget::setLightingEnabled(bool on) { m_lighting->setEnabled(on); setViewportUpdateMode(on ? QGraphicsView::FullViewportUpdate : QGraphicsView::SmartViewportUpdate); }
-void DesignerWidget::setLightAngle(int degrees) { m_lighting->setLightAngle(degrees); }
-void DesignerWidget::setLightIntensity(double val) { m_lighting->setIntensity(val); }
+void DesignerWidget::setLightingEnabled(bool on) {
+    for (auto* gi : m_graphicItems) gi->setLightingEnabled(on);
+    setViewportUpdateMode(on ? QGraphicsView::FullViewportUpdate : QGraphicsView::SmartViewportUpdate);
+}
+void DesignerWidget::setLightAngle(int degrees) {
+    for (auto* gi : m_graphicItems) gi->setLightAngle(degrees);
+}
+void DesignerWidget::setLightIntensity(double val) {
+    for (auto* gi : m_graphicItems) gi->setLightIntensity(val);
+}
 
 void DesignerWidget::setGlitterEnabled(bool on) {
     if (m_glitterGroup && !on) { m_scene->removeItem(m_glitterGroup); delete m_glitterGroup; m_glitterGroup = nullptr; }
@@ -99,12 +103,16 @@ void DesignerWidget::setGlitterEnabled(bool on) {
 }
 
 void DesignerWidget::setGlitterPattern(int pattern) {
+    m_glitterPattern = pattern;
     if (m_glitterGroup) regenerateGlitter();
 }
 
 void DesignerWidget::regenerateGlitter() {
     if (m_glitterGroup) { m_scene->destroyItemGroup(qgraphicsitem_cast<QGraphicsItemGroup*>(m_glitterGroup)); m_glitterGroup = nullptr; }
     m_glitterGroup = m_scene->createItemGroup({});
+    auto* group = qgraphicsitem_cast<QGraphicsItemGroup*>(m_glitterGroup);
+    group->setPos(m_guideSceneCenter);
+    createGlitter(m_glitterPattern);
 }
 
 void DesignerWidget::createGlitter(int pattern) {

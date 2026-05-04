@@ -35,7 +35,6 @@ public:
     void setVisibleVisible(bool b);
     
     // Lighting
-    LightingEffect* lightingEffect() { return m_lighting; }
     void setLightingEnabled(bool on);
     void setLightAngle(int degrees);
     void setLightIntensity(double val);
@@ -65,8 +64,8 @@ private:
     QGraphicsScene* m_scene;
     GuideItem* m_guideBleed;
     GuideItem* m_guideVisible;
-    LightingEffect* m_lighting;
     QGraphicsItem* m_glitterGroup = nullptr;
+    int m_glitterPattern = 0;
     QList<BadgeGraphicItem*> m_graphicItems;
     double m_zoomLevel = 1.0;
     double m_badgeSizeMm = 57.0;
