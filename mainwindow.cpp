@@ -12,6 +12,7 @@
 #include <QFormLayout>
 #include <QGroupBox>
 #include <QScrollArea>
+#include <QListWidget>
 #include <QJsonDocument>
 #include <QJsonArray>
 #include <QApplication>
@@ -141,6 +142,50 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     connect(m_propContrast, &QSlider::valueChanged, this, [this]{ onInspectorChanged(); });
     connect(m_propSaturation, &QSlider::valueChanged, this, [this]{ onInspectorChanged(); });
 
+    // Layer group
+    auto* layerGroup = new QGroupBox("レイヤー");
+    auto* layerLayout = new QVBoxLayout(layerGroup);
+    auto* layerList = new QListWidget;
+    layerList->setMaximumHeight(120);
+    layerLayout->addWidget(layerList);
+    auto* layerBtnRow = new QHBoxLayout;
+    auto* btnAddLayer = new QPushButton("＋");
+    auto* btnDelLayer = new QPushButton("－");
+    auto* btnUpLayer = new QPushButton("▲");
+    auto* btnDownLayer = new QPushButton("▼");
+    btnAddLayer->setFixedWidth(30); btnDelLayer->setFixedWidth(30);
+    btnUpLayer->setFixedWidth(30); btnDownLayer->setFixedWidth(30);
+    layerBtnRow->addWidget(btnAddLayer);
+    layerBtnRow->addWidget(btnDelLayer);
+    layerBtnRow->addWidget(btnUpLayer);
+    layerBtnRow->addWidget(btnDownLayer);
+    layerBtnRow->addStretch();
+    layerLayout->addLayout(layerBtnRow);
+    inspLayout->addWidget(layerGroup);
+
+    connect(btnAddLayer, &QPushButton::clicked, this, [this]{ onSetImage(); });
+    connect(btnDelLayer, &QPushButton::clicked, this, [this, layerList]{
+        int row = layerList->currentRow();
+        if (row < 0 || m_selected.isEmpty()) return;
+        auto& layers = m_selected.first()->badge().layers;
+        if (row < layers.size()) { layers.removeAt(row); layerList->takeItem(row); m_selected.first()->update(); }
+    });
+    connect(btnUpLayer, &QPushButton::clicked, this, [this, layerList]{
+        int row = layerList->currentRow();
+        if (row <= 0 || m_selected.isEmpty()) return;
+        auto& layers = m_selected.first()->badge().layers;
+        if (row < layers.size()) { layers.swapItemsAt(row, row-1); layerList->takeItem(row); auto* item = layerList->takeItem(row-1);
+            layerList->insertItem(row-1, layerList->item(row)); layerList->insertItem(row, item); layerList->setCurrentRow(row-1);
+            m_selected.first()->update(); }
+    });
+    connect(btnDownLayer, &QPushButton::clicked, this, [this, layerList]{
+        int row = layerList->currentRow();
+        if (row < 0 || m_selected.isEmpty()) return;
+        auto& layers = m_selected.first()->badge().layers;
+        if (row + 1 < layers.size()) { layers.swapItemsAt(row, row+1); auto* item = layerList->takeItem(row);
+            layerList->insertItem(row+1, item); layerList->setCurrentRow(row+1); m_selected.first()->update(); }
+    });
+
     // Guide group
     auto* guideGroup = new QGroupBox("ガイド表示");
     auto* guideLayout = new QVBoxLayout(guideGroup);
@@ -203,7 +248,8 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
 
     m_inspectorDock = new ads::CDockWidget("インスペクター");
     m_inspectorDock->setWidget(scroll);
-    m_inspectorDock->setMinimumSizeHintMode(ads::CDockWidget::MinimumSizeHintFromContent);
+    m_inspectorDock->setMinimumSizeHintMode(ads::CDockWidget::MinimumSizeHintFromDockWidget);
+    m_inspectorDock->resize(300, 800);
 
     auto* area = m_dockManager->setCentralWidget(m_workspaceDock);
     m_dockManager->addDockWidget(ads::RightDockWidgetArea, m_inspectorDock, area);

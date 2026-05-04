@@ -1,13 +1,31 @@
 #include "badgeitem.h"
 #include <QJsonDocument>
 
+QJsonObject LayerItem::toJson() const {
+    return QJsonObject{{"imagePath", imagePath}, {"name", name}, {"opacity", opacity}, {"visible", visible}, {"offsetX", offsetX}, {"offsetY", offsetY}};
+}
+
+LayerItem LayerItem::fromJson(const QJsonObject& obj) {
+    LayerItem l;
+    l.imagePath = obj["imagePath"].toString();
+    l.name = obj["name"].toString();
+    l.opacity = obj["opacity"].toDouble(1.0);
+    l.visible = obj["visible"].toBool(true);
+    l.offsetX = obj["offsetX"].toDouble(0.0);
+    l.offsetY = obj["offsetY"].toDouble(0.0);
+    return l;
+}
+
 QJsonObject BadgeItem::toJson() const {
+    QJsonArray layerArr;
+    for (const auto& l : layers) layerArr.append(l.toJson());
     return QJsonObject{
         {"widthMm", widthMm}, {"heightMm", heightMm},
         {"xMm", xMm}, {"yMm", yMm}, {"rotation", rotation},
         {"label", label}, {"imagePath", imagePath}, {"displayText", displayText},
         {"clipToCircle", clipToCircle},
-        {"brightness", brightness}, {"contrast", contrast}, {"saturation", saturation}
+        {"brightness", brightness}, {"contrast", contrast}, {"saturation", saturation},
+        {"layers", layerArr}
     };
 }
 
@@ -25,6 +43,8 @@ BadgeItem BadgeItem::fromJson(const QJsonObject& obj) {
     b.brightness = obj["brightness"].toDouble(0.0);
     b.contrast = obj["contrast"].toDouble(0.0);
     b.saturation = obj["saturation"].toDouble(0.0);
+    for (const auto& v : obj["layers"].toArray())
+        b.layers.append(LayerItem::fromJson(v.toObject()));
     return b;
 }
 

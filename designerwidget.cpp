@@ -69,7 +69,8 @@ BadgeGraphicItem* DesignerWidget::selectedGraphic() const {
 
 void DesignerWidget::updateGuides(double badgeSizeMm) {
     m_badgeSizeMm = badgeSizeMm;
-    viewport()->update(); // trigger repaint of foreground
+    if (m_glitterGroup) regenerateGlitter();
+    viewport()->update();
 }
 
 void DesignerWidget::setGuidesVisible(bool b) {

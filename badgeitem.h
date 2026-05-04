@@ -7,6 +7,18 @@
 #include <QJsonObject>
 #include <QJsonArray>
 
+struct LayerItem {
+    QString imagePath;
+    QString name;
+    double opacity = 1.0;
+    bool visible = true;
+    double offsetX = 0.0; // mm offset within badge
+    double offsetY = 0.0;
+    
+    QJsonObject toJson() const;
+    static LayerItem fromJson(const QJsonObject& obj);
+};
+
 struct BadgeItem {
     double widthMm = 32.0;
     double heightMm = 32.0;
@@ -21,6 +33,7 @@ struct BadgeItem {
     double contrast = 0.0;
     double saturation = 0.0;
     bool isSelected = false;
+    QList<LayerItem> layers;
 
     QJsonObject toJson() const;
     static BadgeItem fromJson(const QJsonObject& obj);

@@ -42,22 +42,43 @@ void BadgeGraphicItem::renderCore(QPainter* painter, const QRectF& r) {
         painter->setClipPath(path);
     }
 
-    if (!m_processed.isNull()) {
-        painter->drawPixmap(r.toRect(), m_processed);
-    } else if (!m_thumbnail.isNull()) {
-        painter->drawPixmap(r.toRect(), m_thumbnail);
+    // Render layers
+    for (const auto& layer : m_badge.layers) {
+        if (!layer.visible) continue;
+        QPixmap img;
+        if (!layer.imagePath.isEmpty() && QFileInfo::exists(layer.imagePath))
+            img.load(layer.imagePath);
+        if (!img.isNull()) {
+            painter->setOpacity(layer.opacity);
+            QRectF lr = r.adjusted(layer.offsetX * 96.0 / 25.4, layer.offsetY * 96.0 / 25.4, 0, 0);
+            painter->drawPixmap(lr.toRect(), img);
+        }
+    }
+
+    // Fallback to main image if no layers
+    if (m_badge.layers.isEmpty()) {
+        if (!m_processed.isNull()) {
+            painter->drawPixmap(r.toRect(), m_processed);
+        } else if (!m_thumbnail.isNull()) {
+            painter->drawPixmap(r.toRect(), m_thumbnail);
+        } else if (m_badge.imagePath.isEmpty() || !QFileInfo::exists(m_badge.imagePath)) {
+            painter->fillRect(r, QColor(240, 240, 240));
+            QPen dashPen(Qt::lightGray);
+            dashPen.setDashPattern({2, 2});
+            painter->setPen(dashPen);
+            painter->drawEllipse(r);
+            painter->setPen(Qt::gray);
+            painter->setFont(QFont("Arial", 7));
+            painter->drawText(r, Qt::AlignCenter, "Image\nDrop/DoubleClick");
+        } else {
+            painter->drawPixmap(r.toRect(), m_thumbnail);
+        }
     } else {
-        painter->fillRect(r, QColor(240, 240, 240));
-        QPen dashPen(Qt::lightGray);
-        dashPen.setDashPattern({2, 2});
-        painter->setPen(dashPen);
-        painter->drawEllipse(r);
-        painter->setPen(Qt::gray);
-        painter->setFont(QFont("Arial", 7));
-        painter->drawText(r, Qt::AlignCenter, "Image\nDrop/DoubleClick");
+        // Has layers but no main image = empty background
     }
 
     if (!m_badge.displayText.isEmpty()) {
+        painter->setOpacity(1.0);
         QFont font("Arial", 10);
         painter->setFont(font);
         painter->setPen(Qt::black);
