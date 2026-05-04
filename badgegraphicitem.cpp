@@ -28,10 +28,13 @@ public:
     }
     Corner corner() const { return m_corner; }
 protected:
-    void mousePressEvent(QGraphicsSceneMouseEvent* e) override { m_dragging = true; e->accept(); }
+    QPointF m_startPos;
+    
+    void mousePressEvent(QGraphicsSceneMouseEvent* e) override { m_dragging = true; m_startPos = e->scenePos(); e->accept(); }
     void mouseMoveEvent(QGraphicsSceneMouseEvent* e) override {
         if (!m_dragging) return;
-        QPointF delta = e->scenePos() - e->lastScenePos();
+        QPointF delta = e->scenePos() - m_startPos;
+        m_startPos = e->scenePos();
         const double mmToPx = 96.0 / 25.4;
         BadgeItem& b = m_badge->badge();
         if (m_corner == TL || m_corner == BL) { b.widthMm -= delta.x() / mmToPx; b.xMm += delta.x() / mmToPx; }
@@ -175,7 +178,10 @@ void BadgeGraphicItem::applyColorCorrection() {
 void BadgeGraphicItem::syncFromBadge() {
     prepareGeometryChange();
     setTransformOriginPoint(boundingRect().center());
-    setPos(m_badge.xMm * 96.0 / 25.4, m_badge.yMm * 96.0 / 25.4);
+    double px = m_badge.xMm * 96.0 / 25.4;
+    double py = m_badge.yMm * 96.0 / 25.4;
+    if (qAbs(pos().x() - px) > 0.01 || qAbs(pos().y() - py) > 0.01)
+        setPos(px, py);
     setRotation(m_badge.rotation);
     updateHandles();
     update();

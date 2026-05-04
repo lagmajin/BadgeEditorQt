@@ -72,8 +72,14 @@ BadgeGraphicItem* DesignerWidget::selectedGraphic() const {
 
 void DesignerWidget::updateGuides(double badgeSizeMm) {
     m_badgeSizeMm = badgeSizeMm;
+    m_guideSceneCenter = mapToScene(viewport()->rect().center());
     if (m_glitterGroup) regenerateGlitter();
     viewport()->update();
+}
+
+void DesignerWidget::scrollContentsBy(int dx, int dy) {
+    QGraphicsView::scrollContentsBy(dx, dy);
+    m_guideSceneCenter = mapToScene(viewport()->rect().center());
 }
 
 void DesignerWidget::setGuidesVisible(bool b) {
@@ -217,8 +223,7 @@ void DesignerWidget::drawForeground(QPainter* painter, const QRectF& rect) {
     double finishPx = m_badgeSizeMm * mmToPx;
     double visiblePx = std::max(0.0, (m_badgeSizeMm - 4)) * mmToPx;
 
-    QPointF center = mapToScene(viewport()->rect().center());
-    double cx = center.x(), cy = center.y();
+    double cx = m_guideSceneCenter.x(), cy = m_guideSceneCenter.y();
 
     double rb = bleedPx / 2, rf = finishPx / 2, rv = visiblePx / 2;
 

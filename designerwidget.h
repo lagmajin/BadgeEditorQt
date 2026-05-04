@@ -59,6 +59,7 @@ protected:
     void drawForeground(QPainter* painter, const QRectF& rect) override;
     void dragEnterEvent(QDragEnterEvent* event) override;
     void dropEvent(QDropEvent* event) override;
+    void scrollContentsBy(int dx, int dy) override;
 
 private:
     QGraphicsScene* m_scene;
@@ -68,7 +69,8 @@ private:
     QGraphicsItem* m_glitterGroup = nullptr;
     QList<BadgeGraphicItem*> m_graphicItems;
     double m_zoomLevel = 1.0;
-    double m_badgeSizeMm = 32.0;
+    double m_badgeSizeMm = 57.0;
+    QPointF m_guideSceneCenter{0, 0};
     
     void createGlitter(int pattern);
     QPainterPath createStar(double size);
