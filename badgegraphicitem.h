@@ -36,7 +36,6 @@ private:
     QList<QGraphicsRectItem*> m_handles;
     void loadImage();
     void renderCore(QPainter* painter, const QRectF& rect);
-    void createHandles();
 };
 
 #endif

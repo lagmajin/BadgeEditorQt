@@ -33,7 +33,6 @@ protected:
     void mousePressEvent(QGraphicsSceneMouseEvent* e) override { m_dragging = true; m_startPos = e->scenePos(); e->accept(); }
     void mouseMoveEvent(QGraphicsSceneMouseEvent* e) override {
         if (!m_dragging) return;
-        // Map both scene points to badge local coords, then subtract to get delta in local space
         QPointF deltaLocal = m_badge->mapFromScene(e->scenePos()) - m_badge->mapFromScene(m_startPos);
         m_startPos = e->scenePos();
         const double mmToPx = 96.0 / 25.4;
@@ -44,9 +43,13 @@ protected:
         else { b.heightMm += deltaLocal.y() / mmToPx; }
         if (b.widthMm < 5) b.widthMm = 5;
         if (b.heightMm < 5) b.heightMm = 5;
+        m_badge->updateHandles();
+        m_badge->update();
+    }
+    void mouseReleaseEvent(QGraphicsSceneMouseEvent*) override {
+        m_dragging = false;
         m_badge->syncFromBadge();
     }
-    void mouseReleaseEvent(QGraphicsSceneMouseEvent*) override { m_dragging = false; }
 private:
     Corner m_corner;
     BadgeGraphicItem* m_badge;
@@ -59,28 +62,36 @@ BadgeGraphicItem::BadgeGraphicItem(const BadgeItem& badge, QGraphicsItem* parent
     setAcceptHoverEvents(true);
     setTransformOriginPoint(boundingRect().center());
     loadImage();
-    createHandles();
+    updateHandles();
 }
 
-void BadgeGraphicItem::createHandles() {
-    // Remove old handles
-    for (auto* h : m_handles) { if (h->scene()) h->scene()->removeItem(h); delete h; }
-    m_handles.clear();
-    if (!m_badge.isSelected) return;
+void BadgeGraphicItem::updateHandles() {
+    if (!m_badge.isSelected) {
+        for (auto* h : m_handles) { if (h->scene()) h->scene()->removeItem(h); delete h; }
+        m_handles.clear();
+        return;
+    }
     const double mmToPx = 96.0 / 25.4;
     double pw = m_badge.widthMm * mmToPx;
     double ph = m_badge.heightMm * mmToPx;
-    double margin = m_badge.isSelected ? 3.0 : 2.0;
+    double margin = 3.0;
     QPointF corners[4] = {QPointF(-margin, -margin), QPointF(pw+margin, -margin), QPointF(-margin, ph+margin), QPointF(pw+margin, ph+margin)};
     int types[4] = {0,1,2,3};
     for (int i = 0; i < 4; ++i) {
-        auto* h = new ResizeHandle(static_cast<ResizeHandle::Corner>(types[i]), this);
-        h->setPos(corners[i]);
-        m_handles.append(h);
+        if (i < m_handles.size()) {
+            m_handles[i]->setPos(corners[i]);
+        } else {
+            auto* h = new ResizeHandle(static_cast<ResizeHandle::Corner>(types[i]), this);
+            h->setPos(corners[i]);
+            m_handles.append(h);
+        }
+    }
+    while (m_handles.size() > 4) {
+        auto* h = m_handles.takeLast();
+        if (h->scene()) h->scene()->removeItem(h);
+        delete h;
     }
 }
-
-void BadgeGraphicItem::updateHandles() { createHandles(); }
 
 QRectF BadgeGraphicItem::boundingRect() const {
     const double mmToPx = 96.0 / 25.4;
@@ -181,9 +192,10 @@ void BadgeGraphicItem::syncFromBadge() {
     setTransformOriginPoint(boundingRect().center());
     double px = m_badge.xMm * 96.0 / 25.4;
     double py = m_badge.yMm * 96.0 / 25.4;
-    if (qAbs(pos().x() - px) > 0.01 || qAbs(pos().y() - py) > 0.01)
+    if (qAbs(pos().x() - px) > 0.1 || qAbs(pos().y() - py) > 0.1)
         setPos(px, py);
-    setRotation(m_badge.rotation);
+    if (qAbs(rotation() - m_badge.rotation) > 0.1)
+        setRotation(m_badge.rotation);
     updateHandles();
     update();
 }
