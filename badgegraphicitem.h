@@ -6,8 +6,6 @@
 #include <QPainter>
 #include "badgeitem.h"
 
-class LightingEffect;
-
 class BadgeGraphicItem : public QGraphicsObject {
     Q_OBJECT
 public:
@@ -21,9 +19,6 @@ public:
     void syncFromBadge();
     void applyColorCorrection();
     void updateHandles();
-    void setLightingEnabled(bool on);
-    void setLightAngle(int degrees);
-    void setLightIntensity(double val);
 
 signals:
     void badgeClicked(BadgeGraphicItem* item);
@@ -39,7 +34,6 @@ private:
     QPixmap m_thumbnail;
     QPixmap m_processed;
     QList<QGraphicsRectItem*> m_handles;
-    LightingEffect* m_lighting = nullptr;
     void loadImage();
     void renderCore(QPainter* painter, const QRectF& rect);
     void createHandles();

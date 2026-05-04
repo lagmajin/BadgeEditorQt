@@ -57,6 +57,7 @@ protected:
     void drawBackground(QPainter* painter, const QRectF& rect) override;
     void drawForeground(QPainter* painter, const QRectF& rect) override;
     void dragEnterEvent(QDragEnterEvent* event) override;
+    void dragMoveEvent(QDragMoveEvent* event) override;
     void dropEvent(QDropEvent* event) override;
     void scrollContentsBy(int dx, int dy) override;
 
@@ -65,7 +66,11 @@ private:
     GuideItem* m_guideBleed;
     GuideItem* m_guideVisible;
     QGraphicsItem* m_glitterGroup = nullptr;
+    QGraphicsItem* m_lightingOverlay = nullptr;
     int m_glitterPattern = 0;
+    double m_lightAngle = 0;
+    double m_lightIntensity = 0.5;
+    bool m_lightingEnabled = false;
     QList<BadgeGraphicItem*> m_graphicItems;
     double m_zoomLevel = 1.0;
     double m_badgeSizeMm = 57.0;
@@ -74,6 +79,7 @@ private:
     void createGlitter(int pattern);
     QPainterPath createStar(double size);
     QPainterPath createSnowflake(double size);
+    void positionGuideOverlays();
 };
 
 #endif

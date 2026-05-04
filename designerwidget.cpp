@@ -7,12 +7,64 @@
 #include <QSet>
 #include <cmath>
 
+class LightingOverlayItem : public QGraphicsItem {
+public:
+    LightingOverlayItem(QGraphicsItem* parent = nullptr) : QGraphicsItem(parent) {
+        setFlag(ItemIgnoresTransformations, true);
+    }
+    QRectF boundingRect() const override { return QRectF(-200, -200, 400, 400); }
+    void paint(QPainter* painter, const QStyleOptionGraphicsItem*, QWidget*) override {
+        if (!m_enabled) return;
+        QRectF r = boundingRect();
+        painter->save();
+        QRadialGradient shade(r.center(), r.width() / 2);
+        double rad = m_angle * M_PI / 180.0;
+        QPointF lightCenter = r.center() + QPointF(cos(rad) * r.width() * 0.3, -sin(rad) * r.height() * 0.3);
+        shade.setCenter(lightCenter);
+        shade.setFocalPoint(lightCenter);
+        shade.setColorAt(0.0, QColor(255, 255, 255, 0));
+        shade.setColorAt(0.35, QColor(0, 0, 0, int(10 * m_intensity)));
+        shade.setColorAt(0.7, QColor(0, 0, 0, int(50 * m_intensity)));
+        shade.setColorAt(1.0, QColor(0, 0, 0, int(120 * m_intensity)));
+        painter->setBrush(shade);
+        painter->setPen(Qt::NoPen);
+        painter->drawEllipse(r);
+        QRadialGradient spec(QPointF(r.left() + r.width() * 0.22, r.top() + r.height() * 0.14), r.width() * 0.15);
+        spec.setColorAt(0.0, QColor(255, 255, 255, int(200 * m_intensity)));
+        spec.setColorAt(0.5, QColor(255, 255, 255, int(80 * m_intensity)));
+        spec.setColorAt(1.0, QColor(255, 255, 255, 0));
+        painter->setBrush(spec);
+        double specR = r.width() * 0.12;
+        painter->drawEllipse(QPointF(r.left() + r.width() * 0.22, r.top() + r.height() * 0.14), specR, specR * 0.7);
+        painter->restore();
+    }
+    void setEnabled(bool on) { m_enabled = on; update(); }
+    void setAngle(double a) { m_angle = a; update(); }
+    void setIntensity(double v) { m_intensity = v; update(); }
+private:
+    bool m_enabled = false;
+    double m_angle = 0;
+    double m_intensity = 0.5;
+};
+
+static bool isImageFile(const QString& path) {
+    static const QSet<QString> formats = []{
+        QSet<QString> s;
+        for (const auto& fmt : QImageReader::supportedImageFormats())
+            s.insert(QString::fromUtf8(fmt).toLower());
+        return s;
+    }();
+    QString ext = QFileInfo(path).suffix().toLower();
+    return !ext.isEmpty() && formats.contains(ext);
+}
+
 DesignerWidget::DesignerWidget(QWidget* parent) : QGraphicsView(parent) {
     m_scene = new QGraphicsScene(-500, -500, 1000, 1000, this);
     setScene(m_scene);
     setRenderHints(QPainter::Antialiasing | QPainter::SmoothPixmapTransform);
     setDragMode(QGraphicsView::RubberBandDrag);
     setAcceptDrops(true);
+    viewport()->setAcceptDrops(true);
     setTransformationAnchor(QGraphicsView::AnchorUnderMouse);
     setViewportUpdateMode(QGraphicsView::FullViewportUpdate);
     setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
@@ -23,7 +75,10 @@ DesignerWidget::DesignerWidget(QWidget* parent) : QGraphicsView(parent) {
     m_guideBleed = new GuideItem;
     m_guideVisible = new GuideItem;
 
-    // Lighting effect is now per-badge
+    // Lighting overlay centered on guide
+    m_lightingOverlay = new LightingOverlayItem;
+    m_scene->addItem(m_lightingOverlay);
+    m_lightingOverlay->setZValue(9999);
 }
 
 void DesignerWidget::addBadge(const BadgeItem& item) {
@@ -70,6 +125,7 @@ BadgeGraphicItem* DesignerWidget::selectedGraphic() const {
 void DesignerWidget::updateGuides(double badgeSizeMm) {
     m_badgeSizeMm = badgeSizeMm;
     m_guideSceneCenter = mapToScene(viewport()->rect().center());
+    positionGuideOverlays();
     if (m_glitterGroup) regenerateGlitter();
     viewport()->update();
 }
@@ -77,6 +133,12 @@ void DesignerWidget::updateGuides(double badgeSizeMm) {
 void DesignerWidget::scrollContentsBy(int dx, int dy) {
     QGraphicsView::scrollContentsBy(dx, dy);
     m_guideSceneCenter = mapToScene(viewport()->rect().center());
+    positionGuideOverlays();
+}
+
+void DesignerWidget::positionGuideOverlays() {
+    if (m_glitterGroup) m_glitterGroup->setPos(m_guideSceneCenter);
+    if (m_lightingOverlay) m_lightingOverlay->setPos(m_guideSceneCenter);
 }
 
 void DesignerWidget::setGuidesVisible(bool b) {
@@ -87,14 +149,20 @@ void DesignerWidget::setGuidesVisible(bool b) {
 void DesignerWidget::setBleedVisible(bool b) { m_guideBleed->setVisible(b); }
 void DesignerWidget::setVisibleVisible(bool b) { m_guideVisible->setVisible(b); }
 void DesignerWidget::setLightingEnabled(bool on) {
-    for (auto* gi : m_graphicItems) gi->setLightingEnabled(on);
+    m_lightingEnabled = on;
+    auto* lo = qgraphicsitem_cast<LightingOverlayItem*>(m_lightingOverlay);
+    if (lo) lo->setEnabled(on);
     setViewportUpdateMode(on ? QGraphicsView::FullViewportUpdate : QGraphicsView::SmartViewportUpdate);
 }
 void DesignerWidget::setLightAngle(int degrees) {
-    for (auto* gi : m_graphicItems) gi->setLightAngle(degrees);
+    m_lightAngle = degrees;
+    auto* lo = qgraphicsitem_cast<LightingOverlayItem*>(m_lightingOverlay);
+    if (lo) lo->setAngle(degrees);
 }
 void DesignerWidget::setLightIntensity(double val) {
-    for (auto* gi : m_graphicItems) gi->setLightIntensity(val);
+    m_lightIntensity = val;
+    auto* lo = qgraphicsitem_cast<LightingOverlayItem*>(m_lightingOverlay);
+    if (lo) lo->setIntensity(val);
 }
 
 void DesignerWidget::setGlitterEnabled(bool on) {
@@ -269,18 +337,25 @@ void DesignerWidget::drawForeground(QPainter* painter, const QRectF& rect) {
 }
 
 void DesignerWidget::dragEnterEvent(QDragEnterEvent* event) {
-    if (event->mimeData()->hasUrls()) event->acceptProposedAction();
+    if (event->mimeData()->hasUrls()) {
+        for (const auto& url : event->mimeData()->urls()) {
+            if (isImageFile(url.toLocalFile())) {
+                event->acceptProposedAction();
+                return;
+            }
+        }
+    }
 }
 
-static bool isImageFile(const QString& path) {
-    static const QSet<QString> formats = []{
-        QSet<QString> s;
-        for (const auto& fmt : QImageReader::supportedImageFormats())
-            s.insert(QString::fromUtf8(fmt).toLower());
-        return s;
-    }();
-    QString ext = QFileInfo(path).suffix().toLower();
-    return !ext.isEmpty() && formats.contains(ext);
+void DesignerWidget::dragMoveEvent(QDragMoveEvent* event) {
+    if (event->mimeData()->hasUrls()) {
+        for (const auto& url : event->mimeData()->urls()) {
+            if (isImageFile(url.toLocalFile())) {
+                event->acceptProposedAction();
+                return;
+            }
+        }
+    }
 }
 
 void DesignerWidget::dropEvent(QDropEvent* event) {
