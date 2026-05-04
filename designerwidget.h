@@ -4,6 +4,7 @@
 #include <QGraphicsView>
 #include <QGraphicsScene>
 #include <QGraphicsEllipseItem>
+#include <QGraphicsItemGroup>
 #include <QList>
 #include "badgeitem.h"
 #include "badgegraphicitem.h"

@@ -103,14 +103,13 @@ void DesignerWidget::setGlitterPattern(int pattern) {
 }
 
 void DesignerWidget::regenerateGlitter() {
-    if (m_glitterGroup) { m_scene->removeItem(m_glitterGroup); delete m_glitterGroup; }
+    if (m_glitterGroup) { m_scene->destroyItemGroup(qgraphicsitem_cast<QGraphicsItemGroup*>(m_glitterGroup)); m_glitterGroup = nullptr; }
     m_glitterGroup = m_scene->createItemGroup({});
-    // Glitter will be added via createGlitter when pattern changes
-    createGlitter(0);
 }
 
 void DesignerWidget::createGlitter(int pattern) {
     if (!m_glitterGroup) m_glitterGroup = m_scene->createItemGroup({});
+    auto* group = qgraphicsitem_cast<QGraphicsItemGroup*>(m_glitterGroup);
     const double mmToPx = 96.0 / 25.4;
     double visibleR = std::max(0.0, (m_badgeSizeMm - 4)) * mmToPx / 2.0;
     auto& rng = *QRandomGenerator::global();
@@ -144,7 +143,7 @@ void DesignerWidget::createGlitter(int pattern) {
         }
         dot->setPos(x, y);
         dot->setFlag(QGraphicsItem::ItemIgnoresTransformations, true);
-        m_glitterGroup->addToGroup(dot);
+        if (group) group->addToGroup(dot);
     }
 }
 

@@ -18,6 +18,7 @@
 #include <QMimeData>
 #include <QDragEnterEvent>
 #include <QDropEvent>
+#include <QPushButton>
 #include <QFileInfo>
 #include <cmath>
 
@@ -202,7 +203,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
 void MainWindow::onNew() {
     m_badges.clear();
     m_currentFile.clear();
-    while (auto* gi = m_designer->graphicItems().firstOrNull()) { m_designer->graphicItems().removeFirst(); gi->scene()->removeItem(gi); delete gi; }
+    while (!m_designer->graphicItems().isEmpty()) { auto* gi = m_designer->graphicItems().first(); m_designer->graphicItems().removeFirst(); gi->scene()->removeItem(gi); delete gi; }
     m_designer->addBadge(BadgeItem{});
     m_designer->updateGuides(32);
     updateTitle();

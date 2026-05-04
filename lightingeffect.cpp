@@ -10,7 +10,7 @@ QRectF LightingEffect::boundingRectFor(const QRectF& sourceRect) const {
 }
 
 void LightingEffect::draw(QPainter* painter) {
-    QPointF offset;
+    QPoint offset;
     const QPixmap pix = sourcePixmap(Qt::LogicalCoordinates, &offset);
     QRectF r = pix.rect();
 

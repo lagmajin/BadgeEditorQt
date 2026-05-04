@@ -63,6 +63,10 @@ private slots:
     void setupLayoutMode();
     void updatePaperCanvas();
 
+protected:
+    void dragEnterEvent(QDragEnterEvent* event) override;
+    void dropEvent(QDropEvent* event) override;
+
 private:
     void applyTheme(bool dark);
     void refreshBadges();
