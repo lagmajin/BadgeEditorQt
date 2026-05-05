@@ -3,7 +3,6 @@
 
 #include <QMainWindow>
 #include <QSplitter>
-#include <QStackedWidget>
 #include <QComboBox>
 #include <QCheckBox>
 #include <QDoubleSpinBox>
@@ -11,24 +10,27 @@
 #include <QLabel>
 #include <QSpinBox>
 #include <QLineEdit>
+#include <QMenu>
 #include <QToolBar>
 #include <QUndoStack>
+#include <QByteArray>
 #include "badgeitem.h"
 #include "designerwidget.h"
+#include "layoutworkspacewidget.h"
 
 namespace ads {
 class CDockManager;
 class CDockWidget;
+class CDockAreaWidget;
 }
 
 class BadgeGraphicItem;
 
 class MainWindow : public QMainWindow {
-    Q_OBJECT
 public:
     explicit MainWindow(QWidget* parent = nullptr);
 
-private slots:
+private:
     // File
     void onNew();
     void onOpen();
@@ -66,30 +68,38 @@ private slots:
     void onImageDropped(const QString& filePath);
     void onAutoLayout();
 
-    void setupLayoutMode();
-    void updatePaperCanvas();
-
 protected:
     void dragEnterEvent(QDragEnterEvent* event) override;
     void dropEvent(QDropEvent* event) override;
+    void closeEvent(QCloseEvent* event) override;
 
 private:
     void applyTheme(bool dark);
     void refreshBadges();
-    void syncLayoutBadges();
-    void saveState();
+    void syncLayoutWorkspace();
     void updateTitle();
-    QList<BadgeItem> collectBadges() const;
+    void loadDockState();
+    void saveDockState();
+    void resetDockState();
+    void openDesignerPerspective();
+    void openLayoutPerspective();
+    void saveDesignerPerspective();
+    void saveLayoutPerspective();
+    void syncPerspectiveUi(const QString& name);
+    void savePerspectiveAs();
+    void openSavedPerspective();
+    void deleteSavedPerspective();
+    void refreshPerspectiveMenu();
 
     // UI
     ads::CDockManager* m_dockManager = nullptr;
-    ads::CDockWidget* m_workspaceDock = nullptr;
+    ads::CDockAreaWidget* m_dockArea = nullptr;
     ads::CDockWidget* m_inspectorDock = nullptr;
+    ads::CDockWidget* m_designerDock = nullptr;
+    ads::CDockWidget* m_layoutDock = nullptr;
     QWidget* m_inspector;
     DesignerWidget* m_designer;
-    QGraphicsView* m_layoutView;
-    QGraphicsScene* m_layoutScene;
-    QStackedWidget* m_stack;
+    LayoutWorkspaceWidget* m_layoutWorkspace;
 
     // Toolbar
     QToolBar* m_toolbar;
@@ -97,6 +107,8 @@ private:
     QAction* m_actLayout;
     QLabel* m_zoomLabel;
     QAction* m_actTheme;
+    QMenu* m_perspectiveMenu = nullptr;
+    QMenu* m_savedPerspectiveMenu = nullptr;
 
     // Inspector - properties
     QDoubleSpinBox* m_propX;
@@ -105,6 +117,7 @@ private:
     QDoubleSpinBox* m_propH;
     QSlider* m_propRotation;
     QLineEdit* m_propText;
+    QLineEdit* m_propColorSpace;
 
     // Inspector - color correction
     QSlider* m_propBrightness;
@@ -123,12 +136,14 @@ private:
     // Layout config
     QComboBox* m_comboPaperSize;
     QCheckBox* m_chkLandscape;
+    QDoubleSpinBox* m_spinPaperMargin;
+    QDoubleSpinBox* m_spinPaperSpacing;
 
     // State
-    QList<BadgeItem> m_badges;
     QList<BadgeGraphicItem*> m_selected;
     QString m_currentFile;
     QUndoStack* m_undoStack;
+    QByteArray m_defaultDockState;
     double m_zoomScale = 1.0;
     bool m_isDark = true;
     bool m_updatingUI = false;

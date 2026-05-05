@@ -7,6 +7,7 @@
 #include <QFileInfo>
 #include <QStyleOptionGraphicsItem>
 #include <QCursor>
+#include <wobjectimpl.h>
 
 // --- ResizeHandle: small corner square for resizing ---
 class ResizeHandle : public QGraphicsRectItem {
@@ -64,6 +65,8 @@ BadgeGraphicItem::BadgeGraphicItem(const BadgeItem& badge, QGraphicsItem* parent
     loadImage();
     updateHandles();
 }
+
+W_OBJECT_IMPL(BadgeGraphicItem)
 
 void BadgeGraphicItem::updateHandles() {
     if (!m_badge.isSelected) {
@@ -142,9 +145,10 @@ void BadgeGraphicItem::renderCore(QPainter* painter, const QRectF& r) {
     }
 
     // Draw main image (always, behind or in front of layers)
-    if (!m_thumbnail.isNull()) {
+    const QPixmap& baseImage = m_processed.isNull() ? m_thumbnail : m_processed;
+    if (!baseImage.isNull()) {
         painter->setOpacity(1.0);
-        painter->drawPixmap(r.toRect(), m_thumbnail);
+        painter->drawPixmap(r.toRect(), baseImage);
         drewAnything = true;
     }
 
@@ -173,31 +177,54 @@ void BadgeGraphicItem::renderCore(QPainter* painter, const QRectF& r) {
 }
 
 void BadgeGraphicItem::loadImage() {
-    if (m_badge.imagePath.isEmpty() || !QFileInfo::exists(m_badge.imagePath)) return;
-    m_thumbnail.load(m_badge.imagePath);
+    m_loadedImagePath = m_badge.imagePath;
+    m_thumbnail = QPixmap();
+    m_processed = QPixmap();
+    m_colorSpaceLabel = QStringLiteral("読み込みなし");
+
+    if (m_badge.imagePath.isEmpty() || !QFileInfo::exists(m_badge.imagePath)) {
+        update();
+        return;
+    }
+
+    QString label;
+    m_thumbnail = QPixmap::fromImage(ImageProcessor::loadImage(m_badge.imagePath, &label));
+    m_colorSpaceLabel = label;
     applyColorCorrection();
 }
 
 void BadgeGraphicItem::applyColorCorrection() {
     if (m_badge.brightness == 0 && m_badge.contrast == 0 && m_badge.saturation == 0) {
         m_processed = QPixmap();
+        update();
         return;
     }
     if (!m_thumbnail.isNull())
         m_processed = ImageProcessor::applyCorrection(m_thumbnail, m_badge.brightness, m_badge.contrast, m_badge.saturation);
+    update();
 }
 
 void BadgeGraphicItem::syncFromBadge() {
     prepareGeometryChange();
     setTransformOriginPoint(boundingRect().center());
+    if (m_badge.imagePath != m_loadedImagePath) {
+        loadImage();
+    }
+    bool changed = false;
     double px = m_badge.xMm * 96.0 / 25.4;
     double py = m_badge.yMm * 96.0 / 25.4;
-    if (qAbs(pos().x() - px) > 0.1 || qAbs(pos().y() - py) > 0.1)
+    if (qAbs(pos().x() - px) > 0.1 || qAbs(pos().y() - py) > 0.1) {
         setPos(px, py);
-    if (qAbs(rotation() - m_badge.rotation) > 0.1)
+        changed = true;
+    }
+    if (qAbs(rotation() - m_badge.rotation) > 0.1) {
         setRotation(m_badge.rotation);
+        changed = true;
+    }
     updateHandles();
     update();
+    if (changed)
+        emit badgeMoved(this);
 }
 
 void BadgeGraphicItem::mousePressEvent(QGraphicsSceneMouseEvent* event) {

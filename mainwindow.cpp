@@ -2,6 +2,7 @@
 #include "badgegraphicitem.h"
 #include "batchlayoutdialog.h"
 #include "layoutengine.h"
+#include "projectsync.h"
 #include <QMenuBar>
 #include <QMenu>
 #include <QAction>
@@ -13,18 +14,21 @@
 #include <QGroupBox>
 #include <QScrollArea>
 #include <QListWidget>
-#include <QJsonDocument>
-#include <QJsonArray>
 #include <QApplication>
 #include <QMimeData>
 #include <QDragEnterEvent>
 #include <QDropEvent>
 #include <QPushButton>
 #include <QShortcut>
+#include <QInputDialog>
+#include <QSettings>
 #include <DockManager.h>
+#include <DockAreaWidget.h>
 #include <DockWidget.h>
 #include <QFileInfo>
-#include <cmath>
+
+import badge.documentio;
+import badge.model;
 
 MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     setWindowTitle("Badge Editor Pro");
@@ -47,13 +51,23 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     editMenu->addAction("やり直し(&R)", this, &MainWindow::onRedo, QKeySequence::Redo);
     editMenu->addSeparator();
     editMenu->addAction("削除", this, &MainWindow::onDelete, QKeySequence::Delete);
-    new QShortcut(QKeySequence(Qt::Key_Backspace), this, SLOT(onDelete()));
+    auto* backspaceShortcut = new QShortcut(QKeySequence(Qt::Key_Backspace), this);
+    connect(backspaceShortcut, &QShortcut::activated, this, &MainWindow::onDelete);
 
     auto* viewMenu = menuBar()->addMenu("表示(&V)");
     viewMenu->addAction("ズームイン", this, [this]{ m_zoomScale *= 1.2; m_zoomLabel->setText(QString::number(m_zoomScale*100,'f',0)+"%"); });
     viewMenu->addAction("ズームアウト", this, [this]{ m_zoomScale /= 1.2; m_zoomLabel->setText(QString::number(m_zoomScale*100,'f',0)+"%"); });
     viewMenu->addSeparator();
     m_actTheme = viewMenu->addAction("テーマ切替", this, &MainWindow::onToggleTheme);
+    viewMenu->addAction("ドック配置を初期化", this, &MainWindow::resetDockState);
+    auto* perspectiveMenu = viewMenu->addMenu("Perspective");
+    m_perspectiveMenu = perspectiveMenu;
+    perspectiveMenu->addAction("現在を編集として保存", this, &MainWindow::saveDesignerPerspective);
+    perspectiveMenu->addAction("現在を配置確認として保存", this, &MainWindow::saveLayoutPerspective);
+    perspectiveMenu->addAction("名前を付けて保存...", this, &MainWindow::savePerspectiveAs);
+    perspectiveMenu->addSeparator();
+    perspectiveMenu->addAction("編集を開く", this, &MainWindow::openDesignerPerspective);
+    perspectiveMenu->addAction("配置確認を開く", this, &MainWindow::openLayoutPerspective);
 
     // --- Toolbar ---
     m_toolbar = addToolBar("Main");
@@ -73,11 +87,15 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     QAction* autoAct = m_toolbar->addAction("自動配置");
     connect(autoAct, &QAction::triggered, this, &MainWindow::onAutoLayout);
     m_toolbar->addSeparator();
+    QAction* designerPerspectiveAct = m_toolbar->addAction("編集");
+    connect(designerPerspectiveAct, &QAction::triggered, this, &MainWindow::openDesignerPerspective);
+    designerPerspectiveAct->setShortcut(QKeySequence("Ctrl+E"));
+    QAction* layoutPerspectiveAct = m_toolbar->addAction("配置確認");
+    connect(layoutPerspectiveAct, &QAction::triggered, this, &MainWindow::openLayoutPerspective);
+    layoutPerspectiveAct->setShortcut(QKeySequence("Ctrl+L"));
+    m_toolbar->addSeparator();
     m_zoomLabel = new QLabel("100%");
     m_toolbar->addWidget(m_zoomLabel);
-
-    // --- Central Stack ---
-    m_stack = new QStackedWidget;
 
     // Designer
     m_designer = new DesignerWidget;
@@ -86,14 +104,9 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     connect(m_designer, &DesignerWidget::badgeDoubleClicked, this, [this](BadgeGraphicItem*){ onSetImage(); });
     connect(m_designer, &DesignerWidget::badgeMoved, this, &MainWindow::onBadgeMoved);
     m_designer->updateGuides(57);
-    m_stack->addWidget(m_designer);
 
     // Layout
-    m_layoutScene = new QGraphicsScene(this);
-    m_layoutView = new QGraphicsView(m_layoutScene);
-    m_layoutView->setRenderHints(QPainter::Antialiasing);
-    m_layoutView->setBackgroundBrush(Qt::darkGray);
-    m_stack->addWidget(m_layoutView);
+    m_layoutWorkspace = new LayoutWorkspaceWidget;
 
     // --- Inspector ---
     auto* scroll = new QScrollArea;
@@ -126,6 +139,9 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     auto* imgBtn = new QPushButton("画像を変更...");
     connect(imgBtn, &QPushButton::clicked, this, &MainWindow::onSetImage);
     propForm->addRow(imgBtn);
+    m_propColorSpace = new QLineEdit;
+    m_propColorSpace->setReadOnly(true);
+    propForm->addRow("色空間:", m_propColorSpace);
     inspLayout->addWidget(propGroup);
 
     connect(m_propX, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &MainWindow::onInspectorChanged);
@@ -237,12 +253,24 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     auto* layoutForm = new QFormLayout(layoutGroup);
     m_comboPaperSize = new QComboBox; m_comboPaperSize->addItems({"A4 (210 x 297 mm)", "B5 (182 x 257 mm)"});
     m_chkLandscape = new QCheckBox("横向き");
+    m_spinPaperMargin = new QDoubleSpinBox;
+    m_spinPaperMargin->setSuffix(" mm");
+    m_spinPaperMargin->setRange(0.0, 100.0);
+    m_spinPaperMargin->setValue(10.0);
+    m_spinPaperSpacing = new QDoubleSpinBox;
+    m_spinPaperSpacing->setSuffix(" mm");
+    m_spinPaperSpacing->setRange(0.0, 50.0);
+    m_spinPaperSpacing->setValue(1.0);
     layoutForm->addRow("用紙:", m_comboPaperSize);
     layoutForm->addRow(m_chkLandscape);
+    layoutForm->addRow("余白:", m_spinPaperMargin);
+    layoutForm->addRow("間隔:", m_spinPaperSpacing);
     inspLayout->addWidget(layoutGroup);
 
-    connect(m_comboPaperSize, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this]{ if (!m_isDesigner) setupLayoutMode(); });
-    connect(m_chkLandscape, &QCheckBox::toggled, this, [this]{ if (!m_isDesigner) setupLayoutMode(); });
+    connect(m_comboPaperSize, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this]{ if (!m_isDesigner) syncLayoutWorkspace(); });
+    connect(m_chkLandscape, &QCheckBox::toggled, this, [this]{ if (!m_isDesigner) syncLayoutWorkspace(); });
+    connect(m_spinPaperMargin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this]{ if (!m_isDesigner) syncLayoutWorkspace(); });
+    connect(m_spinPaperSpacing, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this]{ if (!m_isDesigner) syncLayoutWorkspace(); });
 
     inspLayout->addStretch();
     scroll->setWidget(m_inspector);
@@ -252,31 +280,44 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     ads::CDockManager::setConfigFlag(ads::CDockManager::XmlCompressionEnabled, false);
     ads::CDockManager::setConfigFlag(ads::CDockManager::FocusHighlighting, true);
     m_dockManager = new ads::CDockManager(this);
+    connect(m_dockManager, &ads::CDockManager::perspectiveOpened, this, &MainWindow::syncPerspectiveUi);
 
-    m_workspaceDock = new ads::CDockWidget("ワークスペース");
-    m_workspaceDock->setWidget(m_stack);
-    m_workspaceDock->setFeature(ads::CDockWidget::DockWidgetClosable, false);
+    m_designerDock = new ads::CDockWidget("編集");
+    m_designerDock->setWidget(m_designer);
+    m_designerDock->setFeature(ads::CDockWidget::DockWidgetClosable, false);
+
+    m_layoutDock = new ads::CDockWidget("配置確認");
+    m_layoutDock->setWidget(m_layoutWorkspace);
+    m_layoutDock->setFeature(ads::CDockWidget::DockWidgetClosable, false);
 
     m_inspectorDock = new ads::CDockWidget("インスペクター");
     m_inspectorDock->setWidget(scroll);
     m_inspectorDock->setMinimumSizeHintMode(ads::CDockWidget::MinimumSizeHintFromDockWidget);
     m_inspectorDock->resize(300, 800);
 
-    auto* area = m_dockManager->setCentralWidget(m_workspaceDock);
-    m_dockManager->addDockWidget(ads::RightDockWidgetArea, m_inspectorDock, area);
+    m_dockArea = m_dockManager->setCentralWidget(m_designerDock);
+    m_dockManager->addDockWidgetTabToArea(m_layoutDock, m_dockArea);
+    m_dockManager->addDockWidget(ads::RightDockWidgetArea, m_inspectorDock, m_dockArea);
+    m_defaultDockState = m_dockManager->saveState(1);
+    m_dockManager->addPerspective("designer");
+    m_layoutDock->setAsCurrentTab();
+    m_dockManager->addPerspective("layout");
+    m_designerDock->setAsCurrentTab();
+    loadDockState();
+    refreshPerspectiveMenu();
 
     applyTheme(true);
-    onModeChanged(true);
+    openDesignerPerspective();
     updateTitle();
 }
 
 // --- File slots ---
 void MainWindow::onNew() {
-    m_badges.clear();
     m_currentFile.clear();
-    while (!m_designer->graphicItems().isEmpty()) { auto* gi = m_designer->graphicItems().first(); m_designer->graphicItems().removeFirst(); gi->scene()->removeItem(gi); delete gi; }
+    m_designer->clearBadges();
     m_designer->addBadge(BadgeItem{});
     m_designer->updateGuides(57);
+    syncLayoutWorkspace();
     updateTitle();
 }
 
@@ -285,10 +326,13 @@ void MainWindow::onOpen() {
     if (path.isEmpty()) return;
     QFile f(path);
     if (f.open(QIODevice::ReadOnly)) {
-        QJsonDocument doc = QJsonDocument::fromJson(f.readAll());
-        m_badges = BadgeItem::fromJsonArray(doc.array());
+        const auto loaded = badge::loadDocumentFromJson(f.readAll());
+        if (!loaded.ok) {
+            QMessageBox::warning(this, "開く", "ファイルの読み込みに失敗しました");
+            return;
+        }
         onNew();
-        for (const auto& b : m_badges) m_designer->addBadge(b);
+        projectsync::applyDocument(*m_designer, *m_layoutWorkspace, *m_comboPaperSize, *m_chkLandscape, *m_spinPaperMargin, *m_spinPaperSpacing, loaded.document);
         m_currentFile = path;
         updateTitle();
     }
@@ -298,7 +342,7 @@ void MainWindow::onSave() {
     if (m_currentFile.isEmpty()) { onSaveAs(); return; }
     QFile f(m_currentFile);
     if (f.open(QIODevice::WriteOnly)) {
-        f.write(QJsonDocument(BadgeItem::toJsonArray(collectBadges())).toJson());
+        f.write(badge::saveDocumentToJson(projectsync::currentDocument(*m_designer, *m_comboPaperSize, *m_chkLandscape, *m_spinPaperMargin, *m_spinPaperSpacing, m_currentFile)));
     }
 }
 
@@ -320,6 +364,7 @@ void MainWindow::onDelete() {
     m_designer->removeSelectedBadges();
     m_selected.clear();
     onBadgeDeselected();
+    syncLayoutWorkspace();
 }
 
 void MainWindow::onToggleTheme() { m_isDark = !m_isDark; applyTheme(m_isDark); }
@@ -328,12 +373,10 @@ void MainWindow::onModeChanged(bool designer) {
     m_isDesigner = designer;
     m_actDesigner->setChecked(designer);
     m_actLayout->setChecked(!designer);
-    m_designer->setVisible(designer);
-    m_layoutView->setVisible(!designer);
     if (designer) {
-        m_designer->setGuidesVisible(true);
+        openDesignerPerspective();
     } else {
-        setupLayoutMode();
+        openLayoutPerspective();
     }
 }
 
@@ -346,6 +389,7 @@ void MainWindow::onBadgeSelected(BadgeGraphicItem* item) {
     m_propW->setValue(b.widthMm); m_propH->setValue(b.heightMm);
     m_propRotation->setValue(int(b.rotation));
     m_propText->setText(b.displayText);
+    m_propColorSpace->setText(item->colorSpaceLabel());
     m_propBrightness->setValue(int(b.brightness));
     m_propContrast->setValue(int(b.contrast));
     m_propSaturation->setValue(int(b.saturation));
@@ -359,6 +403,7 @@ void MainWindow::onBadgeDeselected() {
     m_propW->setValue(32); m_propH->setValue(32);
     m_propRotation->setValue(0);
     m_propText->clear();
+    m_propColorSpace->setText("未選択");
     m_updatingUI = false;
 }
 
@@ -369,6 +414,7 @@ void MainWindow::onBadgeMoved(BadgeGraphicItem* item) {
     m_propX->setValue(b.xMm);
     m_propY->setValue(b.yMm);
     m_updatingUI = false;
+    syncLayoutWorkspace();
 }
 
 void MainWindow::onInspectorChanged() {
@@ -383,7 +429,9 @@ void MainWindow::onInspectorChanged() {
     b.saturation = m_propSaturation->value();
     m_selected.first()->applyColorCorrection();
     m_selected.first()->syncFromBadge();
+    m_propColorSpace->setText(m_selected.first()->colorSpaceLabel());
     m_designer->updateGuides(b.widthMm);
+    syncLayoutWorkspace();
 }
 
 void MainWindow::onSetImage() {
@@ -393,12 +441,15 @@ void MainWindow::onSetImage() {
     m_selected.first()->badge().imagePath = path;
     m_selected.first()->applyColorCorrection();
     m_selected.first()->syncFromBadge();
+    m_propColorSpace->setText(m_selected.first()->colorSpaceLabel());
+    syncLayoutWorkspace();
 }
 
 // --- Effects ---
 void MainWindow::onGuideToggle() {
     m_designer->setBleedVisible(m_chkBleed->isChecked());
     m_designer->setVisibleVisible(m_chkVisible->isChecked());
+    syncLayoutWorkspace();
 }
 
 void MainWindow::onLightingToggle(bool on) { m_designer->setLightingEnabled(on); }
@@ -416,8 +467,8 @@ void MainWindow::onAddBadge() {
     const double mmToPx = 96.0 / 25.4;
     b.xMm = center.x() / mmToPx - b.widthMm / 2;
     b.yMm = center.y() / mmToPx - b.heightMm / 2;
-    m_badges.append(b);
     m_designer->addBadge(b);
+    syncLayoutWorkspace();
 }
 
 void MainWindow::onBatchAdd() {
@@ -429,68 +480,28 @@ void MainWindow::onBatchAdd() {
                 b.xMm = 10 + c * (b.widthMm + 1);
                 b.yMm = 10 + r * (b.heightMm + 1);
                 b.clipToCircle = dlg.clipCircle();
-                m_badges.append(b);
                 m_designer->addBadge(b);
             }
+        syncLayoutWorkspace();
     }
 }
 
 void MainWindow::onAutoLayout() {
-    PaperConfig cfg;
-    cfg.widthMm = m_comboPaperSize->currentIndex() == 1 ? 182 : 210;
-    cfg.heightMm = m_comboPaperSize->currentIndex() == 1 ? 257 : 297;
-    if (m_chkLandscape->isChecked()) std::swap(cfg.widthMm, cfg.heightMm);
-    m_badges = LayoutEngine::autoLayout(collectBadges(), cfg);
+    auto document = projectsync::currentDocument(*m_designer, *m_comboPaperSize, *m_chkLandscape, *m_spinPaperMargin, *m_spinPaperSpacing, m_currentFile);
+    document.badges = badge::auto_layout(document.badges, document.paper);
+    projectsync::applyDocument(*m_designer, *m_layoutWorkspace, *m_comboPaperSize, *m_chkLandscape, *m_spinPaperMargin, *m_spinPaperSpacing, document);
     onModeChanged(false);
 }
 
 void MainWindow::onImageDropped(const QString& filePath) {
     BadgeItem b; b.imagePath = filePath;
     b.label = QFileInfo(filePath).baseName();
-    m_badges.append(b);
     m_designer->addBadge(b);
+    syncLayoutWorkspace();
 }
 
-void MainWindow::setupLayoutMode() {
-    m_layoutScene->clear();
-    const double mmToPx = 96.0 / 25.4;
-    PaperConfig cfg;
-    cfg.widthMm = m_comboPaperSize->currentIndex() == 1 ? 182 : 210;
-    cfg.heightMm = m_comboPaperSize->currentIndex() == 1 ? 257 : 297;
-    if (m_chkLandscape->isChecked()) std::swap(cfg.widthMm, cfg.heightMm);
-    updatePaperCanvas();
-
-    auto* paper = m_layoutScene->addRect(0, 0, cfg.widthMm * mmToPx, cfg.heightMm * mmToPx, QPen(Qt::black), QBrush(Qt::white));
-
-    // Safe area
-    QPen safePen(Qt::red, 1, Qt::DashLine);
-    safePen.setDashPattern({5, 5});
-    m_layoutScene->addRect(5 * mmToPx, 5 * mmToPx, (cfg.widthMm - 10) * mmToPx, (cfg.heightMm - 10) * mmToPx, safePen, Qt::NoBrush);
-
-    syncLayoutBadges();
-}
-
-void MainWindow::updatePaperCanvas() {
-    const double mmToPx = 96.0 / 25.4;
-    double w = m_comboPaperSize->currentIndex() == 1 ? 182 : 210;
-    double h = m_comboPaperSize->currentIndex() == 1 ? 257 : 297;
-    if (m_chkLandscape->isChecked()) std::swap(w, h);
-    m_layoutScene->setSceneRect(-50, -50, w * mmToPx + 100, h * mmToPx + 100);
-}
-
-void MainWindow::syncLayoutBadges() {
-    const double mmToPx = 96.0 / 25.4;
-    for (const auto& b : collectBadges()) {
-        auto* rect = m_layoutScene->addRect(0, 0, b.widthMm * mmToPx, b.heightMm * mmToPx, QPen(Qt::black), QBrush(Qt::cyan));
-        rect->setPos(b.xMm * mmToPx, b.yMm * mmToPx);
-    }
-}
-
-QList<BadgeItem> MainWindow::collectBadges() const {
-    QList<BadgeItem> list;
-    for (auto* gi : m_designer->graphicItems())
-        list.append(gi->badge());
-    return list;
+void MainWindow::syncLayoutWorkspace() {
+    m_layoutWorkspace->setDocument(projectsync::currentDocument(*m_designer, *m_comboPaperSize, *m_chkLandscape, *m_spinPaperMargin, *m_spinPaperSpacing, m_currentFile));
 }
 
 void MainWindow::applyTheme(bool dark) {
@@ -533,5 +544,179 @@ void MainWindow::dropEvent(QDropEvent* event) {
         QString ext = QFileInfo(path).suffix().toLower();
         if (ext == "png" || ext == "jpg" || ext == "jpeg" || ext == "bmp")
             onImageDropped(path);
+    }
+}
+
+void MainWindow::closeEvent(QCloseEvent* event) {
+    saveDockState();
+    QMainWindow::closeEvent(event);
+}
+
+void MainWindow::loadDockState() {
+    QSettings settings;
+    m_dockManager->loadPerspectives(settings);
+    const QByteArray state = settings.value("dock/state").toByteArray();
+    if (!state.isEmpty()) {
+        m_dockManager->restoreState(state, 1);
+    }
+    const QString activePerspective = settings.value("dock/activePerspective", "designer").toString();
+    if (activePerspective == "layout") {
+        openLayoutPerspective();
+    } else {
+        openDesignerPerspective();
+    }
+}
+
+void MainWindow::saveDockState() {
+    QSettings settings;
+    settings.setValue("dock/state", m_dockManager->saveState(1));
+    m_dockManager->savePerspectives(settings);
+    settings.setValue("dock/activePerspective", m_isDesigner ? "designer" : "layout");
+    refreshPerspectiveMenu();
+}
+
+void MainWindow::resetDockState() {
+    if (m_defaultDockState.isEmpty()) {
+        return;
+    }
+    m_dockManager->restoreState(m_defaultDockState, 1);
+    m_designerDock->setAsCurrentTab();
+    m_isDesigner = true;
+    m_actDesigner->setChecked(true);
+    m_actLayout->setChecked(false);
+    syncLayoutWorkspace();
+}
+
+void MainWindow::openDesignerPerspective() {
+    if (!m_dockManager || !m_designerDock) {
+        return;
+    }
+    m_designerDock->setAsCurrentTab();
+    m_dockManager->openPerspective("designer");
+    syncPerspectiveUi("designer");
+}
+
+void MainWindow::openLayoutPerspective() {
+    if (!m_dockManager || !m_layoutDock) {
+        return;
+    }
+    m_layoutDock->setAsCurrentTab();
+    m_dockManager->openPerspective("layout");
+    syncPerspectiveUi("layout");
+}
+
+void MainWindow::saveDesignerPerspective() {
+    if (!m_dockManager) {
+        return;
+    }
+    m_dockManager->addPerspective("designer");
+    saveDockState();
+}
+
+void MainWindow::saveLayoutPerspective() {
+    if (!m_dockManager) {
+        return;
+    }
+    m_dockManager->addPerspective("layout");
+    saveDockState();
+}
+
+void MainWindow::savePerspectiveAs() {
+    if (!m_dockManager) {
+        return;
+    }
+    const QString name = QInputDialog::getText(this, "Perspective を保存", "名前:");
+    if (name.trimmed().isEmpty()) {
+        return;
+    }
+    m_dockManager->addPerspective(name.trimmed());
+    saveDockState();
+    m_dockManager->openPerspective(name.trimmed());
+    syncPerspectiveUi(name.trimmed());
+}
+
+void MainWindow::deleteSavedPerspective() {
+    if (!m_dockManager) {
+        return;
+    }
+
+    const QStringList names = m_dockManager->perspectiveNames();
+    QStringList deletable;
+    for (const auto& name : names) {
+        if (name != "designer" && name != "layout") {
+            deletable.append(name);
+        }
+    }
+
+    if (deletable.isEmpty()) {
+        QMessageBox::information(this, "Perspective", "削除できる保存済み perspective がありません");
+        return;
+    }
+
+    bool ok = false;
+    const QString name = QInputDialog::getItem(this, "Perspective を削除", "削除する名前:", deletable, 0, false, &ok);
+    if (!ok || name.isEmpty()) {
+        return;
+    }
+
+    m_dockManager->removePerspective(name);
+    saveDockState();
+
+    if (m_dockManager->perspectiveNames().contains("designer")) {
+        m_dockManager->openPerspective("designer");
+        syncPerspectiveUi("designer");
+    } else {
+        syncPerspectiveUi(QString());
+    }
+}
+
+void MainWindow::openSavedPerspective() {
+    auto* act = qobject_cast<QAction*>(sender());
+    if (!act || !m_dockManager) {
+        return;
+    }
+    const QString name = act->data().toString();
+    if (name.isEmpty()) {
+        return;
+    }
+    m_dockManager->openPerspective(name);
+    syncPerspectiveUi(name);
+}
+
+void MainWindow::syncPerspectiveUi(const QString& name) {
+    Q_UNUSED(name);
+    const bool designer = !m_dockArea || m_dockArea->currentDockWidget() != m_layoutDock;
+    m_isDesigner = designer;
+    m_actDesigner->setChecked(designer);
+    m_actLayout->setChecked(!designer);
+    if (designer) {
+        m_designer->setGuidesVisible(true);
+    }
+    syncLayoutWorkspace();
+}
+
+void MainWindow::refreshPerspectiveMenu() {
+    if (!m_perspectiveMenu || !m_dockManager) {
+        return;
+    }
+
+    m_savedPerspectiveMenu = nullptr;
+    m_perspectiveMenu->clear();
+    m_perspectiveMenu->addAction("現在を編集として保存", this, &MainWindow::saveDesignerPerspective);
+    m_perspectiveMenu->addAction("現在を配置確認として保存", this, &MainWindow::saveLayoutPerspective);
+    m_perspectiveMenu->addAction("名前を付けて保存...", this, &MainWindow::savePerspectiveAs);
+    m_perspectiveMenu->addSeparator();
+    m_perspectiveMenu->addAction("編集を開く", this, &MainWindow::openDesignerPerspective);
+    m_perspectiveMenu->addAction("配置確認を開く", this, &MainWindow::openLayoutPerspective);
+
+    const QStringList names = m_dockManager->perspectiveNames();
+    if (!names.isEmpty()) {
+        m_savedPerspectiveMenu = m_perspectiveMenu->addMenu("保存済み");
+        m_savedPerspectiveMenu->addAction("削除...", this, &MainWindow::deleteSavedPerspective);
+        m_savedPerspectiveMenu->addSeparator();
+        for (const auto& name : names) {
+            auto* action = m_savedPerspectiveMenu->addAction(name, this, &MainWindow::openSavedPerspective);
+            action->setData(name);
+        }
     }
 }

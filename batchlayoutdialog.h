@@ -9,7 +9,6 @@
 #include "badgeitem.h"
 
 class BatchLayoutDialog : public QDialog {
-    Q_OBJECT
 public:
     explicit BatchLayoutDialog(QWidget* parent = nullptr);
     double badgeWidth() const { return m_width->value(); }

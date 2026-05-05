@@ -3,6 +3,7 @@
 
 int main(int argc, char* argv[]) {
     QApplication app(argc, argv);
+    app.setOrganizationName("BadgeEditorQt");
     app.setApplicationName("BadgeEditorQt");
     app.setApplicationVersion("1.0.0");
     MainWindow w;

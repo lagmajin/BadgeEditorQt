@@ -10,6 +10,7 @@
 #include <QDragEnterEvent>
 #include <QDropEvent>
 #include <QMimeData>
+#include <wobjectdefs.h>
 #include "badgeitem.h"
 #include "badgegraphicitem.h"
 #include "guideitem.h"
@@ -17,11 +18,12 @@
 #include "imageprocessor.h"
 
 class DesignerWidget : public QGraphicsView {
-    Q_OBJECT
+    W_OBJECT(DesignerWidget)
 public:
     explicit DesignerWidget(QWidget* parent = nullptr);
     
     void addBadge(const BadgeItem& item);
+    void clearBadges();
     void removeSelectedBadges();
     void refreshAll();
     void syncToBadgeList(QList<BadgeItem>& badges);
@@ -47,15 +49,16 @@ public:
     void updateBackground(const QBrush& brush);
     void setBatchMode(bool on);
 
-signals:
-    void badgeSelected(BadgeGraphicItem* item);
-    void badgeDeselected();
-    void badgeDoubleClicked(BadgeGraphicItem* item);
-    void badgeMoved(BadgeGraphicItem* item);
+Q_SIGNALS:
+    void badgeSelected(BadgeGraphicItem* item) W_SIGNAL(badgeSelected, item);
+    void badgeDeselected() W_SIGNAL(badgeDeselected);
+    void badgeDoubleClicked(BadgeGraphicItem* item) W_SIGNAL(badgeDoubleClicked, item);
+    void badgeMoved(BadgeGraphicItem* item) W_SIGNAL(badgeMoved, item);
 
 protected:
     void wheelEvent(QWheelEvent* event) override;
     void mousePressEvent(QMouseEvent* event) override;
+    void resizeEvent(QResizeEvent* event) override;
     void drawBackground(QPainter* painter, const QRectF& rect) override;
     void drawForeground(QPainter* painter, const QRectF& rect) override;
     void dragEnterEvent(QDragEnterEvent* event) override;
@@ -76,12 +79,12 @@ private:
     QList<BadgeGraphicItem*> m_graphicItems;
     double m_zoomLevel = 1.0;
     double m_badgeSizeMm = 57.0;
-    QPointF m_guideSceneCenter{0, 0};
     bool m_batchMode = false;
     
     void createGlitter(int pattern);
     QPainterPath createStar(double size);
     QPainterPath createSnowflake(double size);
+    QPointF guideSceneCenter() const;
     void positionGuideOverlays();
 };
 

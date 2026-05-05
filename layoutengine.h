@@ -1,15 +1,10 @@
 #ifndef LAYOUTENGINE_H
 #define LAYOUTENGINE_H
 
+import badge.paper;
+
 #include <QList>
 #include "badgeitem.h"
-
-struct PaperConfig {
-    double widthMm = 210.0;
-    double heightMm = 297.0;
-    double marginMm = 10.0;
-    double spacingMm = 1.0;
-};
 
 class LayoutEngine {
 public:

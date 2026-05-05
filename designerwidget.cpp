@@ -6,6 +6,8 @@
 #include <QImageReader>
 #include <QSet>
 #include <cmath>
+#include <utility>
+#include <wobjectimpl.h>
 
 class LightingOverlayItem : public QGraphicsItem {
 public:
@@ -89,6 +91,8 @@ DesignerWidget::DesignerWidget(QWidget* parent) : QGraphicsView(parent) {
     m_lightingOverlay->setZValue(9999);
 }
 
+W_OBJECT_IMPL(DesignerWidget)
+
 void DesignerWidget::addBadge(const BadgeItem& item) {
     auto* gi = new BadgeGraphicItem(item);
     m_scene->addItem(gi);
@@ -97,6 +101,14 @@ void DesignerWidget::addBadge(const BadgeItem& item) {
     connect(gi, &BadgeGraphicItem::badgeClicked, this, &DesignerWidget::badgeSelected);
     connect(gi, &BadgeGraphicItem::badgeDoubleClicked, this, &DesignerWidget::badgeDoubleClicked);
     connect(gi, &BadgeGraphicItem::badgeMoved, this, &DesignerWidget::badgeMoved);
+}
+
+void DesignerWidget::clearBadges() {
+    for (auto* gi : std::as_const(m_graphicItems)) {
+        m_scene->removeItem(gi);
+        delete gi;
+    }
+    m_graphicItems.clear();
 }
 
 void DesignerWidget::removeSelectedBadges() {
@@ -133,7 +145,6 @@ BadgeGraphicItem* DesignerWidget::selectedGraphic() const {
 
 void DesignerWidget::updateGuides(double badgeSizeMm) {
     m_badgeSizeMm = badgeSizeMm;
-    m_guideSceneCenter = mapToScene(viewport()->rect().center());
     positionGuideOverlays();
     if (m_glitterGroup) regenerateGlitter();
     viewport()->update();
@@ -141,16 +152,27 @@ void DesignerWidget::updateGuides(double badgeSizeMm) {
 
 void DesignerWidget::scrollContentsBy(int dx, int dy) {
     QGraphicsView::scrollContentsBy(dx, dy);
-    m_guideSceneCenter = mapToScene(viewport()->rect().center());
     positionGuideOverlays();
+    viewport()->update();
+}
+
+void DesignerWidget::resizeEvent(QResizeEvent* event) {
+    QGraphicsView::resizeEvent(event);
+    positionGuideOverlays();
+    viewport()->update();
+}
+
+QPointF DesignerWidget::guideSceneCenter() const {
+    return mapToScene(viewport()->rect().center());
 }
 
 void DesignerWidget::positionGuideOverlays() {
     const double mmToPx = 96.0 / 25.4;
     double finishR = m_badgeSizeMm * mmToPx / 2;
-    if (m_glitterGroup) m_glitterGroup->setPos(m_guideSceneCenter);
+    const QPointF center = guideSceneCenter();
+    if (m_glitterGroup) m_glitterGroup->setPos(center);
     if (m_lightingOverlay) {
-        m_lightingOverlay->setPos(m_guideSceneCenter);
+        m_lightingOverlay->setPos(center);
         auto* lo = qgraphicsitem_cast<LightingOverlayItem*>(m_lightingOverlay);
         if (lo) lo->setRadius(finishR);
     }
@@ -194,7 +216,7 @@ void DesignerWidget::regenerateGlitter() {
     if (m_glitterGroup) { m_scene->destroyItemGroup(qgraphicsitem_cast<QGraphicsItemGroup*>(m_glitterGroup)); m_glitterGroup = nullptr; }
     m_glitterGroup = m_scene->createItemGroup({});
     auto* group = qgraphicsitem_cast<QGraphicsItemGroup*>(m_glitterGroup);
-    group->setPos(m_guideSceneCenter);
+    group->setPos(guideSceneCenter());
     createGlitter(m_glitterPattern);
 }
 
@@ -314,7 +336,8 @@ void DesignerWidget::drawForeground(QPainter* painter, const QRectF& rect) {
     double finishPx = m_badgeSizeMm * mmToPx;
     double visiblePx = std::max(0.0, (m_badgeSizeMm - 4)) * mmToPx;
 
-    double cx = m_guideSceneCenter.x(), cy = m_guideSceneCenter.y();
+    const QPointF center = guideSceneCenter();
+    double cx = center.x(), cy = center.y();
 
     double rb = bleedPx / 2, rf = finishPx / 2, rv = visiblePx / 2;
 

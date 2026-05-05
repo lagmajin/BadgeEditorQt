@@ -1,6 +1,123 @@
 #include "imageprocessor.h"
+#include <QColorSpace>
+#include <QImageReader>
 #include <QImage>
 #include <cmath>
+
+import badge.imageio;
+
+namespace {
+
+QString describeColorSpace(const QImage& image) {
+    const QColorSpace srgb(QColorSpace::SRgb);
+    const QColorSpace cs = image.colorSpace();
+    if (cs.isValid()) {
+        const QString desc = cs.description().trimmed();
+        if (!desc.isEmpty()) {
+            return desc;
+        }
+        if (cs == srgb) {
+            return QStringLiteral("sRGB");
+        }
+        return QStringLiteral("埋め込み色空間");
+    }
+    return QStringLiteral("sRGB前提");
+}
+
+QImage normalizeToSrgb(QImage image) {
+    if (image.isNull()) {
+        return {};
+    }
+
+    const QColorSpace srgb(QColorSpace::SRgb);
+    const QColorSpace sourceSpace = image.colorSpace();
+    if (sourceSpace.isValid() && sourceSpace != srgb) {
+        image.convertToColorSpace(srgb);
+    } else if (!sourceSpace.isValid()) {
+        image.setColorSpace(srgb);
+    }
+
+    if (image.colorSpace().isValid() && image.colorSpace() != srgb) {
+        image.convertToColorSpace(srgb);
+    }
+
+    image = image.convertToFormat(QImage::Format_ARGB32);
+    image.setColorSpace(srgb);
+    return image;
+}
+
+QImage loadViaQtReader(const QString& path) {
+    QImageReader reader(path);
+    reader.setAutoTransform(true);
+
+    QImage image = reader.read();
+    if (image.isNull()) {
+        return {};
+    }
+
+    return normalizeToSrgb(std::move(image));
+}
+
+QImage loadViaOiio(const QString& path) {
+    const auto raw = badge::load_image(path.toUtf8().constData());
+    if (!raw) {
+        return {};
+    }
+
+    const auto& img = *raw;
+    if (img.width <= 0 || img.height <= 0 || img.channels <= 0 || img.pixels.empty()) {
+        return {};
+    }
+
+    QImage out(img.width, img.height, QImage::Format_ARGB32);
+    if (out.isNull()) {
+        return {};
+    }
+
+    for (int y = 0; y < img.height; ++y) {
+        auto* line = reinterpret_cast<QRgb*>(out.scanLine(y));
+        for (int x = 0; x < img.width; ++x) {
+            const int idx = (y * img.width + x) * img.channels;
+            const int r = img.pixels[idx + 0];
+            const int g = img.channels > 1 ? img.pixels[idx + 1] : r;
+            const int b = img.channels > 2 ? img.pixels[idx + 2] : r;
+            const int a = img.channels > 3 ? img.pixels[idx + 3] : 255;
+            line[x] = qRgba(r, g, b, a);
+        }
+    }
+
+    return normalizeToSrgb(std::move(out));
+}
+
+}
+
+QImage ImageProcessor::loadImage(const QString& path, QString* colorSpaceLabel) {
+    if (QImage viaQt = loadViaQtReader(path); !viaQt.isNull()) {
+        if (colorSpaceLabel) {
+            *colorSpaceLabel = describeColorSpace(viaQt);
+        }
+        return viaQt;
+    }
+
+    if (QImage viaOiio = loadViaOiio(path); !viaOiio.isNull()) {
+        if (colorSpaceLabel) {
+            *colorSpaceLabel = QStringLiteral("OIIO / sRGB前提");
+        }
+        return viaOiio;
+    }
+
+    QImage fallback;
+    if (fallback.load(path)) {
+        if (colorSpaceLabel) {
+            *colorSpaceLabel = describeColorSpace(fallback);
+        }
+        return normalizeToSrgb(std::move(fallback));
+    }
+    if (colorSpaceLabel) {
+        *colorSpaceLabel = QStringLiteral("読み込み失敗");
+    }
+    return {};
+}
 
 QPixmap ImageProcessor::applyCorrection(const QPixmap& src, double brightness, double contrast, double saturation) {
     QImage img = src.toImage().convertToFormat(QImage::Format_ARGB32_Premultiplied);

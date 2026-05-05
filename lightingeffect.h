@@ -4,7 +4,6 @@
 #include <QGraphicsEffect>
 
 class LightingEffect : public QGraphicsEffect {
-    Q_OBJECT
 public:
     explicit LightingEffect(QObject* parent = nullptr);
     void draw(QPainter* painter) override;
