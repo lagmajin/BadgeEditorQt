@@ -903,7 +903,6 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     refreshPerspectiveMenu();
 
     loadAppSettings();
-    loadPrintSettings();
     updateInspectorMode();
     openDesignerPerspective();
     updateTitle();
@@ -1133,7 +1132,7 @@ void MainWindow::onPrintPreview() {
     syncLayoutWorkspace();
     const badge::DocumentData document = projectsync::currentDocument(m_layoutBadges, *m_comboPaperSize, *m_chkLandscape, *m_spinPaperMargin, *m_spinPaperSpacing, m_currentFile);
     QPrinter printer(QPrinter::HighResolution);
-    configurePrinterForDocument(printer, document, m_printResolution);
+    configurePrinterForDocument(printer, document, m_appSettings.printResolution);
     QPrintPreviewDialog preview(&printer, this);
     preview.setWindowTitle(QStringLiteral("印刷プレビュー"));
     connect(&preview, &QPrintPreviewDialog::paintRequested, this, [this](QPrinter* previewPrinter) {
@@ -1142,8 +1141,8 @@ void MainWindow::onPrintPreview() {
         }
     });
     if (preview.exec() == QDialog::Accepted) {
-        m_printResolution = std::max(72, printer.resolution());
-        savePrintSettings();
+        m_appSettings.printResolution = std::max(72, printer.resolution());
+        saveAppSettings();
     }
 }
 
@@ -1151,14 +1150,14 @@ void MainWindow::onPrint() {
     syncLayoutWorkspace();
     const badge::DocumentData document = projectsync::currentDocument(m_layoutBadges, *m_comboPaperSize, *m_chkLandscape, *m_spinPaperMargin, *m_spinPaperSpacing, m_currentFile);
     QPrinter printer(QPrinter::HighResolution);
-    configurePrinterForDocument(printer, document, m_printResolution);
+    configurePrinterForDocument(printer, document, m_appSettings.printResolution);
     QPrintDialog dlg(&printer, this);
     dlg.setWindowTitle(QStringLiteral("印刷"));
     if (dlg.exec() != QDialog::Accepted) {
         return;
     }
-    m_printResolution = std::max(72, printer.resolution());
-    savePrintSettings();
+    m_appSettings.printResolution = std::max(72, printer.resolution());
+    saveAppSettings();
     if (!m_layoutWorkspace->print(&printer)) {
         QMessageBox::warning(this, "印刷", "印刷に失敗しました");
     }
@@ -1983,6 +1982,7 @@ void MainWindow::loadAppSettings() {
     loaded.lightIntensity = settings.value("app/lightIntensity", loaded.lightIntensity).toInt();
     loaded.glitterEnabled = settings.value("app/glitterEnabled", loaded.glitterEnabled).toBool();
     loaded.glitterPattern = settings.value("app/glitterPattern", loaded.glitterPattern).toInt();
+    loaded.printResolution = settings.value("app/printResolution", loaded.printResolution).toInt();
     applyAppSettings(loaded);
 }
 
@@ -1997,16 +1997,7 @@ void MainWindow::saveAppSettings() {
     settings.setValue("app/lightIntensity", m_appSettings.lightIntensity);
     settings.setValue("app/glitterEnabled", m_appSettings.glitterEnabled);
     settings.setValue("app/glitterPattern", m_appSettings.glitterPattern);
-}
-
-void MainWindow::loadPrintSettings() {
-    QSettings settings;
-    m_printResolution = std::max(72, settings.value("print/resolution", m_printResolution).toInt());
-}
-
-void MainWindow::savePrintSettings() {
-    QSettings settings;
-    settings.setValue("print/resolution", std::max(72, m_printResolution));
+    settings.setValue("app/printResolution", std::max(72, m_appSettings.printResolution));
 }
 
 void MainWindow::resetDockState() {

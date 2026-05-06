@@ -14,6 +14,7 @@ struct AppSettings {
     int lightIntensity = 45;
     bool glitterEnabled = false;
     int glitterPattern = 0;
+    int printResolution = 300;
 };
 
 class QCheckBox;
@@ -43,6 +44,7 @@ private:
     QSpinBox* m_lightIntensity = nullptr;
     QCheckBox* m_glitterEnabled = nullptr;
     QComboBox* m_glitterPattern = nullptr;
+    QSpinBox* m_printResolution = nullptr;
     bool m_backdropApplied = false;
     bool m_darkTheme = true;
 };

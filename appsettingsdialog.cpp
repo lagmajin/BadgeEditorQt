@@ -112,6 +112,15 @@ AppSettingsDialog::AppSettingsDialog(const AppSettings& settings, QWidget* paren
     previewForm->addRow("ラメパターン:", m_glitterPattern);
     root->addWidget(previewGroup);
 
+    auto* printGroup = new QGroupBox("印刷");
+    auto* printForm = new QFormLayout(printGroup);
+    m_printResolution = new QSpinBox;
+    m_printResolution->setRange(72, 1200);
+    m_printResolution->setSuffix(" DPI");
+    m_printResolution->setValue(std::clamp(settings.printResolution, 72, 1200));
+    printForm->addRow("解像度:", m_printResolution);
+    root->addWidget(printGroup);
+
     auto updateEnabledState = [this]() {
         const bool lightingOn = m_lightingEnabled && m_lightingEnabled->isChecked();
         const bool glitterOn = m_glitterEnabled && m_glitterEnabled->isChecked();
@@ -172,5 +181,6 @@ AppSettings AppSettingsDialog::settings() const {
     result.lightIntensity = m_lightIntensity ? m_lightIntensity->value() : 45;
     result.glitterEnabled = m_glitterEnabled ? m_glitterEnabled->isChecked() : false;
     result.glitterPattern = m_glitterPattern ? m_glitterPattern->currentIndex() : 0;
+    result.printResolution = m_printResolution ? m_printResolution->value() : 300;
     return result;
 }
