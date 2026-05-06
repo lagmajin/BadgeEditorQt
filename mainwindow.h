@@ -118,6 +118,8 @@ private:
     void saveDockState();
     void loadAppSettings();
     void saveAppSettings();
+    void loadPrintSettings();
+    void savePrintSettings();
     void resetDockState();
     void openDesignerPerspective();
     void openLayoutPerspective();
@@ -244,6 +246,7 @@ private:
     bool m_isDesigner = true;
     bool m_backdropApplied = false;
     bool m_skipNextLayoutSync = false;
+    int m_printResolution = 300;
 };
 
 #endif
