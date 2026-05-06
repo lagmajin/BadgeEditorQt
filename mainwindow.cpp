@@ -31,6 +31,11 @@
 #include <QShowEvent>
 #include <QTime>
 #include <QWindow>
+#include <QPageSize>
+#include <QPageLayout>
+#include <QPrinter>
+#include <QPrintDialog>
+#include <QPrintPreviewDialog>
 #include <QGraphicsScene>
 #include <QPainter>
 #include <QPainterPath>
@@ -392,6 +397,15 @@ MaterialPresetDefaults materialDefaults(int preset) {
     }
 }
 
+void configurePrinterForDocument(QPrinter& printer, const badge::DocumentData& document) {
+    printer.setResolution(300);
+    printer.setFullPage(true);
+    printer.setPageSize(QPageSize(QSizeF(document.paper.widthMm, document.paper.heightMm), QPageSize::Millimeter));
+    printer.setPageOrientation(document.paper.widthMm >= document.paper.heightMm
+                                   ? QPageLayout::Landscape
+                                   : QPageLayout::Portrait);
+}
+
 }
 
 #ifdef Q_OS_WIN
@@ -427,6 +441,8 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     fileMenu->addSeparator();
     fileMenu->addAction("PDF出力...", this, &MainWindow::onExportPdf);
     fileMenu->addAction("画像出力...", this, &MainWindow::onExportPng);
+    fileMenu->addAction("印刷プレビュー...", this, &MainWindow::onPrintPreview, QKeySequence("Ctrl+Shift+P"));
+    fileMenu->addAction("印刷...", this, &MainWindow::onPrint, QKeySequence::Print);
 
     auto* editMenu = menuBar()->addMenu("編集(&E)");
     editMenu->addAction("元に戻す(&U)", this, &MainWindow::onUndo, QKeySequence::Undo);
@@ -1109,6 +1125,36 @@ void MainWindow::onExportPng() {
     if (!m_layoutWorkspace->exportPng(outPath, dlg.dpi(), dlg.whiteBackground())) {
         QMessageBox::warning(this, "画像出力", "PNGの書き出しに失敗しました");
         return;
+    }
+}
+
+void MainWindow::onPrintPreview() {
+    syncLayoutWorkspace();
+    const badge::DocumentData document = projectsync::currentDocument(m_layoutBadges, *m_comboPaperSize, *m_chkLandscape, *m_spinPaperMargin, *m_spinPaperSpacing, m_currentFile);
+    QPrinter printer(QPrinter::HighResolution);
+    configurePrinterForDocument(printer, document);
+    QPrintPreviewDialog preview(&printer, this);
+    preview.setWindowTitle(QStringLiteral("印刷プレビュー"));
+    connect(&preview, &QPrintPreviewDialog::paintRequested, this, [this](QPrinter* previewPrinter) {
+        if (m_layoutWorkspace) {
+            m_layoutWorkspace->print(previewPrinter);
+        }
+    });
+    preview.exec();
+}
+
+void MainWindow::onPrint() {
+    syncLayoutWorkspace();
+    const badge::DocumentData document = projectsync::currentDocument(m_layoutBadges, *m_comboPaperSize, *m_chkLandscape, *m_spinPaperMargin, *m_spinPaperSpacing, m_currentFile);
+    QPrinter printer(QPrinter::HighResolution);
+    configurePrinterForDocument(printer, document);
+    QPrintDialog dlg(&printer, this);
+    dlg.setWindowTitle(QStringLiteral("印刷"));
+    if (dlg.exec() != QDialog::Accepted) {
+        return;
+    }
+    if (!m_layoutWorkspace->print(&printer)) {
+        QMessageBox::warning(this, "印刷", "印刷に失敗しました");
     }
 }
 

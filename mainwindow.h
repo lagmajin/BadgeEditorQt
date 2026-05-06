@@ -46,6 +46,8 @@ private:
     void onSaveAs();
     void onExportPdf();
     void onExportPng();
+    void onPrintPreview();
+    void onPrint();
 
     // Edit
     void onUndo();
@@ -150,6 +152,8 @@ private:
     QAction* m_actTheme;
     QAction* m_actAppSettings = nullptr;
     QAction* m_actTransferDebug = nullptr;
+    QAction* m_actPrintPreview = nullptr;
+    QAction* m_actPrint = nullptr;
     QAction* m_actGridVisible = nullptr;
     QAction* m_actSnapToGrid = nullptr;
     QMenu* m_perspectiveMenu = nullptr;

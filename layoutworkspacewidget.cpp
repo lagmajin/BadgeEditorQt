@@ -10,7 +10,9 @@
 #include <QPainterPath>
 #include <QPdfWriter>
 #include <QPageSize>
+#include <QPageLayout>
 #include <QMarginsF>
+#include <QPrinter>
 #include <QImage>
 #include <QFileInfo>
 #include <QString>
@@ -315,6 +317,36 @@ bool LayoutWorkspaceWidget::exportPdf(const QString& filePath, int dpi) const {
     const QRectF target(QPointF(0, 0), QSizeF(writer.width(), writer.height()));
     renderDocumentScene(m_scene, m_impl->document, &painter, kSceneDpi, target);
     painter.end();
+    for (auto* item : safeGuides) {
+        item->setVisible(true);
+    }
+    return true;
+}
+
+bool LayoutWorkspaceWidget::print(QPrinter* printer) const {
+    if (!m_scene || !printer || m_impl->document.paper.widthMm <= 0.0 || m_impl->document.paper.heightMm <= 0.0) {
+        return false;
+    }
+
+    const auto safeGuides = sceneItemsByTag(m_scene, QString::fromLatin1(kSafeGuideTag));
+    for (auto* item : safeGuides) {
+        item->setVisible(false);
+    }
+
+    QPainter painter(printer);
+    if (!painter.isActive()) {
+        for (auto* item : safeGuides) {
+            item->setVisible(true);
+        }
+        return false;
+    }
+    painter.setRenderHints(QPainter::Antialiasing | QPainter::SmoothPixmapTransform, true);
+    const QRect fullRect = printer->pageLayout().fullRectPixels(printer->resolution());
+    painter.fillRect(fullRect, Qt::white);
+    const QRectF target(QPointF(0, 0), QSizeF(fullRect.size()));
+    renderDocumentScene(m_scene, m_impl->document, &painter, kSceneDpi, target);
+    painter.end();
+
     for (auto* item : safeGuides) {
         item->setVisible(true);
     }
