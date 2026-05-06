@@ -9,15 +9,20 @@ set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC OFF)
 
 find_package(Qt6 REQUIRED COMPONENTS Widgets Core)
+find_package(Qt6 COMPONENTS Svg QUIET)
 find_package(qtadvanceddocking-qt6 REQUIRED)
 find_package(OpenImageIO CONFIG REQUIRED)
 
 set(SOURCES
     main.cpp
     mainwindow.cpp
+    dockstylemanager.cpp
     designerwidget.cpp
     layoutworkspacewidget.cpp
     batchlayoutdialog.cpp
+    exportdialog.cpp
+    appsettingsdialog.cpp
+    transferdebugdialog.cpp
     badgeitem.cpp
     badgegraphicitem.cpp
     guideitem.cpp
@@ -29,9 +34,13 @@ set(SOURCES
 
 set(HEADERS
     mainwindow.h
+    dockstylemanager.h
     designerwidget.h
     layoutworkspacewidget.h
     batchlayoutdialog.h
+    exportdialog.h
+    appsettingsdialog.h
+    transferdebugdialog.h
     badgeitem.h
     badgegraphicitem.h
     guideitem.h
@@ -56,6 +65,15 @@ target_sources(BadgeEditorQt
 )
 
 target_link_libraries(BadgeEditorQt PRIVATE Qt6::Widgets Qt6::Core ads::qtadvanceddocking-qt6 OpenImageIO::OpenImageIO)
+
+if (WIN32)
+    target_link_libraries(BadgeEditorQt PRIVATE dwmapi)
+endif()
+
+if (TARGET Qt6::Svg)
+    target_link_libraries(BadgeEditorQt PRIVATE Qt6::Svg)
+    target_compile_definitions(BadgeEditorQt PRIVATE BADGEEDITOR_HAS_QTSVG=1)
+endif()
 
 target_include_directories(BadgeEditorQt PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}

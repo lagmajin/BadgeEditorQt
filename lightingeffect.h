@@ -16,7 +16,7 @@ public:
 
 private:
     double m_angle = 315.0;
-    double m_intensity = 0.8;
+    double m_intensity = 0.35;
 };
 
 #endif

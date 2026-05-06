@@ -1,8 +1,12 @@
 #include "mainwindow.h"
+#include "appsettingsdialog.h"
 #include "badgegraphicitem.h"
 #include "batchlayoutdialog.h"
+#include "exportdialog.h"
+#include "imageprocessor.h"
 #include "layoutengine.h"
 #include "projectsync.h"
+#include "transferdebugdialog.h"
 #include <QMenuBar>
 #include <QMenu>
 #include <QAction>
@@ -13,6 +17,7 @@
 #include <QFormLayout>
 #include <QGroupBox>
 #include <QScrollArea>
+#include <QSizePolicy>
 #include <QListWidget>
 #include <QApplication>
 #include <QMimeData>
@@ -21,20 +26,397 @@
 #include <QPushButton>
 #include <QShortcut>
 #include <QInputDialog>
+#include <QTimer>
 #include <QSettings>
+#include <QShowEvent>
+#include <QTime>
+#include <QWindow>
+#include <QGraphicsScene>
+#include <QPainter>
+#include <QPainterPath>
+#include <QImage>
+#include <QTemporaryDir>
+#include <QDir>
+#include <QDockWidget>
+#include <QTabWidget>
+#include <QSignalBlocker>
+#include <QListWidgetItem>
+#include <algorithm>
+#include <iterator>
+#include <functional>
+#include <limits>
+#include <cmath>
+#ifdef Q_OS_WIN
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#include <dwmapi.h>
+#endif
+#include <QFont>
 #include <DockManager.h>
 #include <DockAreaWidget.h>
 #include <DockWidget.h>
 #include <QFileInfo>
+#include <wobjectimpl.h>
 
 import badge.documentio;
 import badge.model;
+import badge.qtbridge;
+
+namespace {
+
+#ifdef Q_OS_WIN
+#ifndef DWMWA_SYSTEMBACKDROP_TYPE
+#define DWMWA_SYSTEMBACKDROP_TYPE 38
+#endif
+#ifndef DWMWA_WINDOW_CORNER_PREFERENCE
+#define DWMWA_WINDOW_CORNER_PREFERENCE 33
+#endif
+#ifndef DWMWA_USE_IMMERSIVE_DARK_MODE
+#define DWMWA_USE_IMMERSIVE_DARK_MODE 20
+#endif
+#ifndef DWMSBT_MAINWINDOW
+#define DWMSBT_MAINWINDOW static_cast<DWM_SYSTEMBACKDROP_TYPE>(2)
+#endif
+#ifndef DWMWCP_ROUND
+#define DWMWCP_ROUND static_cast<DWM_WINDOW_CORNER_PREFERENCE>(2)
+#endif
+#endif
+
+class DocumentSnapshotCommand final : public QUndoCommand {
+public:
+    DocumentSnapshotCommand(QString label,
+                            QList<BadgeItem> beforeBadges,
+                            QList<int> beforeSelection,
+                            QList<BadgeItem> afterBadges,
+                            QList<int> afterSelection,
+                            std::function<void(const QList<BadgeItem>&, const QList<int>&)> apply)
+        : m_beforeBadges(std::move(beforeBadges)),
+          m_beforeSelection(std::move(beforeSelection)),
+          m_afterBadges(std::move(afterBadges)),
+          m_afterSelection(std::move(afterSelection)),
+          m_apply(std::move(apply)) {
+        setText(std::move(label));
+    }
+
+    void undo() override {
+        m_apply(m_beforeBadges, m_beforeSelection);
+    }
+
+    void redo() override {
+        m_apply(m_afterBadges, m_afterSelection);
+    }
+
+private:
+    QList<BadgeItem> m_beforeBadges;
+    QList<int> m_beforeSelection;
+    QList<BadgeItem> m_afterBadges;
+    QList<int> m_afterSelection;
+    std::function<void(const QList<BadgeItem>&, const QList<int>&)> m_apply;
+};
+
+QList<int> indicesForSelection(const QList<BadgeGraphicItem*>& selected, const QList<BadgeGraphicItem*>& all) {
+    QList<int> indices;
+    for (auto* item : selected) {
+        const int idx = all.indexOf(item);
+        if (idx >= 0) {
+            indices.append(idx);
+        }
+    }
+    return indices;
+}
+
+BadgeItem badgeForLayoutPreview(BadgeItem badge) {
+    // The current Designer guides describe a circular badge with bleed outside the finish size.
+    badge.clipToCircle = true;
+    return badge;
+}
+
+BadgeItem badgeForLayoutTransfer(BadgeItem badge) {
+    // Layout transfer must carry only the raw badge content, not the Designer preview effects.
+    badge.clipToCircle = true;
+    return badge;
+}
+
+QRectF badgeContentRectPx(const BadgeItem& badge) {
+    const double pxPerMm = 96.0 / 25.4;
+    const double margin = badge.isSelected ? 3.0 : 2.0;
+    return QRectF(margin, margin, badge.widthMm * pxPerMm, badge.heightMm * pxPerMm);
+}
+
+QRectF badgePrimaryImageRectPx(const BadgeItem& badge) {
+    const QRectF content = badgeContentRectPx(badge);
+    const double scale = std::max(0.1, badge.imageScale);
+    const QSizeF scaledSize(content.width() * scale, content.height() * scale);
+    return QRectF(content.center().x() - scaledSize.width() * 0.5,
+                  content.center().y() - scaledSize.height() * 0.5,
+                  scaledSize.width(),
+                  scaledSize.height());
+}
+
+QPixmap correctedPixmapForBadge(const BadgeItem& badge, const QString& path) {
+    if (path.isEmpty()) {
+        return {};
+    }
+    QString colorSpaceLabel;
+    const QImage loaded = ImageProcessor::loadImage(path, &colorSpaceLabel);
+    if (loaded.isNull()) {
+        return {};
+    }
+    QPixmap pixmap = QPixmap::fromImage(loaded);
+    if (badge.brightness != 0.0 || badge.contrast != 0.0 || badge.saturation != 0.0) {
+        pixmap = ImageProcessor::applyCorrection(pixmap, badge.brightness, badge.contrast, badge.saturation);
+    }
+    return pixmap;
+}
+
+void paintTransferBadgeContent(QPainter& painter, const BadgeItem& badge) {
+    const QRectF contentRect = badgeContentRectPx(badge);
+    const QString primaryPath = !badge.layers.isEmpty() ? badge.layers.first().imagePath : badge.imagePath;
+    const QPixmap basePixmap = correctedPixmapForBadge(badge, primaryPath);
+    const LayerItem* primaryLayer = badge.layers.isEmpty() ? nullptr : &badge.layers.first();
+    if (!basePixmap.isNull() && (!primaryLayer || primaryLayer->visible)) {
+        painter.setOpacity(primaryLayer ? primaryLayer->opacity : 1.0);
+        painter.drawPixmap(badgePrimaryImageRectPx(badge), basePixmap, QRectF(basePixmap.rect()));
+    }
+
+    const int startLayer = badge.layers.isEmpty() ? 0 : 1;
+    for (int i = startLayer; i < badge.layers.size(); ++i) {
+        const auto& layer = badge.layers[i];
+        if (!layer.visible) {
+            continue;
+        }
+        const QPixmap layerPixmap = correctedPixmapForBadge(badge, layer.imagePath);
+        if (layerPixmap.isNull()) {
+            continue;
+        }
+        painter.setOpacity(layer.opacity);
+        const QRectF layerRect = contentRect.translated(layer.offsetX * 96.0 / 25.4,
+                                                        layer.offsetY * 96.0 / 25.4);
+        painter.drawPixmap(layerRect, layerPixmap, QRectF(layerPixmap.rect()));
+    }
+
+    painter.setOpacity(1.0);
+    if (!badge.displayText.isEmpty()) {
+        QFont font("Arial", 10);
+        painter.setFont(font);
+        painter.setPen(Qt::white);
+        painter.drawText(contentRect.adjusted(1, 1, 1, 1), Qt::AlignCenter, badge.displayText);
+        painter.setPen(Qt::black);
+        painter.drawText(contentRect, Qt::AlignCenter, badge.displayText);
+    }
+}
+
+QImage renderTransferCropImage(DesignerWidget& designer, BadgeGraphicItem& item, const QPointF& guideCenterScene, double guideSizeMm) {
+    Q_UNUSED(designer);
+    const double pxPerMm = 96.0 / 25.4;
+    const double transferDiameterMm = std::max(0.1, guideSizeMm + 3.0);
+    const int transferDiameterPx = std::max(1, int(std::round(transferDiameterMm * pxPerMm)));
+    const QRectF transferRectScene(guideCenterScene.x() - transferDiameterPx * 0.5,
+                                   guideCenterScene.y() - transferDiameterPx * 0.5,
+                                   transferDiameterPx,
+                                   transferDiameterPx);
+
+    QImage image(QSize(transferDiameterPx, transferDiameterPx), QImage::Format_ARGB32_Premultiplied);
+    image.fill(Qt::transparent);
+
+    QPainter painter(&image);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
+
+    QPainterPath clip;
+    clip.addEllipse(QRectF(0.0, 0.0, transferDiameterPx, transferDiameterPx));
+    painter.setClipPath(clip);
+    QTransform world;
+    world.translate(-transferRectScene.left(), -transferRectScene.top());
+    world *= item.sceneTransform();
+    painter.setWorldTransform(world);
+    paintTransferBadgeContent(painter, item.badge());
+    painter.end();
+    return image;
+}
+
+QString writeLayoutTransferImage(const QImage& image, const QString& stem) {
+    static QTemporaryDir transferDir(QDir::tempPath() + "/BadgeEditorQt-transfer-XXXXXX");
+    if (!transferDir.isValid()) {
+        return {};
+    }
+    static int counter = 0;
+    QString safeStem = stem.isEmpty() ? QStringLiteral("badge") : stem;
+    for (QChar& ch : safeStem) {
+        if (!ch.isLetterOrNumber()) {
+            ch = QLatin1Char('_');
+        }
+    }
+    const QString path = transferDir.path() + QStringLiteral("/%1_%2.png")
+                             .arg(safeStem)
+                             .arg(++counter);
+    if (!image.save(path)) {
+        return {};
+    }
+    return path;
+}
+
+QImage renderLayoutDebugImage(const BadgeItem& badge, int targetPx) {
+    if (targetPx <= 0) {
+        return {};
+    }
+
+    QImage canvas(QSize(targetPx, targetPx), QImage::Format_ARGB32_Premultiplied);
+    canvas.fill(badge.flattenedForLayoutTransfer ? Qt::transparent : Qt::white);
+
+    const QString primaryPath = !badge.layers.isEmpty() ? badge.layers.first().imagePath : badge.imagePath;
+    if (primaryPath.isEmpty()) {
+        return canvas;
+    }
+
+    QString colorSpaceLabel;
+    const QImage source = ImageProcessor::loadImage(primaryPath, &colorSpaceLabel);
+    if (source.isNull()) {
+        return canvas;
+    }
+
+    QPainter painter(&canvas);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
+    painter.drawImage(QRectF(0.0, 0.0, targetPx, targetPx), source, QRectF(source.rect()));
+    painter.end();
+    return canvas;
+}
+
+BadgeItem makeLayoutTransferBadge(const BadgeItem& badge, const QImage& crop, double guideSizeMm) {
+    BadgeItem out = badgeForLayoutTransfer(badge);
+    out.widthMm = std::max(0.1, guideSizeMm);
+    out.heightMm = std::max(0.1, guideSizeMm);
+    out.xMm = 0.0;
+    out.yMm = 0.0;
+    out.imageScale = 1.0;
+    out.displayText.clear();
+    out.brightness = 0.0;
+    out.contrast = 0.0;
+    out.saturation = 0.0;
+    out.flattenedForLayoutTransfer = true;
+    out.layers.clear();
+    out.imagePath.clear();
+
+    const QString tempPath = writeLayoutTransferImage(crop, badge.label.isEmpty() ? QStringLiteral("layout") : badge.label);
+    if (!tempPath.isEmpty()) {
+        out.layers.append(layerFromImagePath(tempPath));
+    }
+    return out;
+}
+
+void setPrimaryImageLayer(BadgeItem& badge, const QString& path) {
+    const LayerItem layer = layerFromImagePath(path);
+    if (badge.layers.isEmpty()) {
+        badge.layers.append(layer);
+    } else {
+        badge.layers[0] = layer;
+    }
+    badge.imagePath.clear();
+}
+
+int badgeSizePresetIndex(double widthMm, double heightMm) {
+    if (std::abs(widthMm - heightMm) > 0.1) {
+        return 0;
+    }
+
+    struct Preset {
+        double sizeMm;
+        int index;
+    };
+    constexpr Preset presets[] = {
+        {25.0, 1},
+        {32.0, 2},
+        {44.0, 3},
+        {57.0, 4},
+        {65.0, 5},
+        {76.0, 6},
+        {100.0, 7},
+    };
+
+    for (const auto& preset : presets) {
+        if (std::abs(widthMm - preset.sizeMm) <= 0.1) {
+            return preset.index;
+        }
+    }
+    return 0;
+}
+
+double badgeGuideSizeMm(const BadgeItem& badge) {
+    return std::max(badge.widthMm, badge.heightMm);
+}
+
+bool badgeInsideCentralGuide(const BadgeItem& badge, double guideSizeMm) {
+    const double visibleRadiusMm = std::max(0.0, guideSizeMm - 4.0) * 0.5;
+    if (visibleRadiusMm <= 0.0) {
+        return true;
+    }
+    const double contentW = std::max(0.1, badge.widthMm * std::max(0.1, badge.imageScale));
+    const double contentH = std::max(0.1, badge.heightMm * std::max(0.1, badge.imageScale));
+    const double left = badge.xMm;
+    const double top = badge.yMm;
+    const double right = left + contentW;
+    const double bottom = top + contentH;
+
+    const double closestX = std::clamp(0.0, left, right);
+    const double closestY = std::clamp(0.0, top, bottom);
+    return (closestX * closestX + closestY * closestY) <= (visibleRadiusMm * visibleRadiusMm);
+}
+
+QList<BadgeItem> badgesInsideCentralGuide(const QList<BadgeItem>& badges, double guideSizeMm) {
+    QList<BadgeItem> filtered;
+    for (const auto& badge : badges) {
+        if (badgeInsideCentralGuide(badge, guideSizeMm)) {
+            filtered.append(badge);
+        }
+    }
+    return filtered;
+}
+
+struct MaterialPresetDefaults {
+    int specular;
+    int env;
+    int glitter;
+    bool glitterEnabled;
+};
+
+MaterialPresetDefaults materialDefaults(int preset) {
+    switch (preset) {
+    case 1: return {22, 10, 0, false};   // matte
+    case 2: return {42, 28, 8, false};   // hologram
+    case 3: return {32, 18, 0, false};   // pearl
+    case 4: return {38, 22, 18, false};  // glitter
+    default: return {48, 24, 6, false};  // gloss
+    }
+}
+
+}
+
+#ifdef Q_OS_WIN
+static void applyWinBackdrop(HWND hwnd, bool darkMode) {
+    if (!hwnd) {
+        return;
+    }
+
+    const DWM_SYSTEMBACKDROP_TYPE backdrop = DWMSBT_MAINWINDOW;
+    const DWM_WINDOW_CORNER_PREFERENCE corner = DWMWCP_ROUND;
+    const BOOL dark = darkMode ? TRUE : FALSE;
+    DwmSetWindowAttribute(hwnd, DWMWA_SYSTEMBACKDROP_TYPE, &backdrop, sizeof(backdrop));
+    DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, &corner, sizeof(corner));
+    DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &dark, sizeof(dark));
+}
+#endif
 
 MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     setWindowTitle("Badge Editor Pro");
     resize(1300, 900);
     setAcceptDrops(true);
     m_undoStack = new QUndoStack(this);
+    QFont appFont = QApplication::font();
+    appFont.setPointSize(appFont.pointSize() + 1);
+    QApplication::setFont(appFont);
 
     // --- Menu ---
     auto* fileMenu = menuBar()->addMenu("ファイル(&F)");
@@ -51,15 +433,38 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     editMenu->addAction("やり直し(&R)", this, &MainWindow::onRedo, QKeySequence::Redo);
     editMenu->addSeparator();
     editMenu->addAction("削除", this, &MainWindow::onDelete, QKeySequence::Delete);
+    editMenu->addSeparator();
+    editMenu->addAction("左揃え", this, &MainWindow::onAlignLeft, QKeySequence("Ctrl+Alt+Left"));
+    editMenu->addAction("中央揃え(横)", this, &MainWindow::onAlignHCenter, QKeySequence("Ctrl+Alt+H"));
+    editMenu->addAction("右揃え", this, &MainWindow::onAlignRight, QKeySequence("Ctrl+Alt+Right"));
+    editMenu->addAction("上揃え", this, &MainWindow::onAlignTop, QKeySequence("Ctrl+Alt+Up"));
+    editMenu->addAction("中央揃え(縦)", this, &MainWindow::onAlignVCenter, QKeySequence("Ctrl+Alt+V"));
+    editMenu->addAction("下揃え", this, &MainWindow::onAlignBottom, QKeySequence("Ctrl+Alt+Down"));
     auto* backspaceShortcut = new QShortcut(QKeySequence(Qt::Key_Backspace), this);
-    connect(backspaceShortcut, &QShortcut::activated, this, &MainWindow::onDelete);
+    connect(backspaceShortcut, &QShortcut::activated, this, [this]{ onDelete(); });
 
     auto* viewMenu = menuBar()->addMenu("表示(&V)");
     viewMenu->addAction("ズームイン", this, [this]{ m_zoomScale *= 1.2; m_zoomLabel->setText(QString::number(m_zoomScale*100,'f',0)+"%"); });
     viewMenu->addAction("ズームアウト", this, [this]{ m_zoomScale /= 1.2; m_zoomLabel->setText(QString::number(m_zoomScale*100,'f',0)+"%"); });
     viewMenu->addSeparator();
     m_actTheme = viewMenu->addAction("テーマ切替", this, &MainWindow::onToggleTheme);
+    m_actAppSettings = viewMenu->addAction("アプリ設定...", this, &MainWindow::onAppSettings, QKeySequence("Ctrl+,"));
+    m_actGridVisible = viewMenu->addAction("グリッド表示");
+    m_actGridVisible->setCheckable(true);
+    m_actGridVisible->setChecked(true);
+    connect(m_actGridVisible, &QAction::toggled, this, [this](bool on){ onToggleGrid(on); });
+    m_actSnapToGrid = viewMenu->addAction("グリッドにスナップ");
+    m_actSnapToGrid->setCheckable(true);
+    m_actSnapToGrid->setChecked(true);
+    connect(m_actSnapToGrid, &QAction::toggled, this, [this](bool on){ onToggleSnapToGrid(on); });
+    m_actTransferDebug = viewMenu->addAction("転送デバッグ", this, &MainWindow::onShowTransferDebug);
     viewMenu->addAction("ドック配置を初期化", this, &MainWindow::resetDockState);
+    viewMenu->addAction("診断パネルを表示", this, [this] {
+        if (m_logDock) {
+            m_logDock->setVisible(true);
+            m_logDock->setAsCurrentTab();
+        }
+    });
     auto* perspectiveMenu = viewMenu->addMenu("Perspective");
     m_perspectiveMenu = perspectiveMenu;
     perspectiveMenu->addAction("現在を編集として保存", this, &MainWindow::saveDesignerPerspective);
@@ -69,41 +474,66 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     perspectiveMenu->addAction("編集を開く", this, &MainWindow::openDesignerPerspective);
     perspectiveMenu->addAction("配置確認を開く", this, &MainWindow::openLayoutPerspective);
 
-    // --- Toolbar ---
-    m_toolbar = addToolBar("Main");
-    m_toolbar->setMovable(false);
-    m_actDesigner = m_toolbar->addAction("DESIGNER");
-    m_actDesigner->setCheckable(true); m_actDesigner->setChecked(true);
-    m_actLayout = m_toolbar->addAction("LAYOUT");
+    // --- Toolbars ---
+    const QFont uiFont = QApplication::font();
+    menuBar()->setFont(uiFont);
+
+    m_commonToolbar = addToolBar("共通");
+    m_commonToolbar->setMovable(false);
+    m_commonToolbar->setFont(uiFont);
+    m_actDesigner = m_commonToolbar->addAction("DESIGNER");
+    m_actDesigner->setCheckable(true);
+    m_actDesigner->setChecked(true);
+    m_actLayout = m_commonToolbar->addAction("LAYOUT");
     m_actLayout->setCheckable(true);
     connect(m_actDesigner, &QAction::triggered, this, [this]{ onModeChanged(true); });
     connect(m_actLayout, &QAction::triggered, this, [this]{ onModeChanged(false); });
-
-    QAction* addAct = m_toolbar->addAction("＋");
-    connect(addAct, &QAction::triggered, this, &MainWindow::onAddBadge);
-    QAction* batchAct = m_toolbar->addAction("一括");
-    connect(batchAct, &QAction::triggered, this, &MainWindow::onBatchAdd);
-    m_toolbar->addSeparator();
-    QAction* autoAct = m_toolbar->addAction("自動配置");
-    connect(autoAct, &QAction::triggered, this, &MainWindow::onAutoLayout);
-    m_toolbar->addSeparator();
-    QAction* designerPerspectiveAct = m_toolbar->addAction("編集");
-    connect(designerPerspectiveAct, &QAction::triggered, this, &MainWindow::openDesignerPerspective);
-    designerPerspectiveAct->setShortcut(QKeySequence("Ctrl+E"));
-    QAction* layoutPerspectiveAct = m_toolbar->addAction("配置確認");
-    connect(layoutPerspectiveAct, &QAction::triggered, this, &MainWindow::openLayoutPerspective);
-    layoutPerspectiveAct->setShortcut(QKeySequence("Ctrl+L"));
-    m_toolbar->addSeparator();
+    m_commonToolbar->addSeparator();
+    m_commonToolbar->addAction(m_actTheme);
+    m_commonToolbar->addAction(m_actAppSettings);
+    m_commonToolbar->addSeparator();
+    m_actZoomIn = m_commonToolbar->addAction("ズームイン", this, [this]{ m_zoomScale *= 1.2; m_zoomLabel->setText(QString::number(m_zoomScale*100,'f',0)+"%"); });
+    m_actZoomOut = m_commonToolbar->addAction("ズームアウト", this, [this]{ m_zoomScale /= 1.2; m_zoomLabel->setText(QString::number(m_zoomScale*100,'f',0)+"%"); });
+    m_commonToolbar->addSeparator();
     m_zoomLabel = new QLabel("100%");
-    m_toolbar->addWidget(m_zoomLabel);
+    m_commonToolbar->addWidget(m_zoomLabel);
+
+    m_designerToolbar = addToolBar("Designer");
+    m_designerToolbar->setMovable(false);
+    m_designerToolbar->setFont(uiFont);
+    m_actAddBadge = m_designerToolbar->addAction("＋");
+    connect(m_actAddBadge, &QAction::triggered, this, [this]{ onAddBadge(); });
+    m_actBatchAdd = m_designerToolbar->addAction("一括");
+    connect(m_actBatchAdd, &QAction::triggered, this, [this]{ onBatchAdd(); });
+    m_designerToolbar->addSeparator();
+    m_actSendToLayout = m_designerToolbar->addAction("レイアウトへ送る");
+    connect(m_actSendToLayout, &QAction::triggered, this, [this]{ onSendToLayout(); });
+    m_designerToolbar->addSeparator();
+    m_actOpenDesignerPerspective = m_designerToolbar->addAction("編集");
+    connect(m_actOpenDesignerPerspective, &QAction::triggered, this, [this]{ openDesignerPerspective(); });
+    m_actOpenDesignerPerspective->setShortcut(QKeySequence("Ctrl+E"));
+
+    m_layoutToolbar = addToolBar("Layout");
+    m_layoutToolbar->setMovable(false);
+    m_layoutToolbar->setFont(uiFont);
+    m_actOpenLayoutPerspective = m_layoutToolbar->addAction("配置確認");
+    connect(m_actOpenLayoutPerspective, &QAction::triggered, this, [this]{ openLayoutPerspective(); });
+    m_actOpenLayoutPerspective->setShortcut(QKeySequence("Ctrl+L"));
+    m_layoutToolbar->addSeparator();
+    m_layoutToolbar->addAction("編集に戻る", this, [this]{ openDesignerPerspective(); });
+    m_layoutToolbar->addAction("送信し直す", this, [this]{ onSendToLayout(); });
+    m_layoutToolbar->addSeparator();
+    m_actClearLayout = m_layoutToolbar->addAction("レイアウトをクリア", this, &MainWindow::onClearLayout);
 
     // Designer
     m_designer = new DesignerWidget;
-    connect(m_designer, &DesignerWidget::badgeSelected, this, &MainWindow::onBadgeSelected);
-    connect(m_designer, &DesignerWidget::badgeDeselected, this, &MainWindow::onBadgeDeselected);
+    connect(m_designer, &DesignerWidget::badgeSelected, this, [this](BadgeGraphicItem* item){ onBadgeSelected(item); });
+    connect(m_designer, &DesignerWidget::selectionChanged, this, [this]{ onSelectionChanged(); });
+    connect(m_designer, &DesignerWidget::badgeDeselected, this, [this]{ onBadgeDeselected(); });
     connect(m_designer, &DesignerWidget::badgeDoubleClicked, this, [this](BadgeGraphicItem*){ onSetImage(); });
-    connect(m_designer, &DesignerWidget::badgeMoved, this, &MainWindow::onBadgeMoved);
-    m_designer->updateGuides(57);
+    connect(m_designer, &DesignerWidget::badgeMoved, this, [this](BadgeGraphicItem* item){ onBadgeMoved(item); });
+    connect(m_designer, &DesignerWidget::nudgeRequested, this, [this](double dxMm, double dyMm){ onNudgeRequested(dxMm, dyMm); });
+    m_designer->updateGuides(32);
 
     // Layout
     m_layoutWorkspace = new LayoutWorkspaceWidget;
@@ -112,48 +542,73 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     auto* scroll = new QScrollArea;
     scroll->setWidgetResizable(true);
     scroll->setMinimumWidth(280);
-    scroll->setMaximumWidth(320);
+    scroll->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     m_inspector = new QWidget;
+    m_inspector->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
     auto* inspLayout = new QVBoxLayout(m_inspector);
 
     // Properties group
     auto* propGroup = new QGroupBox("オブジェクト情報");
+    m_propGroup = propGroup;
     auto* propForm = new QFormLayout(propGroup);
+    propForm->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
     m_propX = new QDoubleSpinBox; m_propX->setSuffix(" mm"); m_propX->setRange(0, 2000);
     m_propY = new QDoubleSpinBox; m_propY->setSuffix(" mm"); m_propY->setRange(0, 2000);
     m_propW = new QDoubleSpinBox; m_propW->setSuffix(" mm"); m_propW->setRange(2, 200);
     m_propH = new QDoubleSpinBox; m_propH->setSuffix(" mm"); m_propH->setRange(2, 200);
+    m_propImageScale = new QDoubleSpinBox; m_propImageScale->setSuffix(" %"); m_propImageScale->setRange(10, 500); m_propImageScale->setSingleStep(5); m_propImageScale->setValue(100);
     m_propRotation = new QSlider(Qt::Horizontal); m_propRotation->setRange(0, 360);
     m_propText = new QLineEdit;
     propForm->addRow("X:", m_propX); propForm->addRow("Y:", m_propY);
     propForm->addRow("幅:", m_propW); propForm->addRow("高さ:", m_propH);
+    propForm->addRow("画像倍率:", m_propImageScale);
     // Size preset
-    auto* sizePreset = new QComboBox;
-    sizePreset->addItems({"カスタム", "32mm", "44mm", "57mm", "65mm", "76mm"});
-    propForm->addRow("プリセット:", sizePreset);
-    connect(sizePreset, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int idx){
-        double sizes[] = {0, 32, 44, 57, 65, 76};
-        if (idx > 0) { m_propW->setValue(sizes[idx]); m_propH->setValue(sizes[idx]); }
+    m_sizePreset = new QComboBox;
+    m_sizePreset->addItems({
+        "カスタム",
+        "25mm",
+        "32mm",
+        "44mm",
+        "57mm",
+        "65mm",
+        "76mm",
+        "100mm"
     });
+    propForm->addRow("プリセット:", m_sizePreset);
+    connect(m_sizePreset, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int idx){
+        static const double sizes[] = {0, 25, 32, 44, 57, 65, 76, 100};
+        if (idx > 0 && idx < static_cast<int>(std::size(sizes))) {
+            m_propW->setValue(sizes[idx]);
+            m_propH->setValue(sizes[idx]);
+        }
+    });
+    m_sizePreset->setCurrentIndex(badgeSizePresetIndex(32.0, 32.0));
     propForm->addRow("回転:", m_propRotation); propForm->addRow("テキスト:", m_propText);
+    m_propClipCircle = new QCheckBox("円形クリップ");
+    m_propClipCircle->setChecked(true);
+    propForm->addRow(m_propClipCircle);
     auto* imgBtn = new QPushButton("画像を変更...");
-    connect(imgBtn, &QPushButton::clicked, this, &MainWindow::onSetImage);
+    connect(imgBtn, &QPushButton::clicked, this, [this]{ onSetImage(); });
     propForm->addRow(imgBtn);
     m_propColorSpace = new QLineEdit;
     m_propColorSpace->setReadOnly(true);
     propForm->addRow("色空間:", m_propColorSpace);
     inspLayout->addWidget(propGroup);
 
-    connect(m_propX, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &MainWindow::onInspectorChanged);
-    connect(m_propY, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &MainWindow::onInspectorChanged);
-    connect(m_propW, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &MainWindow::onInspectorChanged);
-    connect(m_propH, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &MainWindow::onInspectorChanged);
+    connect(m_propX, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this](double){ onInspectorChanged(); });
+    connect(m_propY, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this](double){ onInspectorChanged(); });
+    connect(m_propW, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this](double){ onInspectorChanged(); });
+    connect(m_propH, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this](double){ onInspectorChanged(); });
+    connect(m_propImageScale, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this](double){ onInspectorChanged(); });
     connect(m_propRotation, &QSlider::valueChanged, this, [this]{ onInspectorChanged(); });
     connect(m_propText, &QLineEdit::textChanged, this, [this]{ onInspectorChanged(); });
+    connect(m_propClipCircle, &QCheckBox::toggled, this, [this]{ onInspectorChanged(); });
 
     // Color correction group
     auto* colorGroup = new QGroupBox("色補正");
+    m_colorGroup = colorGroup;
     auto* colorForm = new QFormLayout(colorGroup);
+    colorForm->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
     m_propBrightness = new QSlider(Qt::Horizontal); m_propBrightness->setRange(-100, 100);
     m_propContrast = new QSlider(Qt::Horizontal); m_propContrast->setRange(-100, 100);
     m_propSaturation = new QSlider(Qt::Horizontal); m_propSaturation->setRange(-100, 100);
@@ -171,10 +626,11 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
 
     // Layer group
     auto* layerGroup = new QGroupBox("レイヤー");
+    m_layerGroup = layerGroup;
     auto* layerLayout = new QVBoxLayout(layerGroup);
-    auto* layerList = new QListWidget;
-    layerList->setMaximumHeight(120);
-    layerLayout->addWidget(layerList);
+    m_layerList = new QListWidget;
+    m_layerList->setMaximumHeight(120);
+    layerLayout->addWidget(m_layerList);
     auto* layerBtnRow = new QHBoxLayout;
     auto* btnAddLayer = new QPushButton("＋");
     auto* btnDelLayer = new QPushButton("－");
@@ -190,87 +646,196 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     layerLayout->addLayout(layerBtnRow);
     inspLayout->addWidget(layerGroup);
 
-    connect(btnAddLayer, &QPushButton::clicked, this, [this]{ onSetImage(); });
-    connect(btnDelLayer, &QPushButton::clicked, this, [this, layerList]{
-        int row = layerList->currentRow();
-        if (row < 0 || m_selected.isEmpty()) return;
-        auto& layers = m_selected.first()->badge().layers;
-        if (row < layers.size()) { layers.removeAt(row); layerList->takeItem(row); m_selected.first()->update(); }
+    connect(btnAddLayer, &QPushButton::clicked, this, [this]{
+        if (m_selected.isEmpty()) return;
+        const QString path = QFileDialog::getOpenFileName(this, "レイヤー画像を選択", QString(), "すべての画像 (*.png *.jpg *.jpeg *.bmp *.gif *.webp *.tiff *.tif *.svg *.ico);;PNG (*.png);;JPEG (*.jpg *.jpeg)");
+        if (path.isEmpty()) return;
+        const auto before = currentDesignerBadges();
+        const auto selected = selectedBadgeIndices();
+        if (selected.isEmpty()) {
+            return;
+        }
+        auto after = before;
+        LayerItem layer;
+        layer.imagePath = path;
+        layer.name = QFileInfo(path).baseName();
+        after[selected.first()].layers.append(layer);
+        pushBadgeChange("レイヤー追加", before, selected, after, selected);
+        appendLog(QStringLiteral("レイヤーを追加しました: %1").arg(path));
     });
-    connect(btnUpLayer, &QPushButton::clicked, this, [this, layerList]{
-        int row = layerList->currentRow();
+    connect(btnDelLayer, &QPushButton::clicked, this, [this]{
+        if (!m_layerList || m_selected.isEmpty()) return;
+        int row = m_layerList->currentRow();
+        if (row < 0 || m_selected.isEmpty()) return;
+        const auto before = currentDesignerBadges();
+        const auto selected = selectedBadgeIndices();
+        if (selected.isEmpty()) {
+            return;
+        }
+        auto after = before;
+        auto& layers = after[selected.first()].layers;
+        if (row < layers.size()) {
+            layers.removeAt(row);
+            pushBadgeChange("レイヤー削除", before, selected, after, selected);
+            appendLog(QStringLiteral("レイヤー %1 を削除しました").arg(row + 1));
+        }
+    });
+    connect(btnUpLayer, &QPushButton::clicked, this, [this]{
+        if (!m_layerList || m_selected.isEmpty()) return;
+        int row = m_layerList->currentRow();
         if (row <= 0 || m_selected.isEmpty()) return;
-        auto& layers = m_selected.first()->badge().layers;
-        if (row < layers.size()) { layers.swapItemsAt(row, row-1); layerList->takeItem(row); auto* item = layerList->takeItem(row-1);
-            layerList->insertItem(row-1, layerList->item(row)); layerList->insertItem(row, item); layerList->setCurrentRow(row-1);
-            m_selected.first()->update(); }
+        const auto before = currentDesignerBadges();
+        const auto selected = selectedBadgeIndices();
+        if (selected.isEmpty()) {
+            return;
+        }
+        auto after = before;
+        auto& layers = after[selected.first()].layers;
+        if (row < layers.size()) {
+            layers.swapItemsAt(row, row - 1);
+            pushBadgeChange("レイヤー上へ移動", before, selected, after, selected);
+            appendLog(QStringLiteral("レイヤー %1 を上へ移動しました").arg(row + 1));
+        }
     });
-    connect(btnDownLayer, &QPushButton::clicked, this, [this, layerList]{
-        int row = layerList->currentRow();
+    connect(btnDownLayer, &QPushButton::clicked, this, [this]{
+        if (!m_layerList || m_selected.isEmpty()) return;
+        int row = m_layerList->currentRow();
         if (row < 0 || m_selected.isEmpty()) return;
-        auto& layers = m_selected.first()->badge().layers;
-        if (row + 1 < layers.size()) { layers.swapItemsAt(row, row+1); auto* item = layerList->takeItem(row);
-            layerList->insertItem(row+1, item); layerList->setCurrentRow(row+1); m_selected.first()->update(); }
+        const auto before = currentDesignerBadges();
+        const auto selected = selectedBadgeIndices();
+        if (selected.isEmpty()) {
+            return;
+        }
+        auto after = before;
+        auto& layers = after[selected.first()].layers;
+        if (row + 1 < layers.size()) {
+            layers.swapItemsAt(row, row + 1);
+            pushBadgeChange("レイヤー下へ移動", before, selected, after, selected);
+            appendLog(QStringLiteral("レイヤー %1 を下へ移動しました").arg(row + 1));
+        }
     });
 
     // Guide group
     auto* guideGroup = new QGroupBox("ガイド表示");
+    m_guideGroup = guideGroup;
     auto* guideLayout = new QVBoxLayout(guideGroup);
     m_chkBleed = new QCheckBox("巻き込みエリア (塗り足し)"); m_chkBleed->setChecked(true);
     m_chkVisible = new QCheckBox("可視エリア (安全圏)"); m_chkVisible->setChecked(true);
     guideLayout->addWidget(m_chkBleed);
     guideLayout->addWidget(m_chkVisible);
     inspLayout->addWidget(guideGroup);
-    connect(m_chkBleed, &QCheckBox::toggled, this, &MainWindow::onGuideToggle);
-    connect(m_chkVisible, &QCheckBox::toggled, this, &MainWindow::onGuideToggle);
+    connect(m_chkBleed, &QCheckBox::toggled, this, [this](bool){ onGuideToggle(); });
+    connect(m_chkVisible, &QCheckBox::toggled, this, [this](bool){ onGuideToggle(); });
 
     // Effects group
     auto* effectGroup = new QGroupBox("エフェクト");
+    m_effectGroup = effectGroup;
     auto* effectLayout = new QVBoxLayout(effectGroup);
-    m_chkGlitter = new QCheckBox("ラメフィルタ");
+    auto* lightGroup = new QGroupBox("光のプレビュー");
+    auto* lightForm = new QFormLayout(lightGroup);
+    lightForm->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
+    m_chkLighting = new QCheckBox("有効にする");
+    m_sliderLightAngle = new QSlider(Qt::Horizontal); m_sliderLightAngle->setRange(0, 360); m_sliderLightAngle->setValue(315);
+    m_sliderLightIntensity = new QSlider(Qt::Horizontal); m_sliderLightIntensity->setRange(0, 100); m_sliderLightIntensity->setValue(45);
+    lightForm->addRow(m_chkLighting);
+    lightForm->addRow("向き:", m_sliderLightAngle);
+    lightForm->addRow("強さ:", m_sliderLightIntensity);
+    effectLayout->addWidget(lightGroup);
+
+    auto* glitterGroup = new QGroupBox("ラメ表示");
+    auto* glitterForm = new QFormLayout(glitterGroup);
+    glitterForm->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
+    m_chkGlitter = new QCheckBox("有効にする");
     m_comboGlitter = new QComboBox;
     m_comboGlitter->addItems({"全面輝き", "星型", "雪型"});
-    m_chkLighting = new QCheckBox("光源プレビュー");
-    m_sliderLightAngle = new QSlider(Qt::Horizontal); m_sliderLightAngle->setRange(0, 360); m_sliderLightAngle->setValue(315);
-    m_sliderLightIntensity = new QSlider(Qt::Horizontal); m_sliderLightIntensity->setRange(0, 100); m_sliderLightIntensity->setValue(80);
-    effectLayout->addWidget(m_chkGlitter);
-    effectLayout->addWidget(m_comboGlitter);
-    effectLayout->addWidget(m_chkLighting);
-    effectLayout->addWidget(new QLabel("光源角度"));
-    effectLayout->addWidget(m_sliderLightAngle);
-    effectLayout->addWidget(new QLabel("光源の強さ"));
-    effectLayout->addWidget(m_sliderLightIntensity);
+    m_comboGlitter->setEnabled(false);
+    glitterForm->addRow(m_chkGlitter);
+    glitterForm->addRow("パターン:", m_comboGlitter);
+    effectLayout->addWidget(glitterGroup);
     inspLayout->addWidget(effectGroup);
 
-    connect(m_chkLighting, &QCheckBox::toggled, this, &MainWindow::onLightingToggle);
-    connect(m_chkGlitter, &QCheckBox::toggled, this, &MainWindow::onGlitterToggle);
-    connect(m_comboGlitter, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &MainWindow::onGlitterPatternChanged);
-    connect(m_sliderLightAngle, &QSlider::valueChanged, this, &MainWindow::onLightingSlider);
-    connect(m_sliderLightIntensity, &QSlider::valueChanged, this, &MainWindow::onLightingSlider);
+    connect(m_chkLighting, &QCheckBox::toggled, this, [this](bool on){ onLightingToggle(on); });
+    connect(m_chkGlitter, &QCheckBox::toggled, this, [this](bool on){
+        if (m_comboGlitter) {
+            m_comboGlitter->setEnabled(on);
+        }
+        onGlitterToggle(on);
+    });
+    connect(m_comboGlitter, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int idx){ onGlitterPatternChanged(idx); });
+    connect(m_sliderLightAngle, &QSlider::valueChanged, this, [this](int){ onLightingSlider(); });
+    connect(m_sliderLightIntensity, &QSlider::valueChanged, this, [this](int){ onLightingSlider(); });
+
+    // Material group
+    auto* materialGroup = new QGroupBox("素材");
+    auto* materialForm = new QFormLayout(materialGroup);
+    materialForm->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
+    m_comboMaterial = new QComboBox;
+    m_comboMaterial->addItems({"標準", "マット", "ホログラム", "パール", "ラメ"});
+    m_sliderSpecular = new QSlider(Qt::Horizontal); m_sliderSpecular->setRange(0, 100);
+    m_sliderEnvReflection = new QSlider(Qt::Horizontal); m_sliderEnvReflection->setRange(0, 100);
+    m_sliderGlitterStrength = new QSlider(Qt::Horizontal); m_sliderGlitterStrength->setRange(0, 100);
+    materialForm->addRow("プリセット:", m_comboMaterial);
+    materialForm->addRow("ツヤ:", m_sliderSpecular);
+    materialForm->addRow("反射:", m_sliderEnvReflection);
+    materialForm->addRow("ラメ感:", m_sliderGlitterStrength);
+    inspLayout->addWidget(materialGroup);
+
+    auto applyMaterialPreset = [this](int preset) {
+        const auto defs = materialDefaults(preset);
+        const QSignalBlocker b1(m_sliderSpecular);
+        const QSignalBlocker b2(m_sliderEnvReflection);
+        const QSignalBlocker b3(m_sliderGlitterStrength);
+        m_sliderSpecular->setValue(defs.specular);
+        m_sliderEnvReflection->setValue(defs.env);
+        m_sliderGlitterStrength->setValue(defs.glitter);
+    };
+    connect(m_comboMaterial, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this, applyMaterialPreset](int idx) {
+        applyMaterialPreset(idx);
+        onInspectorChanged();
+    });
+    connect(m_sliderSpecular, &QSlider::valueChanged, this, [this](int){ onInspectorChanged(); });
+    connect(m_sliderEnvReflection, &QSlider::valueChanged, this, [this](int){ onInspectorChanged(); });
+    connect(m_sliderGlitterStrength, &QSlider::valueChanged, this, [this](int){ onInspectorChanged(); });
+    applyMaterialPreset(0);
 
     // Layout config group
     auto* layoutGroup = new QGroupBox("用紙設定");
+    m_layoutGroup = layoutGroup;
     auto* layoutForm = new QFormLayout(layoutGroup);
-    m_comboPaperSize = new QComboBox; m_comboPaperSize->addItems({"A4 (210 x 297 mm)", "B5 (182 x 257 mm)"});
+    layoutForm->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
+    m_comboPaperSize = new QComboBox;
+    m_comboPaperSize->addItems({
+        "A3 (297 x 420 mm)",
+        "A4 (210 x 297 mm)",
+        "A5 (148 x 210 mm)",
+        "B4 (257 x 364 mm)",
+        "B5 (182 x 257 mm)",
+        "Letter (216 x 279 mm)",
+        "Legal (216 x 356 mm)"
+    });
+    m_comboPaperSize->setCurrentIndex(1);
     m_chkLandscape = new QCheckBox("横向き");
     m_spinPaperMargin = new QDoubleSpinBox;
     m_spinPaperMargin->setSuffix(" mm");
     m_spinPaperMargin->setRange(0.0, 100.0);
-    m_spinPaperMargin->setValue(10.0);
+    m_spinPaperMargin->setValue(5.0);
     m_spinPaperSpacing = new QDoubleSpinBox;
     m_spinPaperSpacing->setSuffix(" mm");
     m_spinPaperSpacing->setRange(0.0, 50.0);
     m_spinPaperSpacing->setValue(1.0);
+    m_chkCutFriendlyLayout = new QCheckBox("切りやすい整列配置");
     layoutForm->addRow("用紙:", m_comboPaperSize);
     layoutForm->addRow(m_chkLandscape);
     layoutForm->addRow("余白:", m_spinPaperMargin);
     layoutForm->addRow("間隔:", m_spinPaperSpacing);
+    layoutForm->addRow(m_chkCutFriendlyLayout);
     inspLayout->addWidget(layoutGroup);
 
     connect(m_comboPaperSize, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this]{ if (!m_isDesigner) syncLayoutWorkspace(); });
     connect(m_chkLandscape, &QCheckBox::toggled, this, [this]{ if (!m_isDesigner) syncLayoutWorkspace(); });
     connect(m_spinPaperMargin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this]{ if (!m_isDesigner) syncLayoutWorkspace(); });
     connect(m_spinPaperSpacing, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this]{ if (!m_isDesigner) syncLayoutWorkspace(); });
+    connect(m_chkCutFriendlyLayout, &QCheckBox::toggled, this, [this]{ if (!m_isDesigner) syncLayoutWorkspace(); });
 
     inspLayout->addStretch();
     scroll->setWidget(m_inspector);
@@ -280,7 +845,8 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     ads::CDockManager::setConfigFlag(ads::CDockManager::XmlCompressionEnabled, false);
     ads::CDockManager::setConfigFlag(ads::CDockManager::FocusHighlighting, true);
     m_dockManager = new ads::CDockManager(this);
-    connect(m_dockManager, &ads::CDockManager::perspectiveOpened, this, &MainWindow::syncPerspectiveUi);
+    connect(m_dockManager, &ads::CDockManager::perspectiveOpened, this, [this](const QString& name){ syncPerspectiveUi(name); });
+    m_dockStyleManager = new DockStyleManager(m_dockManager, this);
 
     m_designerDock = new ads::CDockWidget("編集");
     m_designerDock->setWidget(m_designer);
@@ -295,9 +861,23 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     m_inspectorDock->setMinimumSizeHintMode(ads::CDockWidget::MinimumSizeHintFromDockWidget);
     m_inspectorDock->resize(300, 800);
 
+    auto* logTabs = new QTabWidget;
+    m_logList = new QListWidget;
+    m_issueList = new QListWidget;
+    m_linkList = new QListWidget;
+    logTabs->addTab(m_logList, "操作ログ");
+    logTabs->addTab(m_issueList, "エラー");
+    logTabs->addTab(m_linkList, "リンク切れ");
+
+    m_logDock = new ads::CDockWidget("診断");
+    m_logDock->setWidget(logTabs);
+    m_logDock->setMinimumSizeHintMode(ads::CDockWidget::MinimumSizeHintFromDockWidget);
+    m_logDock->resize(420, 320);
+
     m_dockArea = m_dockManager->setCentralWidget(m_designerDock);
     m_dockManager->addDockWidgetTabToArea(m_layoutDock, m_dockArea);
     m_dockManager->addDockWidget(ads::RightDockWidgetArea, m_inspectorDock, m_dockArea);
+    m_dockManager->addDockWidget(ads::BottomDockWidgetArea, m_logDock, m_dockArea);
     m_defaultDockState = m_dockManager->saveState(1);
     m_dockManager->addPerspective("designer");
     m_layoutDock->setAsCurrentTab();
@@ -306,18 +886,142 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     loadDockState();
     refreshPerspectiveMenu();
 
-    applyTheme(true);
+    loadAppSettings();
+    updateInspectorMode();
     openDesignerPerspective();
     updateTitle();
 }
 
+QList<BadgeItem> MainWindow::currentDesignerBadges() const {
+    if (!m_designer) {
+        return {};
+    }
+    return m_designer->badgeItems();
+}
+
+QList<int> MainWindow::selectedBadgeIndices() const {
+    if (!m_designer) {
+        return {};
+    }
+    return indicesForSelection(m_designer->selectedGraphics(), m_designer->graphicItems());
+}
+
+void MainWindow::applyDesignerBadges(const QList<BadgeItem>& badges, const QList<int>& selectedIndices) {
+    if (!m_designer) {
+        return;
+    }
+    m_designer->setBadgeItems(badges, selectedIndices);
+    refreshDocumentFromDesigner();
+    if (!m_isDesigner) {
+        syncLayoutWorkspace();
+    }
+    refreshDiagnostics();
+}
+
+void MainWindow::pushBadgeChange(const QString& label,
+                                 const QList<BadgeItem>& beforeBadges,
+                                 const QList<int>& beforeSelection,
+                                 const QList<BadgeItem>& afterBadges,
+                                 const QList<int>& afterSelection) {
+    if (!m_undoStack) {
+        applyDesignerBadges(afterBadges, afterSelection);
+        return;
+    }
+
+    m_undoStack->push(new DocumentSnapshotCommand(
+        label,
+        beforeBadges,
+        beforeSelection,
+        afterBadges,
+        afterSelection,
+        [this](const QList<BadgeItem>& badges, const QList<int>& selection) {
+            applyDesignerBadges(badges, selection);
+        }));
+}
+
+void MainWindow::appendLog(const QString& message) {
+    if (!m_logList) {
+        return;
+    }
+    auto* item = new QListWidgetItem(QTime::currentTime().toString("hh:mm:ss") + "  " + message);
+    m_logList->addItem(item);
+    while (m_logList->count() > 200) {
+        delete m_logList->takeItem(0);
+    }
+    m_logList->scrollToBottom();
+}
+
+void MainWindow::refreshDiagnostics() {
+    auto populateMissing = [](QListWidget* list, const QList<BadgeItem>& badges) -> int {
+        if (!list) {
+            return 0;
+        }
+        list->clear();
+        int missingCount = 0;
+        for (int i = 0; i < badges.size(); ++i) {
+            const auto& badge = badges[i];
+            const auto addMissing = [&](const QString& path, const QString& kind) {
+                if (path.isEmpty()) {
+                    return;
+                }
+                if (QFileInfo::exists(path)) {
+                    return;
+                }
+                auto* item = new QListWidgetItem(QStringLiteral("%1: %2 -> %3")
+                                                     .arg(kind)
+                                                     .arg(QString::number(i + 1))
+                                                     .arg(path));
+                item->setForeground(Qt::red);
+                list->addItem(item);
+                ++missingCount;
+            };
+            addMissing(badge.imagePath, QStringLiteral("バッジ画像"));
+            for (int layerIndex = 0; layerIndex < badge.layers.size(); ++layerIndex) {
+                const auto& layer = badge.layers[layerIndex];
+                addMissing(layer.imagePath, QStringLiteral("レイヤー %1").arg(layerIndex + 1));
+            }
+        }
+        if (list->count() == 0) {
+            list->addItem(QStringLiteral("問題は見つかりませんでした"));
+        }
+        return missingCount;
+    };
+
+    if (m_issueList) {
+        m_issueList->clear();
+    }
+
+    const auto badges = currentDesignerBadges();
+    const int missingCount = populateMissing(m_linkList, badges);
+
+    if (m_issueList) {
+        if (badges.isEmpty()) {
+            m_issueList->addItem(QStringLiteral("編集対象がありません"));
+        } else {
+            m_issueList->addItem(QStringLiteral("リンク切れ候補: %1 件").arg(missingCount));
+        }
+    }
+}
+
+W_OBJECT_IMPL(MainWindow)
+
 // --- File slots ---
 void MainWindow::onNew() {
     m_currentFile.clear();
+    m_badges.clear();
+    m_layoutBadges.clear();
+    m_layoutPreviewMode = LayoutPreviewMode::CurrentDesign;
     m_designer->clearBadges();
-    m_designer->addBadge(BadgeItem{});
-    m_designer->updateGuides(57);
-    syncLayoutWorkspace();
+    BadgeItem blank;
+    blank.clipToCircle = true;
+    m_designer->addBadge(blank);
+    m_designer->updateGuides(32);
+    if (!m_isDesigner) {
+        syncLayoutWorkspace();
+    }
+    refreshDocumentFromDesigner();
+    refreshDiagnostics();
+    appendLog("新規プロジェクトを作成しました");
     updateTitle();
 }
 
@@ -333,7 +1037,12 @@ void MainWindow::onOpen() {
         }
         onNew();
         projectsync::applyDocument(*m_designer, *m_layoutWorkspace, *m_comboPaperSize, *m_chkLandscape, *m_spinPaperMargin, *m_spinPaperSpacing, loaded.document);
+        refreshDocumentFromDesigner();
+        m_layoutBadges = m_badges;
+        m_layoutPreviewMode = LayoutPreviewMode::CurrentDesign;
         m_currentFile = path;
+        refreshDiagnostics();
+        appendLog(QStringLiteral("開きました: %1").arg(path));
         updateTitle();
     }
 }
@@ -342,7 +1051,9 @@ void MainWindow::onSave() {
     if (m_currentFile.isEmpty()) { onSaveAs(); return; }
     QFile f(m_currentFile);
     if (f.open(QIODevice::WriteOnly)) {
-        f.write(badge::saveDocumentToJson(projectsync::currentDocument(*m_designer, *m_comboPaperSize, *m_chkLandscape, *m_spinPaperMargin, *m_spinPaperSpacing, m_currentFile)));
+        f.write(badge::saveDocumentToJson(projectsync::currentDocument(m_badges, *m_comboPaperSize, *m_chkLandscape, *m_spinPaperMargin, *m_spinPaperSpacing, m_currentFile)));
+        appendLog(QStringLiteral("保存しました: %1").arg(m_currentFile));
+        refreshDiagnostics();
     }
 }
 
@@ -351,49 +1062,187 @@ void MainWindow::onSaveAs() {
     if (path.isEmpty()) return;
     m_currentFile = path;
     onSave();
+    appendLog(QStringLiteral("名前を付けて保存: %1").arg(path));
     updateTitle();
 }
 
-void MainWindow::onExportPdf() { QMessageBox::information(this, "PDF出力", "準備中"); }
-void MainWindow::onExportPng() { QMessageBox::information(this, "画像出力", "準備中"); }
-
-void MainWindow::onUndo() { m_undoStack->undo(); }
-void MainWindow::onRedo() { m_undoStack->redo(); }
-
-void MainWindow::onDelete() {
-    m_designer->removeSelectedBadges();
-    m_selected.clear();
-    onBadgeDeselected();
+void MainWindow::onExportPdf() {
     syncLayoutWorkspace();
+    const QString defaultName = m_currentFile.isEmpty()
+        ? QStringLiteral("layout.pdf")
+        : QFileInfo(m_currentFile).completeBaseName() + QStringLiteral("_layout.pdf");
+    ExportDialog dlg(ExportDialog::Format::Pdf, defaultName, this);
+    if (dlg.exec() != QDialog::Accepted) {
+        return;
+    }
+    QString outPath = dlg.filePath();
+    if (outPath.isEmpty()) {
+        QMessageBox::warning(this, "PDF出力", "保存先を指定してください");
+        return;
+    }
+    if (!outPath.endsWith(".pdf", Qt::CaseInsensitive)) {
+        outPath += ".pdf";
+    }
+    if (!m_layoutWorkspace->exportPdf(outPath, dlg.dpi())) {
+        QMessageBox::warning(this, "PDF出力", "PDFの書き出しに失敗しました");
+        return;
+    }
 }
 
-void MainWindow::onToggleTheme() { m_isDark = !m_isDark; applyTheme(m_isDark); }
+void MainWindow::onExportPng() {
+    syncLayoutWorkspace();
+    const QString defaultName = m_currentFile.isEmpty()
+        ? QStringLiteral("layout.png")
+        : QFileInfo(m_currentFile).completeBaseName() + QStringLiteral("_layout.png");
+    ExportDialog dlg(ExportDialog::Format::Png, defaultName, this);
+    if (dlg.exec() != QDialog::Accepted) {
+        return;
+    }
+    QString outPath = dlg.filePath();
+    if (outPath.isEmpty()) {
+        QMessageBox::warning(this, "画像出力", "保存先を指定してください");
+        return;
+    }
+    if (!outPath.endsWith(".png", Qt::CaseInsensitive)) {
+        outPath += ".png";
+    }
+    if (!m_layoutWorkspace->exportPng(outPath, dlg.dpi(), dlg.whiteBackground())) {
+        QMessageBox::warning(this, "画像出力", "PNGの書き出しに失敗しました");
+        return;
+    }
+}
+
+void MainWindow::onUndo() {
+    if (m_undoStack) {
+        m_undoStack->undo();
+        appendLog("元に戻しました");
+    }
+}
+
+void MainWindow::onRedo() {
+    if (m_undoStack) {
+        m_undoStack->redo();
+        appendLog("やり直しました");
+    }
+}
+
+void MainWindow::onDelete() {
+    const auto before = currentDesignerBadges();
+    const auto selected = selectedBadgeIndices();
+    if (selected.isEmpty()) {
+        return;
+    }
+
+    QList<BadgeItem> after;
+    after.reserve(before.size() - selected.size());
+    for (int i = 0; i < before.size(); ++i) {
+        if (!selected.contains(i)) {
+            after.append(before[i]);
+        }
+    }
+
+    pushBadgeChange("削除", before, selected, after, {});
+    appendLog(QStringLiteral("選択中の %1 個を削除しました").arg(selected.size()));
+}
+
+void MainWindow::onToggleTheme() {
+    m_appSettings.darkTheme = !m_isDark;
+    applyTheme(m_appSettings.darkTheme);
+    saveAppSettings();
+}
+
+void MainWindow::onAppSettings() {
+    AppSettingsDialog dlg(m_appSettings, this);
+    if (dlg.exec() != QDialog::Accepted) {
+        return;
+    }
+    applyAppSettings(dlg.settings());
+    saveAppSettings();
+}
+void MainWindow::onToggleGrid(bool on) {
+    if (m_designer) {
+        m_designer->setGridVisible(on);
+    }
+    m_appSettings.gridVisible = on;
+    saveAppSettings();
+}
+
+void MainWindow::onToggleSnapToGrid(bool on) {
+    if (m_designer) {
+        m_designer->setSnapToGrid(on);
+    }
+    m_appSettings.snapToGrid = on;
+    saveAppSettings();
+}
 
 void MainWindow::onModeChanged(bool designer) {
     m_isDesigner = designer;
     m_actDesigner->setChecked(designer);
     m_actLayout->setChecked(!designer);
+    updateInspectorMode();
+    updateToolbarsForMode();
     if (designer) {
+        m_layoutPreviewMode = LayoutPreviewMode::CurrentDesign;
         openDesignerPerspective();
     } else {
+        syncLayoutWorkspace();
         openLayoutPerspective();
     }
 }
 
 // --- Inspector ---
-void MainWindow::onBadgeSelected(BadgeGraphicItem* item) {
-    m_selected = {item};
+void MainWindow::onBadgeSelected(BadgeGraphicItem*) {
+    onSelectionChanged();
+}
+
+void MainWindow::onSelectionChanged() {
+    if (m_updatingUI || !m_designer) {
+        return;
+    }
+    m_selected = m_designer->selectedGraphics();
+    if (m_selected.isEmpty()) {
+        onBadgeDeselected();
+        return;
+    }
+
     m_updatingUI = true;
-    BadgeItem& b = item->badge();
+    BadgeItem& b = m_selected.first()->badge();
     m_propX->setValue(b.xMm); m_propY->setValue(b.yMm);
     m_propW->setValue(b.widthMm); m_propH->setValue(b.heightMm);
+    if (m_propImageScale) {
+        m_propImageScale->setValue(b.imageScale * 100.0);
+    }
+    if (m_sizePreset) {
+        m_sizePreset->setCurrentIndex(badgeSizePresetIndex(b.widthMm, b.heightMm));
+    }
     m_propRotation->setValue(int(b.rotation));
-    m_propText->setText(b.displayText);
-    m_propColorSpace->setText(item->colorSpaceLabel());
+    m_propClipCircle->setChecked(b.clipToCircle);
+    if (m_selected.size() > 1) {
+        m_propText->setPlaceholderText(QStringLiteral("複数選択"));
+        m_propText->setText(b.displayText);
+    } else {
+        m_propText->setPlaceholderText(QString());
+        m_propText->setText(b.displayText);
+    }
+    m_propColorSpace->setText(m_selected.first()->colorSpaceLabel());
     m_propBrightness->setValue(int(b.brightness));
     m_propContrast->setValue(int(b.contrast));
     m_propSaturation->setValue(int(b.saturation));
+    if (m_comboMaterial) {
+        m_comboMaterial->setCurrentIndex(std::clamp(b.materialPreset, 0, 4));
+    }
+    if (m_sliderSpecular) {
+        m_sliderSpecular->setValue(int(std::round(b.specularStrength * 100.0)));
+    }
+    if (m_sliderEnvReflection) {
+        m_sliderEnvReflection->setValue(int(std::round(b.envReflectionStrength * 100.0)));
+    }
+    if (m_sliderGlitterStrength) {
+        m_sliderGlitterStrength->setValue(int(std::round(b.glitterStrength * 100.0)));
+    }
+    m_designer->updateGuides(badgeGuideSizeMm(b));
     m_updatingUI = false;
+    refreshLayerList();
 }
 
 void MainWindow::onBadgeDeselected() {
@@ -401,55 +1250,277 @@ void MainWindow::onBadgeDeselected() {
     m_updatingUI = true;
     m_propX->setValue(0); m_propY->setValue(0);
     m_propW->setValue(32); m_propH->setValue(32);
+    if (m_propImageScale) {
+        m_propImageScale->setValue(100.0);
+    }
+    if (m_sizePreset) {
+        m_sizePreset->setCurrentIndex(badgeSizePresetIndex(32.0, 32.0));
+    }
     m_propRotation->setValue(0);
     m_propText->clear();
+    m_propText->setPlaceholderText(QString());
+    if (m_propClipCircle) {
+        m_propClipCircle->setChecked(true);
+    }
     m_propColorSpace->setText("未選択");
+    if (m_comboMaterial) {
+        m_comboMaterial->setCurrentIndex(0);
+    }
+    if (m_sliderSpecular) {
+        m_sliderSpecular->setValue(48);
+    }
+    if (m_sliderEnvReflection) {
+        m_sliderEnvReflection->setValue(24);
+    }
+    if (m_sliderGlitterStrength) {
+        m_sliderGlitterStrength->setValue(6);
+    }
+    if (m_chkLighting) {
+        m_chkLighting->setChecked(false);
+    }
+    if (m_chkGlitter) {
+        m_chkGlitter->setChecked(false);
+    }
+    if (m_comboGlitter) {
+        m_comboGlitter->setEnabled(false);
+    }
+    m_designer->updateGuides(32.0);
     m_updatingUI = false;
+    if (m_layerList) {
+        m_layerList->clear();
+    }
 }
 
 void MainWindow::onBadgeMoved(BadgeGraphicItem* item) {
-    if (m_selected.isEmpty() || m_selected.first() != item) return;
+    if (m_selected.isEmpty() || !m_selected.contains(item)) return;
     m_updatingUI = true;
     BadgeItem& b = item->badge();
     m_propX->setValue(b.xMm);
     m_propY->setValue(b.yMm);
     m_updatingUI = false;
-    syncLayoutWorkspace();
+    if (!m_isDesigner) {
+        syncLayoutWorkspace();
+    }
+    refreshDiagnostics();
 }
 
 void MainWindow::onInspectorChanged() {
     if (m_updatingUI || m_selected.isEmpty()) return;
-    BadgeItem& b = m_selected.first()->badge();
-    b.xMm = m_propX->value(); b.yMm = m_propY->value();
-    b.widthMm = m_propW->value(); b.heightMm = m_propH->value();
-    b.rotation = m_propRotation->value();
-    b.displayText = m_propText->text();
-    b.brightness = m_propBrightness->value();
-    b.contrast = m_propContrast->value();
-    b.saturation = m_propSaturation->value();
-    m_selected.first()->applyColorCorrection();
-    m_selected.first()->syncFromBadge();
-    m_propColorSpace->setText(m_selected.first()->colorSpaceLabel());
-    m_designer->updateGuides(b.widthMm);
-    syncLayoutWorkspace();
+
+    const auto before = currentDesignerBadges();
+    const auto selected = selectedBadgeIndices();
+    if (selected.isEmpty()) {
+        return;
+    }
+
+    auto after = before;
+    for (int index : selected) {
+        if (index < 0 || index >= after.size()) {
+            continue;
+        }
+        auto& b = after[index];
+        b.xMm = m_propX->value();
+        b.yMm = m_propY->value();
+        b.widthMm = m_propW->value();
+        b.heightMm = m_propH->value();
+        b.imageScale = m_propImageScale ? (m_propImageScale->value() / 100.0) : b.imageScale;
+        b.materialPreset = m_comboMaterial ? m_comboMaterial->currentIndex() : b.materialPreset;
+        b.specularStrength = m_sliderSpecular ? (m_sliderSpecular->value() / 100.0) : b.specularStrength;
+        b.envReflectionStrength = m_sliderEnvReflection ? (m_sliderEnvReflection->value() / 100.0) : b.envReflectionStrength;
+        b.glitterStrength = m_sliderGlitterStrength ? (m_sliderGlitterStrength->value() / 100.0) : b.glitterStrength;
+        b.rotation = m_propRotation->value();
+        b.displayText = m_propText->text();
+        b.clipToCircle = m_propClipCircle ? m_propClipCircle->isChecked() : b.clipToCircle;
+        b.brightness = m_propBrightness->value();
+        b.contrast = m_propContrast->value();
+        b.saturation = m_propSaturation->value();
+    }
+
+    m_designer->updateGuides(std::max(m_propW->value(), m_propH->value()));
+
+    pushBadgeChange("プロパティ変更", before, selected, after, selected);
+    appendLog(QStringLiteral("オブジェクト情報を更新しました"));
 }
 
 void MainWindow::onSetImage() {
     if (m_selected.isEmpty()) return;
     QString path = QFileDialog::getOpenFileName(this, "画像を選択", QString(), "すべての画像 (*.png *.jpg *.jpeg *.bmp *.gif *.webp *.tiff *.tif *.svg *.ico);;PNG (*.png);;JPEG (*.jpg *.jpeg)");
     if (path.isEmpty()) return;
-    m_selected.first()->badge().imagePath = path;
-    m_selected.first()->applyColorCorrection();
-    m_selected.first()->syncFromBadge();
-    m_propColorSpace->setText(m_selected.first()->colorSpaceLabel());
-    syncLayoutWorkspace();
+    const auto before = currentDesignerBadges();
+    const auto selected = selectedBadgeIndices();
+    auto after = before;
+    for (int index : selected) {
+        if (index >= 0 && index < after.size()) {
+            setPrimaryImageLayer(after[index], path);
+        }
+    }
+    pushBadgeChange("画像レイヤー変更", before, selected, after, selected);
+    appendLog(QStringLiteral("画像レイヤーを更新しました: %1").arg(path));
+}
+
+void MainWindow::onNudgeRequested(double dxMm, double dyMm) {
+    if (m_selected.isEmpty()) {
+        return;
+    }
+    const auto before = currentDesignerBadges();
+    const auto selected = selectedBadgeIndices();
+    auto after = before;
+    for (int index : selected) {
+        if (index < 0 || index >= after.size()) {
+            continue;
+        }
+        after[index].xMm += dxMm;
+        after[index].yMm += dyMm;
+    }
+    pushBadgeChange("移動", before, selected, after, selected);
+    appendLog(QStringLiteral("移動: %1 mm, %2 mm").arg(dxMm).arg(dyMm));
+}
+
+void MainWindow::onAlignLeft() {
+    const auto before = currentDesignerBadges();
+    const auto selected = selectedBadgeIndices();
+    if (selected.size() < 2) {
+        return;
+    }
+    auto after = before;
+    double left = std::numeric_limits<double>::max();
+    for (int index : selected) {
+        if (index >= 0 && index < after.size()) {
+            left = std::min(left, after[index].xMm);
+        }
+    }
+    for (int index : selected) {
+        if (index >= 0 && index < after.size()) {
+            after[index].xMm = left;
+        }
+    }
+    pushBadgeChange("左揃え", before, selected, after, selected);
+    appendLog("左揃えを実行しました");
+}
+
+void MainWindow::onAlignHCenter() {
+    const auto before = currentDesignerBadges();
+    const auto selected = selectedBadgeIndices();
+    if (selected.size() < 2) {
+        return;
+    }
+    auto after = before;
+    double sum = 0.0;
+    int count = 0;
+    for (int index : selected) {
+        if (index >= 0 && index < after.size()) {
+            sum += after[index].xMm + after[index].widthMm * 0.5;
+            ++count;
+        }
+    }
+    const double center = count > 0 ? sum / count : 0.0;
+    for (int index : selected) {
+        if (index >= 0 && index < after.size()) {
+            after[index].xMm = center - after[index].widthMm * 0.5;
+        }
+    }
+    pushBadgeChange("中央揃え(横)", before, selected, after, selected);
+    appendLog("中央揃え(横)を実行しました");
+}
+
+void MainWindow::onAlignRight() {
+    const auto before = currentDesignerBadges();
+    const auto selected = selectedBadgeIndices();
+    if (selected.size() < 2) {
+        return;
+    }
+    auto after = before;
+    double right = std::numeric_limits<double>::lowest();
+    for (int index : selected) {
+        if (index >= 0 && index < after.size()) {
+            right = std::max(right, after[index].xMm + after[index].widthMm);
+        }
+    }
+    for (int index : selected) {
+        if (index >= 0 && index < after.size()) {
+            after[index].xMm = right - after[index].widthMm;
+        }
+    }
+    pushBadgeChange("右揃え", before, selected, after, selected);
+    appendLog("右揃えを実行しました");
+}
+
+void MainWindow::onAlignTop() {
+    const auto before = currentDesignerBadges();
+    const auto selected = selectedBadgeIndices();
+    if (selected.size() < 2) {
+        return;
+    }
+    auto after = before;
+    double top = std::numeric_limits<double>::max();
+    for (int index : selected) {
+        if (index >= 0 && index < after.size()) {
+            top = std::min(top, after[index].yMm);
+        }
+    }
+    for (int index : selected) {
+        if (index >= 0 && index < after.size()) {
+            after[index].yMm = top;
+        }
+    }
+    pushBadgeChange("上揃え", before, selected, after, selected);
+    appendLog("上揃えを実行しました");
+}
+
+void MainWindow::onAlignVCenter() {
+    const auto before = currentDesignerBadges();
+    const auto selected = selectedBadgeIndices();
+    if (selected.size() < 2) {
+        return;
+    }
+    auto after = before;
+    double sum = 0.0;
+    int count = 0;
+    for (int index : selected) {
+        if (index >= 0 && index < after.size()) {
+            sum += after[index].yMm + after[index].heightMm * 0.5;
+            ++count;
+        }
+    }
+    const double center = count > 0 ? sum / count : 0.0;
+    for (int index : selected) {
+        if (index >= 0 && index < after.size()) {
+            after[index].yMm = center - after[index].heightMm * 0.5;
+        }
+    }
+    pushBadgeChange("中央揃え(縦)", before, selected, after, selected);
+    appendLog("中央揃え(縦)を実行しました");
+}
+
+void MainWindow::onAlignBottom() {
+    const auto before = currentDesignerBadges();
+    const auto selected = selectedBadgeIndices();
+    if (selected.size() < 2) {
+        return;
+    }
+    auto after = before;
+    double bottom = std::numeric_limits<double>::lowest();
+    for (int index : selected) {
+        if (index >= 0 && index < after.size()) {
+            bottom = std::max(bottom, after[index].yMm + after[index].heightMm);
+        }
+    }
+    for (int index : selected) {
+        if (index >= 0 && index < after.size()) {
+            after[index].yMm = bottom - after[index].heightMm;
+        }
+    }
+    pushBadgeChange("下揃え", before, selected, after, selected);
+    appendLog("下揃えを実行しました");
 }
 
 // --- Effects ---
 void MainWindow::onGuideToggle() {
     m_designer->setBleedVisible(m_chkBleed->isChecked());
     m_designer->setVisibleVisible(m_chkVisible->isChecked());
-    syncLayoutWorkspace();
+    if (!m_isDesigner) {
+        syncLayoutWorkspace();
+    }
 }
 
 void MainWindow::onLightingToggle(bool on) { m_designer->setLightingEnabled(on); }
@@ -460,51 +1531,256 @@ void MainWindow::onLightingSlider() {
     m_designer->setLightIntensity(m_sliderLightIntensity->value() / 100.0);
 }
 
+void MainWindow::showEvent(QShowEvent* event) {
+    QMainWindow::showEvent(event);
+    if (!m_backdropApplied) {
+        applyWindowsBackdrop();
+        m_backdropApplied = true;
+    }
+}
+
+void MainWindow::refreshLayerList() {
+    if (!m_layerList) {
+        return;
+    }
+    m_layerList->clear();
+    if (m_selected.isEmpty()) {
+        return;
+    }
+    const auto& layers = m_selected.first()->badge().layers;
+    for (const auto& layer : layers) {
+        const QString label = layer.name.isEmpty() ? QFileInfo(layer.imagePath).baseName() : layer.name;
+        auto* item = new QListWidgetItem(label);
+        m_layerList->addItem(item);
+    }
+}
+
 // --- Badge ---
 void MainWindow::onAddBadge() {
+    const auto before = currentDesignerBadges();
     BadgeItem b;
+    b.clipToCircle = true;
     QPointF center = m_designer->mapToScene(m_designer->viewport()->rect().center());
     const double mmToPx = 96.0 / 25.4;
     b.xMm = center.x() / mmToPx - b.widthMm / 2;
     b.yMm = center.y() / mmToPx - b.heightMm / 2;
-    m_designer->addBadge(b);
-    syncLayoutWorkspace();
+    auto after = before;
+    after.append(b);
+    pushBadgeChange("追加", before, QList<int>{}, after, QList<int>{static_cast<int>(after.size() - 1)});
+    appendLog("バッジを追加しました");
 }
 
 void MainWindow::onBatchAdd() {
     BatchLayoutDialog dlg(this);
     if (dlg.exec() == QDialog::Accepted) {
+        QList<BadgeItem> batchBadges;
+        batchBadges.reserve(dlg.rows() * dlg.cols());
         for (int r = 0; r < dlg.rows(); ++r)
             for (int c = 0; c < dlg.cols(); ++c) {
                 BadgeItem b; b.widthMm = dlg.badgeWidth(); b.heightMm = dlg.badgeHeight();
                 b.xMm = 10 + c * (b.widthMm + 1);
                 b.yMm = 10 + r * (b.heightMm + 1);
                 b.clipToCircle = dlg.clipCircle();
-                m_designer->addBadge(b);
-            }
+                batchBadges.append(b);
+        }
+        m_layoutPreviewMode = LayoutPreviewMode::CurrentDesign;
+        m_layoutBadges = batchBadges;
         syncLayoutWorkspace();
+        openLayoutPerspective();
     }
 }
 
 void MainWindow::onAutoLayout() {
-    auto document = projectsync::currentDocument(*m_designer, *m_comboPaperSize, *m_chkLandscape, *m_spinPaperMargin, *m_spinPaperSpacing, m_currentFile);
-    document.badges = badge::auto_layout(document.badges, document.paper);
-    projectsync::applyDocument(*m_designer, *m_layoutWorkspace, *m_comboPaperSize, *m_chkLandscape, *m_spinPaperMargin, *m_spinPaperSpacing, document);
-    onModeChanged(false);
+    onSendToLayout();
 }
 
 void MainWindow::onImageDropped(const QString& filePath) {
-    BadgeItem b; b.imagePath = filePath;
+    const auto before = currentDesignerBadges();
+    BadgeItem b;
+    b.layers.append(layerFromImagePath(filePath));
+    b.clipToCircle = true;
     b.label = QFileInfo(filePath).baseName();
-    m_designer->addBadge(b);
-    syncLayoutWorkspace();
+    auto after = before;
+    after.append(b);
+    pushBadgeChange("画像ドロップ", before, QList<int>{}, after, QList<int>{static_cast<int>(after.size() - 1)});
+    appendLog(QStringLiteral("画像を追加しました: %1").arg(filePath));
 }
 
 void MainWindow::syncLayoutWorkspace() {
-    m_layoutWorkspace->setDocument(projectsync::currentDocument(*m_designer, *m_comboPaperSize, *m_chkLandscape, *m_spinPaperMargin, *m_spinPaperSpacing, m_currentFile));
+    refreshDocumentFromDesigner();
+    const badge::DocumentData document = projectsync::currentDocument(m_layoutBadges, *m_comboPaperSize, *m_chkLandscape, *m_spinPaperMargin, *m_spinPaperSpacing, m_currentFile);
+    badge::DocumentData layoutDocument = document;
+    const bool cutFriendly = m_chkCutFriendlyLayout && m_chkCutFriendlyLayout->isChecked();
+    if (m_layoutPreviewMode == LayoutPreviewMode::FillPageFromSelection) {
+        BadgeItem templateBadge;
+        bool hasTemplate = false;
+        if (!m_layoutBadges.isEmpty()) {
+            templateBadge = badgeForLayoutPreview(m_layoutBadges.first());
+            hasTemplate = true;
+        } else if (!m_selected.isEmpty()) {
+            templateBadge = badgeForLayoutPreview(m_selected.first()->badge());
+            hasTemplate = true;
+        } else if (!m_badges.isEmpty()) {
+            templateBadge = badgeForLayoutPreview(m_badges.first());
+            hasTemplate = true;
+        }
+        if (hasTemplate) {
+            const QList<BadgeItem> laidOut = cutFriendly
+                ? LayoutEngine::fillPageGrid(templateBadge, layoutDocument.paper)
+                : LayoutEngine::fillPage(templateBadge, layoutDocument.paper);
+            layoutDocument.badges = badge::qt::toCoreBadges(laidOut);
+        }
+    } else if (m_layoutPreviewMode == LayoutPreviewMode::AutoLayoutAll) {
+        const QList<BadgeItem> sourceBadges = badge::qt::fromCoreBadges(layoutDocument.badges);
+        const QList<BadgeItem> laidOut = cutFriendly
+            ? LayoutEngine::autoLayoutGrid(sourceBadges, layoutDocument.paper)
+            : LayoutEngine::autoLayout(sourceBadges, layoutDocument.paper);
+        layoutDocument.badges = badge::qt::toCoreBadges(laidOut);
+    }
+    m_paperWidthMm = document.paper.widthMm;
+    m_paperHeightMm = document.paper.heightMm;
+    m_paperMarginMm = document.paper.marginMm;
+    m_paperSpacingMm = document.paper.spacingMm;
+    m_layoutWorkspace->setDocument(layoutDocument);
+}
+
+void MainWindow::refreshDocumentFromDesigner() {
+    if (m_designer) {
+        m_badges = m_designer->badgeItems();
+    } else {
+        m_badges.clear();
+    }
+}
+
+void MainWindow::updateInspectorMode() {
+    const bool designer = m_isDesigner;
+    if (m_propGroup) m_propGroup->setVisible(designer);
+    if (m_colorGroup) m_colorGroup->setVisible(designer);
+    if (m_layerGroup) m_layerGroup->setVisible(designer);
+    if (m_guideGroup) m_guideGroup->setVisible(designer);
+    if (m_effectGroup) m_effectGroup->setVisible(designer);
+    if (m_layoutGroup) m_layoutGroup->setVisible(!designer);
+}
+
+void MainWindow::updateToolbarsForMode() {
+    const bool designer = m_isDesigner;
+    if (m_designerToolbar) {
+        m_designerToolbar->setVisible(designer);
+    }
+    if (m_layoutToolbar) {
+        m_layoutToolbar->setVisible(!designer);
+    }
+    if (m_actAddBadge) {
+        m_actAddBadge->setEnabled(designer);
+    }
+    if (m_actBatchAdd) {
+        m_actBatchAdd->setEnabled(designer);
+    }
+    if (m_actSendToLayout) {
+        m_actSendToLayout->setEnabled(designer);
+    }
+    if (m_actOpenDesignerPerspective) {
+        m_actOpenDesignerPerspective->setVisible(designer);
+    }
+    if (m_actOpenLayoutPerspective) {
+        m_actOpenLayoutPerspective->setVisible(!designer);
+    }
+    if (m_actClearLayout) {
+        m_actClearLayout->setVisible(!designer);
+    }
+}
+
+void MainWindow::onSendToLayout() {
+    refreshDocumentFromDesigner();
+    m_lastTransferDesignerImage = QImage();
+    m_lastTransferLayoutImage = QImage();
+    m_lastTransferDebugTitle.clear();
+    m_lastTransferDebugDetail.clear();
+    const auto document = projectsync::currentDocument(m_badges, *m_comboPaperSize, *m_chkLandscape, *m_spinPaperMargin, *m_spinPaperSpacing, m_currentFile);
+    const double guideSizeMm = !m_selected.isEmpty()
+        ? badgeGuideSizeMm(m_selected.first()->badge())
+        : (!m_badges.isEmpty() ? badgeGuideSizeMm(m_badges.first()) : 32.0);
+    const QPointF guideCenterScene = m_designer && m_designer->scene()
+        ? m_designer->scene()->sceneRect().center()
+        : QPointF(0.0, 0.0);
+    QList<BadgeItem> guideBadges;
+    const auto graphicItems = m_designer ? m_designer->graphicItems() : QList<BadgeGraphicItem*>{};
+    for (auto* graphicItem : graphicItems) {
+        if (!graphicItem) {
+            continue;
+        }
+        const QImage crop = renderTransferCropImage(*m_designer, *graphicItem, guideCenterScene, guideSizeMm);
+        if (crop.isNull()) {
+            continue;
+        }
+        BadgeItem transferBadge = makeLayoutTransferBadge(graphicItem->badge(), crop, guideSizeMm);
+        if (m_lastTransferDesignerImage.isNull()) {
+            m_lastTransferDesignerImage = crop;
+            m_lastTransferLayoutImage = renderLayoutDebugImage(transferBadge, crop.width());
+            m_lastTransferDebugTitle = graphicItem->badge().label.isEmpty()
+                ? QStringLiteral("最初の転送バッジ")
+                : QStringLiteral("最初の転送バッジ: %1").arg(graphicItem->badge().label);
+            m_lastTransferDebugDetail = QStringLiteral("Designer crop: %1x%2 / Layout input: %3x%4 / guide size: %5mm")
+                .arg(m_lastTransferDesignerImage.width())
+                .arg(m_lastTransferDesignerImage.height())
+                .arg(m_lastTransferLayoutImage.width())
+                .arg(m_lastTransferLayoutImage.height())
+                .arg(guideSizeMm, 0, 'f', 2);
+            appendLog(QStringLiteral("転送デバッグ画像を更新: designer=%1x%2 layout=%3x%4")
+                          .arg(m_lastTransferDesignerImage.width())
+                          .arg(m_lastTransferDesignerImage.height())
+                          .arg(m_lastTransferLayoutImage.width())
+                          .arg(m_lastTransferLayoutImage.height()));
+        }
+        guideBadges.append(transferBadge);
+    }
+    if (guideBadges.isEmpty()) {
+        appendLog(QStringLiteral("中央ガイドの安全域内に送れるバッジがありません"));
+        return;
+    }
+    if (guideBadges.size() <= 1) {
+        m_layoutPreviewMode = LayoutPreviewMode::FillPageFromSelection;
+        m_layoutBadges = QList<BadgeItem>{guideBadges.first()};
+    } else {
+        m_layoutPreviewMode = LayoutPreviewMode::AutoLayoutAll;
+        m_layoutBadges = LayoutEngine::autoLayout(guideBadges, document.paper);
+    }
+    syncLayoutWorkspace();
+    m_skipNextLayoutSync = true;
+    openLayoutPerspective();
+}
+
+void MainWindow::onShowTransferDebug() {
+    appendLog(QStringLiteral("転送デバッグを開こうとしました"));
+    if (!m_transferDebugDialog) {
+        m_transferDebugDialog = new TransferDebugDialog(this);
+        appendLog(QStringLiteral("転送デバッグダイアログを新規作成しました"));
+    }
+    appendLog(QStringLiteral("転送デバッグ内容: designer=%1x%2 layout=%3x%4")
+                  .arg(m_lastTransferDesignerImage.width())
+                  .arg(m_lastTransferDesignerImage.height())
+                  .arg(m_lastTransferLayoutImage.width())
+                  .arg(m_lastTransferLayoutImage.height()));
+    m_transferDebugDialog->setImages(
+        m_lastTransferDesignerImage,
+        m_lastTransferLayoutImage,
+        m_lastTransferDebugTitle.isEmpty() ? QStringLiteral("転送デバッグ") : m_lastTransferDebugTitle,
+        m_lastTransferDebugDetail.isEmpty() ? QStringLiteral("まだ転送していません") : m_lastTransferDebugDetail);
+    m_transferDebugDialog->show();
+    m_transferDebugDialog->raise();
+    m_transferDebugDialog->activateWindow();
+}
+
+void MainWindow::onClearLayout() {
+    m_layoutBadges.clear();
+    m_layoutPreviewMode = LayoutPreviewMode::CurrentDesign;
+    syncLayoutWorkspace();
+    m_skipNextLayoutSync = true;
+    openLayoutPerspective();
 }
 
 void MainWindow::applyTheme(bool dark) {
+    m_isDark = dark;
     QPalette pal;
     if (dark) {
         pal.setColor(QPalette::Window, QColor(0x1E, 0x1E, 0x1E));
@@ -524,10 +1800,77 @@ void MainWindow::applyTheme(bool dark) {
         pal = QApplication::style()->standardPalette();
     }
     QApplication::setPalette(pal);
+    if (m_dockStyleManager) {
+        m_dockStyleManager->applyTheme(QApplication::palette());
+    }
     m_actTheme->setText(dark ? "☀ テーマ切替" : "☾ テーマ切替");
+    applyWindowsBackdrop();
 }
 
-void MainWindow::refreshBadges() { m_designer->refreshAll(); }
+void MainWindow::applyWindowsBackdrop() {
+#ifdef Q_OS_WIN
+    if (auto* window = windowHandle()) {
+        applyWinBackdrop(reinterpret_cast<HWND>(window->winId()), m_isDark);
+    } else if (winId()) {
+        applyWinBackdrop(reinterpret_cast<HWND>(winId()), m_isDark);
+    }
+#else
+    Q_UNUSED(m_isDark);
+#endif
+}
+
+void MainWindow::applyAppSettings(const AppSettings& settings) {
+    m_appSettings = settings;
+
+    applyTheme(settings.darkTheme);
+
+    if (m_actGridVisible) {
+        const QSignalBlocker blocker(m_actGridVisible);
+        m_actGridVisible->setChecked(settings.gridVisible);
+    }
+    if (m_actSnapToGrid) {
+        const QSignalBlocker blocker(m_actSnapToGrid);
+        m_actSnapToGrid->setChecked(settings.snapToGrid);
+    }
+    if (m_designer) {
+        m_designer->setGridVisible(settings.gridVisible);
+        m_designer->setSnapToGrid(settings.snapToGrid);
+        m_designer->setGridSpacingMm(settings.gridSpacingMm);
+        m_designer->setLightingEnabled(settings.lightingEnabled);
+        m_designer->setLightAngle(settings.lightAngle);
+        m_designer->setLightIntensity(settings.lightIntensity / 100.0);
+        m_designer->setGlitterEnabled(settings.glitterEnabled);
+        m_designer->setGlitterPattern(settings.glitterPattern);
+    }
+    if (m_chkLighting) {
+        const QSignalBlocker blocker(m_chkLighting);
+        m_chkLighting->setChecked(settings.lightingEnabled);
+    }
+    if (m_sliderLightAngle) {
+        const QSignalBlocker blocker(m_sliderLightAngle);
+        m_sliderLightAngle->setValue(settings.lightAngle);
+    }
+    if (m_sliderLightIntensity) {
+        const QSignalBlocker blocker(m_sliderLightIntensity);
+        m_sliderLightIntensity->setValue(settings.lightIntensity);
+    }
+    if (m_chkGlitter) {
+        const QSignalBlocker blocker(m_chkGlitter);
+        m_chkGlitter->setChecked(settings.glitterEnabled);
+    }
+    if (m_comboGlitter) {
+        const QSignalBlocker blocker(m_comboGlitter);
+        m_comboGlitter->setCurrentIndex(settings.glitterPattern);
+        m_comboGlitter->setEnabled(settings.glitterEnabled);
+    }
+}
+
+void MainWindow::refreshBadges() {
+    if (m_designer) {
+        m_designer->refreshAll();
+    }
+    refreshDiagnostics();
+}
 
 void MainWindow::updateTitle() {
     QString name = m_currentFile.isEmpty() ? "新規プロジェクト" : QFileInfo(m_currentFile).fileName();
@@ -548,6 +1891,7 @@ void MainWindow::dropEvent(QDropEvent* event) {
 }
 
 void MainWindow::closeEvent(QCloseEvent* event) {
+    saveAppSettings();
     saveDockState();
     QMainWindow::closeEvent(event);
 }
@@ -575,6 +1919,34 @@ void MainWindow::saveDockState() {
     refreshPerspectiveMenu();
 }
 
+void MainWindow::loadAppSettings() {
+    QSettings settings;
+    AppSettings loaded;
+    loaded.darkTheme = settings.value("app/darkTheme", loaded.darkTheme).toBool();
+    loaded.gridVisible = settings.value("app/gridVisible", loaded.gridVisible).toBool();
+    loaded.snapToGrid = settings.value("app/snapToGrid", loaded.snapToGrid).toBool();
+    loaded.gridSpacingMm = settings.value("app/gridSpacingMm", loaded.gridSpacingMm).toDouble();
+    loaded.lightingEnabled = settings.value("app/lightingEnabled", loaded.lightingEnabled).toBool();
+    loaded.lightAngle = settings.value("app/lightAngle", loaded.lightAngle).toInt();
+    loaded.lightIntensity = settings.value("app/lightIntensity", loaded.lightIntensity).toInt();
+    loaded.glitterEnabled = settings.value("app/glitterEnabled", loaded.glitterEnabled).toBool();
+    loaded.glitterPattern = settings.value("app/glitterPattern", loaded.glitterPattern).toInt();
+    applyAppSettings(loaded);
+}
+
+void MainWindow::saveAppSettings() {
+    QSettings settings;
+    settings.setValue("app/darkTheme", m_appSettings.darkTheme);
+    settings.setValue("app/gridVisible", m_appSettings.gridVisible);
+    settings.setValue("app/snapToGrid", m_appSettings.snapToGrid);
+    settings.setValue("app/gridSpacingMm", m_appSettings.gridSpacingMm);
+    settings.setValue("app/lightingEnabled", m_appSettings.lightingEnabled);
+    settings.setValue("app/lightAngle", m_appSettings.lightAngle);
+    settings.setValue("app/lightIntensity", m_appSettings.lightIntensity);
+    settings.setValue("app/glitterEnabled", m_appSettings.glitterEnabled);
+    settings.setValue("app/glitterPattern", m_appSettings.glitterPattern);
+}
+
 void MainWindow::resetDockState() {
     if (m_defaultDockState.isEmpty()) {
         return;
@@ -584,6 +1956,7 @@ void MainWindow::resetDockState() {
     m_isDesigner = true;
     m_actDesigner->setChecked(true);
     m_actLayout->setChecked(false);
+    updateInspectorMode();
     syncLayoutWorkspace();
 }
 
@@ -593,7 +1966,7 @@ void MainWindow::openDesignerPerspective() {
     }
     m_designerDock->setAsCurrentTab();
     m_dockManager->openPerspective("designer");
-    syncPerspectiveUi("designer");
+    syncPerspectiveUiDeferred("designer");
 }
 
 void MainWindow::openLayoutPerspective() {
@@ -602,7 +1975,13 @@ void MainWindow::openLayoutPerspective() {
     }
     m_layoutDock->setAsCurrentTab();
     m_dockManager->openPerspective("layout");
-    syncPerspectiveUi("layout");
+    syncPerspectiveUiDeferred("layout");
+}
+
+void MainWindow::syncPerspectiveUiDeferred(const QString& name) {
+    QTimer::singleShot(0, this, [this, name]() {
+        syncPerspectiveUi(name);
+    });
 }
 
 void MainWindow::saveDesignerPerspective() {
@@ -680,19 +2059,28 @@ void MainWindow::openSavedPerspective() {
         return;
     }
     m_dockManager->openPerspective(name);
-    syncPerspectiveUi(name);
+    syncPerspectiveUiDeferred(name);
 }
 
 void MainWindow::syncPerspectiveUi(const QString& name) {
-    Q_UNUSED(name);
-    const bool designer = !m_dockArea || m_dockArea->currentDockWidget() != m_layoutDock;
+    const bool knownPerspective = (name == "designer" || name == "layout");
+    const bool designer = knownPerspective ? (name != "layout")
+                                           : (!m_dockArea || !m_layoutDock ||
+                                              m_dockArea->currentDockWidget() != m_layoutDock);
     m_isDesigner = designer;
     m_actDesigner->setChecked(designer);
     m_actLayout->setChecked(!designer);
     if (designer) {
         m_designer->setGuidesVisible(true);
+        m_skipNextLayoutSync = false;
     }
-    syncLayoutWorkspace();
+    updateInspectorMode();
+    updateToolbarsForMode();
+    if (!designer && m_skipNextLayoutSync) {
+        m_skipNextLayoutSync = false;
+    } else {
+        syncLayoutWorkspace();
+    }
 }
 
 void MainWindow::refreshPerspectiveMenu() {

@@ -5,6 +5,10 @@
 #include <QRandomGenerator>
 #include <QImageReader>
 #include <QSet>
+#include <QKeySequence>
+#include <QScrollBar>
+#include <QTimer>
+#include <algorithm>
 #include <cmath>
 #include <utility>
 #include <wobjectimpl.h>
@@ -14,41 +18,57 @@ public:
     LightingOverlayItem(QGraphicsItem* parent = nullptr) : QGraphicsItem(parent) {
         setFlag(ItemIgnoresTransformations, true);
     }
-    QRectF boundingRect() const override { return QRectF(-m_radius, -m_radius, m_radius * 2, m_radius * 2); }
+
+    QRectF boundingRect() const override {
+        return QRectF(-m_boundsRadius, -m_boundsRadius, m_boundsRadius * 2.0, m_boundsRadius * 2.0);
+    }
+
     void paint(QPainter* painter, const QStyleOptionGraphicsItem*, QWidget*) override {
-        if (!m_enabled) return;
-        QRectF r = boundingRect();
+        if (!m_enabled) {
+            return;
+        }
+
+        const QRectF r(-m_radius, -m_radius, m_radius * 2.0, m_radius * 2.0);
         painter->save();
-        QRadialGradient shade(r.center(), r.width() / 2);
-        double rad = m_angle * M_PI / 180.0;
-        QPointF lightCenter = r.center() + QPointF(cos(rad) * r.width() * 0.3, -sin(rad) * r.height() * 0.3);
+        painter->setRenderHint(QPainter::Antialiasing, true);
+
+        QRadialGradient shade(r.center(), r.width() / 2.0);
+        const double rad = m_angle * M_PI / 180.0;
+        const QPointF lightCenter = r.center() + QPointF(std::cos(rad) * r.width() * 0.22,
+                                                         -std::sin(rad) * r.height() * 0.22);
         shade.setCenter(lightCenter);
         shade.setFocalPoint(lightCenter);
         shade.setColorAt(0.0, QColor(255, 255, 255, 0));
-        shade.setColorAt(0.35, QColor(0, 0, 0, int(10 * m_intensity)));
-        shade.setColorAt(0.7, QColor(0, 0, 0, int(50 * m_intensity)));
-        shade.setColorAt(1.0, QColor(0, 0, 0, int(120 * m_intensity)));
+        shade.setColorAt(0.42, QColor(255, 255, 255, int(14 * m_intensity)));
+        shade.setColorAt(0.68, QColor(0, 0, 0, int(28 * m_intensity)));
+        shade.setColorAt(1.0, QColor(0, 0, 0, int(88 * m_intensity)));
         painter->setBrush(shade);
         painter->setPen(Qt::NoPen);
         painter->drawEllipse(r);
-        QRadialGradient spec(QPointF(r.left() + r.width() * 0.22, r.top() + r.height() * 0.14), r.width() * 0.15);
-        spec.setColorAt(0.0, QColor(255, 255, 255, int(200 * m_intensity)));
-        spec.setColorAt(0.5, QColor(255, 255, 255, int(80 * m_intensity)));
+
+        QRadialGradient spec(QPointF(r.left() + r.width() * 0.24, r.top() + r.height() * 0.16),
+                             r.width() * 0.14);
+        spec.setColorAt(0.0, QColor(255, 255, 255, int(120 * m_intensity)));
+        spec.setColorAt(0.5, QColor(255, 255, 255, int(45 * m_intensity)));
         spec.setColorAt(1.0, QColor(255, 255, 255, 0));
         painter->setBrush(spec);
-        double specR = r.width() * 0.12;
-        painter->drawEllipse(QPointF(r.left() + r.width() * 0.22, r.top() + r.height() * 0.14), specR, specR * 0.7);
+        const double specR = r.width() * 0.11;
+        painter->drawEllipse(QPointF(r.left() + r.width() * 0.24, r.top() + r.height() * 0.16),
+                             specR, specR * 0.72);
         painter->restore();
     }
+
     void setEnabled(bool on) { m_enabled = on; update(); }
     void setAngle(double a) { m_angle = a; update(); }
     void setIntensity(double v) { m_intensity = v; update(); }
-    void setRadius(double r) { prepareGeometryChange(); m_radius = r; update(); }
+    void setRadius(double r) { m_radius = r; update(); }
+
 private:
     bool m_enabled = false;
-    double m_angle = 0;
-    double m_intensity = 0.5;
-    double m_radius = 100;
+    double m_angle = 0.0;
+    double m_intensity = 0.35;
+    double m_radius = 100.0;
+    double m_boundsRadius = 1000.0;
 };
 
 static bool isImageFile(const QString& path) {
@@ -76,31 +96,61 @@ DesignerWidget::DesignerWidget(QWidget* parent) : QGraphicsView(parent) {
     setAcceptDrops(true);
     viewport()->setAcceptDrops(true);
     setTransformationAnchor(QGraphicsView::AnchorUnderMouse);
-    setViewportUpdateMode(QGraphicsView::FullViewportUpdate);
+    setViewportUpdateMode(QGraphicsView::BoundingRectViewportUpdate);
+    setCacheMode(QGraphicsView::CacheBackground);
     setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
     setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
     setBackgroundBrush(Qt::lightGray);
+    scale(1.25, 1.25);
+    setFocusPolicy(Qt::StrongFocus);
 
     // Guide circles (drawn in drawForeground, not as scene items)
     m_guideBleed = new GuideItem;
     m_guideVisible = new GuideItem;
-
-    // Lighting overlay centered on guide
     m_lightingOverlay = new LightingOverlayItem;
     m_scene->addItem(m_lightingOverlay);
-    m_lightingOverlay->setZValue(9999);
+    m_lightingOverlay->setZValue(9998);
+    connect(m_scene, &QGraphicsScene::selectionChanged, this, [this] {
+        emit selectionChanged();
+    });
+
 }
 
 W_OBJECT_IMPL(DesignerWidget)
 
 void DesignerWidget::addBadge(const BadgeItem& item) {
     auto* gi = new BadgeGraphicItem(item);
+    gi->setGridVisible(m_gridVisible);
+    gi->setSnapToGrid(m_snapToGrid);
+    gi->setGridSpacingMm(m_gridSpacingMm);
     m_scene->addItem(gi);
     gi->syncFromBadge();
     m_graphicItems.append(gi);
     connect(gi, &BadgeGraphicItem::badgeClicked, this, &DesignerWidget::badgeSelected);
     connect(gi, &BadgeGraphicItem::badgeDoubleClicked, this, &DesignerWidget::badgeDoubleClicked);
     connect(gi, &BadgeGraphicItem::badgeMoved, this, &DesignerWidget::badgeMoved);
+}
+
+void DesignerWidget::setBadgeItems(const QList<BadgeItem>& items, const QList<int>& selectedIndices) {
+    clearBadges();
+    for (const auto& item : items) {
+        addBadge(item);
+    }
+
+    QSet<int> selectedSet;
+    for (int index : selectedIndices) {
+        selectedSet.insert(index);
+    }
+    for (int i = 0; i < m_graphicItems.size(); ++i) {
+        auto* gi = m_graphicItems[i];
+        const bool selected = selectedSet.contains(i);
+        gi->badge().isSelected = selected;
+        gi->setSelected(selected);
+        gi->updateHandles();
+        gi->update();
+    }
+
+    emit selectionChanged();
 }
 
 void DesignerWidget::clearBadges() {
@@ -123,7 +173,33 @@ void DesignerWidget::removeSelectedBadges() {
 }
 
 void DesignerWidget::refreshAll() {
-    for (auto* gi : m_graphicItems) gi->syncFromBadge();
+    for (auto* gi : m_graphicItems) {
+        gi->setGridVisible(m_gridVisible);
+        gi->setSnapToGrid(m_snapToGrid);
+        gi->setGridSpacingMm(m_gridSpacingMm);
+        gi->syncFromBadge();
+    }
+}
+
+QList<BadgeItem> DesignerWidget::badgeItems() const {
+    QList<BadgeItem> items;
+    items.reserve(m_graphicItems.size());
+    for (auto* gi : m_graphicItems) {
+        items.append(gi->badge());
+    }
+    return items;
+}
+
+QList<BadgeGraphicItem*> DesignerWidget::selectedGraphics() const {
+    QList<BadgeGraphicItem*> items;
+    const auto selectedItems = m_scene->selectedItems();
+    items.reserve(selectedItems.size());
+    for (auto* item : selectedItems) {
+        if (auto* gi = dynamic_cast<BadgeGraphicItem*>(item)) {
+            items.append(gi);
+        }
+    }
+    return items;
 }
 
 void DesignerWidget::syncToBadgeList(QList<BadgeItem>& badges) {
@@ -143,11 +219,56 @@ BadgeGraphicItem* DesignerWidget::selectedGraphic() const {
     return nullptr;
 }
 
+void DesignerWidget::keyPressEvent(QKeyEvent* event) {
+    if (event->matches(QKeySequence::SelectAll)) {
+        for (auto* gi : m_graphicItems) {
+            gi->setSelected(true);
+            gi->badge().isSelected = true;
+            gi->updateHandles();
+        }
+        emit selectionChanged();
+        event->accept();
+        return;
+    }
+
+    const bool hasSelection = !selectedGraphics().isEmpty();
+    if (hasSelection) {
+        const bool fast = (event->modifiers() & Qt::ShiftModifier);
+        const double baseStep = m_snapToGrid ? std::max(0.1, m_gridSpacingMm) : 1.0;
+        const double step = fast ? baseStep * 5.0 : baseStep;
+        double dx = 0.0;
+        double dy = 0.0;
+        switch (event->key()) {
+        case Qt::Key_Left: dx = -step; break;
+        case Qt::Key_Right: dx = step; break;
+        case Qt::Key_Up: dy = -step; break;
+        case Qt::Key_Down: dy = step; break;
+        default: break;
+        }
+        if (dx != 0.0 || dy != 0.0) {
+            emit nudgeRequested(dx, dy);
+            event->accept();
+            return;
+        }
+    }
+
+    QGraphicsView::keyPressEvent(event);
+}
+
 void DesignerWidget::updateGuides(double badgeSizeMm) {
     m_badgeSizeMm = badgeSizeMm;
-    positionGuideOverlays();
-    if (m_glitterGroup) regenerateGlitter();
-    viewport()->update();
+    if (m_guideUpdatePending) {
+        return;
+    }
+    m_guideUpdatePending = true;
+    QTimer::singleShot(0, this, [this] {
+        m_guideUpdatePending = false;
+        positionGuideOverlays();
+        if (m_glitterGroup) {
+            regenerateGlitter();
+        }
+        viewport()->update();
+    });
 }
 
 void DesignerWidget::scrollContentsBy(int dx, int dy) {
@@ -163,18 +284,20 @@ void DesignerWidget::resizeEvent(QResizeEvent* event) {
 }
 
 QPointF DesignerWidget::guideSceneCenter() const {
-    return mapToScene(viewport()->rect().center());
+    return m_scene->sceneRect().center();
 }
 
 void DesignerWidget::positionGuideOverlays() {
-    const double mmToPx = 96.0 / 25.4;
-    double finishR = m_badgeSizeMm * mmToPx / 2;
     const QPointF center = guideSceneCenter();
     if (m_glitterGroup) m_glitterGroup->setPos(center);
     if (m_lightingOverlay) {
-        m_lightingOverlay->setPos(center);
+        const double mmToPx = 96.0 / 25.4;
         auto* lo = qgraphicsitem_cast<LightingOverlayItem*>(m_lightingOverlay);
-        if (lo) lo->setRadius(finishR);
+        if (lo) {
+            lo->setRadius((m_badgeSizeMm * mmToPx) / 2.0);
+        }
+        m_lightingOverlay->setPos(center);
+        m_lightingOverlay->setVisible(m_lightingEnabled);
     }
 }
 
@@ -185,34 +308,68 @@ void DesignerWidget::setGuidesVisible(bool b) {
 
 void DesignerWidget::setBleedVisible(bool b) { m_guideBleed->setVisible(b); }
 void DesignerWidget::setVisibleVisible(bool b) { m_guideVisible->setVisible(b); }
+void DesignerWidget::setGridVisible(bool b) {
+    m_gridVisible = b;
+    viewport()->update();
+}
+
+void DesignerWidget::setSnapToGrid(bool b) {
+    m_snapToGrid = b;
+    for (auto* gi : m_graphicItems) {
+        gi->setSnapToGrid(b);
+    }
+}
+
+void DesignerWidget::setGridSpacingMm(double mm) {
+    m_gridSpacingMm = mm;
+    for (auto* gi : m_graphicItems) {
+        gi->setGridSpacingMm(mm);
+    }
+    viewport()->update();
+}
+
 void DesignerWidget::setLightingEnabled(bool on) {
     m_lightingEnabled = on;
-    auto* lo = qgraphicsitem_cast<LightingOverlayItem*>(m_lightingOverlay);
-    if (lo) lo->setEnabled(on);
-    setViewportUpdateMode(on ? QGraphicsView::FullViewportUpdate : QGraphicsView::SmartViewportUpdate);
+    if (m_lightingOverlay) {
+        m_lightingOverlay->setVisible(on);
+    }
+    setViewportUpdateMode(on ? QGraphicsView::BoundingRectViewportUpdate : QGraphicsView::SmartViewportUpdate);
+    viewport()->update();
 }
 void DesignerWidget::setLightAngle(int degrees) {
     m_lightAngle = degrees;
     auto* lo = qgraphicsitem_cast<LightingOverlayItem*>(m_lightingOverlay);
-    if (lo) lo->setAngle(degrees);
+    if (lo) {
+        lo->setAngle(degrees);
+    }
 }
 void DesignerWidget::setLightIntensity(double val) {
-    m_lightIntensity = val;
+    m_lightIntensity = std::clamp(val, 0.0, 0.6);
     auto* lo = qgraphicsitem_cast<LightingOverlayItem*>(m_lightingOverlay);
-    if (lo) lo->setIntensity(val);
+    if (lo) {
+        lo->setIntensity(m_lightIntensity);
+    }
 }
 
 void DesignerWidget::setGlitterEnabled(bool on) {
-    if (m_glitterGroup && !on) { m_scene->removeItem(m_glitterGroup); delete m_glitterGroup; m_glitterGroup = nullptr; }
-    if (on) regenerateGlitter();
+    m_glitterEnabled = on;
+    if (!on) {
+        if (m_glitterGroup) { m_scene->removeItem(m_glitterGroup); delete m_glitterGroup; m_glitterGroup = nullptr; }
+        viewport()->update();
+        return;
+    }
+    regenerateGlitter();
 }
 
 void DesignerWidget::setGlitterPattern(int pattern) {
     m_glitterPattern = pattern;
-    if (m_glitterGroup) regenerateGlitter();
+    if (m_glitterEnabled) regenerateGlitter();
 }
 
 void DesignerWidget::regenerateGlitter() {
+    if (!m_glitterEnabled) {
+        return;
+    }
     if (m_glitterGroup) { m_scene->destroyItemGroup(qgraphicsitem_cast<QGraphicsItemGroup*>(m_glitterGroup)); m_glitterGroup = nullptr; }
     m_glitterGroup = m_scene->createItemGroup({});
     auto* group = qgraphicsitem_cast<QGraphicsItemGroup*>(m_glitterGroup);
@@ -221,21 +378,40 @@ void DesignerWidget::regenerateGlitter() {
 }
 
 void DesignerWidget::createGlitter(int pattern) {
+    if (!m_glitterEnabled) {
+        return;
+    }
     if (!m_glitterGroup) m_glitterGroup = m_scene->createItemGroup({});
     auto* group = qgraphicsitem_cast<QGraphicsItemGroup*>(m_glitterGroup);
     const double mmToPx = 96.0 / 25.4;
     double visibleR = std::max(0.0, (m_badgeSizeMm - 4)) * mmToPx / 2.0;
     auto& rng = *QRandomGenerator::global();
-    const int count = pattern == 0 ? 60 : (pattern == 1 ? 18 : 12);
+    const int count = pattern == 0 ? 72 : (pattern == 1 ? 22 : 16);
+    auto addSpark = [&](QGraphicsItem* dot, double x, double y, double baseSize, double alpha, const QColor& color) {
+        if (!group || !dot) {
+            return;
+        }
+        auto* halo = new QGraphicsEllipseItem(-baseSize, -baseSize, baseSize * 2.0, baseSize * 2.0);
+        halo->setBrush(QColor(color.red(), color.green(), color.blue(), int(alpha * 40)));
+        halo->setPen(Qt::NoPen);
+        halo->setPos(x, y);
+        halo->setFlag(QGraphicsItem::ItemIgnoresTransformations, true);
+        group->addToGroup(halo);
+        dot->setPos(x, y);
+        dot->setFlag(QGraphicsItem::ItemIgnoresTransformations, true);
+        group->addToGroup(dot);
+    };
 
     for (int i = 0; i < count; ++i) {
-        double angle = (pattern == 1 || pattern == 2) ? i * 2.0 * M_PI / count + rng.generateDouble() * 0.3
-                                                       : rng.generateDouble() * 2.0 * M_PI;
-        double dist = rng.generateDouble() * visibleR * 0.85 + visibleR * 0.1;
+        const double angleBias = m_lightAngle * M_PI / 180.0;
+        double angle = (pattern == 1 || pattern == 2)
+                           ? i * 2.0 * M_PI / count + rng.generateDouble() * 0.35 + angleBias * 0.05
+                           : rng.generateDouble() * 2.0 * M_PI;
+        double dist = std::pow(rng.generateDouble(), 0.55) * visibleR * 0.95;
         double x = cos(angle) * dist;
         double y = sin(angle) * dist;
-        double size = 2 + rng.generateDouble() * 4;
-        double opacity = 0.2 + rng.generateDouble() * 0.5;
+        double size = 1.4 + rng.generateDouble() * 5.0;
+        double opacity = 0.18 + rng.generateDouble() * 0.65;
 
         QGraphicsItem* dot;
         if (pattern == 1) {
@@ -254,11 +430,10 @@ void DesignerWidget::createGlitter(int pattern) {
             ellipse->setPen(Qt::NoPen);
             dot = ellipse;
         }
-        dot->setPos(x, y);
-        dot->setFlag(QGraphicsItem::ItemIgnoresTransformations, true);
-        if (group) group->addToGroup(dot);
+        addSpark(dot, x, y, size * 0.7, opacity, pattern == 2 ? QColor(200, 220, 255) : QColor(255, 255, 255));
     }
 }
+
 
 QPainterPath DesignerWidget::createStar(double size) {
     QPainterPath path;
@@ -306,11 +481,40 @@ void DesignerWidget::wheelEvent(QWheelEvent* event) {
 }
 
 void DesignerWidget::mousePressEvent(QMouseEvent* event) {
+    if (event->button() == Qt::MiddleButton) {
+        m_panning = true;
+        m_panLastPos = event->pos();
+        viewport()->setCursor(Qt::ClosedHandCursor);
+        event->accept();
+        return;
+    }
     if (event->button() == Qt::LeftButton && !itemAt(event->pos())) {
         m_scene->clearSelection();
         emit badgeDeselected();
     }
     QGraphicsView::mousePressEvent(event);
+}
+
+void DesignerWidget::mouseMoveEvent(QMouseEvent* event) {
+    if (m_panning) {
+        const QPoint delta = event->pos() - m_panLastPos;
+        m_panLastPos = event->pos();
+        horizontalScrollBar()->setValue(horizontalScrollBar()->value() - delta.x());
+        verticalScrollBar()->setValue(verticalScrollBar()->value() - delta.y());
+        event->accept();
+        return;
+    }
+    QGraphicsView::mouseMoveEvent(event);
+}
+
+void DesignerWidget::mouseReleaseEvent(QMouseEvent* event) {
+    if (event->button() == Qt::MiddleButton && m_panning) {
+        m_panning = false;
+        viewport()->unsetCursor();
+        event->accept();
+        return;
+    }
+    QGraphicsView::mouseReleaseEvent(event);
 }
 
 void DesignerWidget::drawBackground(QPainter* painter, const QRectF& rect) {
@@ -327,6 +531,34 @@ void DesignerWidget::drawBackground(QPainter* painter, const QRectF& rect) {
             painter->fillRect(QRect(x, y, tileSize, tileSize), c);
         }
     }
+
+    if (!m_gridVisible) {
+        return;
+    }
+
+    const double mmToPx = 96.0 / 25.4;
+    const double stepPx = std::max(1.0, m_gridSpacingMm * mmToPx);
+    const double majorStepPx = stepPx * 5.0;
+
+    painter->save();
+    painter->setRenderHint(QPainter::Antialiasing, false);
+
+    const int gridLeft = int(std::floor(rect.left() / stepPx) * stepPx);
+    const int gridTop = int(std::floor(rect.top() / stepPx) * stepPx);
+
+    for (double x = gridLeft; x <= rect.right(); x += stepPx) {
+        const bool major = std::fmod(std::abs(x), majorStepPx) < 0.5 || std::fmod(std::abs(x), majorStepPx) > majorStepPx - 0.5;
+        painter->setPen(QPen(major ? QColor(120, 120, 120, 110) : QColor(170, 170, 170, 70), major ? 1.0 : 0.5));
+        painter->drawLine(QPointF(x, rect.top()), QPointF(x, rect.bottom()));
+    }
+
+    for (double y = gridTop; y <= rect.bottom(); y += stepPx) {
+        const bool major = std::fmod(std::abs(y), majorStepPx) < 0.5 || std::fmod(std::abs(y), majorStepPx) > majorStepPx - 0.5;
+        painter->setPen(QPen(major ? QColor(120, 120, 120, 110) : QColor(170, 170, 170, 70), major ? 1.0 : 0.5));
+        painter->drawLine(QPointF(rect.left(), y), QPointF(rect.right(), y));
+    }
+
+    painter->restore();
 }
 
 void DesignerWidget::drawForeground(QPainter* painter, const QRectF& rect) {
@@ -341,50 +573,7 @@ void DesignerWidget::drawForeground(QPainter* painter, const QRectF& rect) {
 
     double rb = bleedPx / 2, rf = finishPx / 2, rv = visiblePx / 2;
 
-    // バッチモード: ガイドライン外のバッジを暗くする
-    if (m_batchMode) {
-        for (auto* gi : m_graphicItems) {
-            QRectF badgeRect = gi->mapToScene(gi->boundingRect()).boundingRect();
-            QPointF badgeCenter = badgeRect.center();
-            double dist = QLineF(cx, cy, badgeCenter.x(), badgeCenter.y()).length();
-            if (dist > rv + badgeRect.width() / 2) {
-                // バッジが可視エリアの外にある
-                painter->save();
-                QTransform t;
-                t.translate(gi->pos().x(), gi->pos().y());
-                t.rotate(gi->rotation());
-                painter->setTransform(t, true);
-                painter->fillRect(gi->boundingRect(), QColor(0, 0, 0, 80));
-                painter->restore();
-            }
-        }
-    }
-
-    // 1. 全体を暗くするオーバーレイ（後で可視エリアをくり抜く）
-    painter->save();
-    QPainterPath darkOverlay;
-    darkOverlay.addRect(rect);
-    QPainterPath visibleCircle;
-    visibleCircle.addEllipse(QPointF(cx, cy), rv, rv);
-    painter->fillPath(darkOverlay.subtracted(visibleCircle), QColor(0, 0, 0, 60));
-    painter->restore();
-
-    // 2. 可視エリア内に斜線パターン（白ハッチで目立たせる）
-    QPainterPath visiblePath;
-    visiblePath.addEllipse(QPointF(cx, cy), rv, rv);
-    QBrush visibleHatch(QColor(255, 255, 255, 30), Qt::FDiagPattern);
-    painter->fillPath(visiblePath, visibleHatch);
-
-    // 3. bleedとfinishの間にハッチ fill
-    QPainterPath bleedPath;
-    bleedPath.addEllipse(QPointF(cx, cy), rb, rb);
-    QPainterPath finishPath;
-    finishPath.addEllipse(QPointF(cx, cy), rf, rf);
-    QPainterPath hatchRegion = bleedPath.subtracted(finishPath);
-    QBrush hatchBrush(QColor(255, 128, 128, 80), Qt::BDiagPattern);
-    painter->fillPath(hatchRegion, hatchBrush);
-
-    // 4. Bleed line (red dashed)
+    // Bleed line (red dashed)
     if (m_guideBleed->isVisible()) {
         QPen pen(QColor(255, 0, 0), 1.5);
         pen.setDashPattern({4, 2});
@@ -393,13 +582,7 @@ void DesignerWidget::drawForeground(QPainter* painter, const QRectF& rect) {
         painter->drawEllipse(QPointF(cx, cy), rb, rb);
     }
 
-    // 5. Finish line (thin solid)
-    QPen finishPen(QColor(255, 0, 0, 180), 0.8);
-    painter->setPen(finishPen);
-    painter->setBrush(Qt::NoBrush);
-    painter->drawEllipse(QPointF(cx, cy), rf, rf);
-
-    // 6. Visible area (green solid)
+    // Visible area (green solid)
     if (m_guideVisible->isVisible()) {
         QPen pen(QColor(0, 255, 0), 2.0);
         painter->setPen(pen);
@@ -436,7 +619,8 @@ void DesignerWidget::dropEvent(QDropEvent* event) {
     for (const auto& url : event->mimeData()->urls()) {
         QString path = url.toLocalFile();
         if (isImageFile(path)) {
-            BadgeItem b; b.imagePath = path;
+            BadgeItem b;
+            b.layers.append(layerFromImagePath(path));
             b.label = QFileInfo(path).baseName();
             addBadge(b);
         }

@@ -20,13 +20,13 @@ void LightingEffect::draw(QPainter* painter) {
     // Sphere shading
     QRadialGradient shade(r.center(), r.width() / 2);
     double rad = m_angle * M_PI / 180.0;
-    QPointF lightCenter = r.center() + QPointF(cos(rad) * r.width() * 0.3, -sin(rad) * r.height() * 0.3);
+    QPointF lightCenter = r.center() + QPointF(cos(rad) * r.width() * 0.22, -sin(rad) * r.height() * 0.22);
     shade.setCenter(lightCenter);
     shade.setFocalPoint(lightCenter);
     shade.setColorAt(0.0, QColor(255, 255, 255, 0));
-    shade.setColorAt(0.35, QColor(0, 0, 0, int(10 * m_intensity)));
-    shade.setColorAt(0.7, QColor(0, 0, 0, int(50 * m_intensity)));
-    shade.setColorAt(1.0, QColor(0, 0, 0, int(120 * m_intensity)));
+    shade.setColorAt(0.35, QColor(0, 0, 0, int(8 * m_intensity)));
+    shade.setColorAt(0.7, QColor(0, 0, 0, int(28 * m_intensity)));
+    shade.setColorAt(1.0, QColor(0, 0, 0, int(88 * m_intensity)));
 
     painter->setBrush(shade);
     painter->setPen(Qt::NoPen);
@@ -34,8 +34,8 @@ void LightingEffect::draw(QPainter* painter) {
 
     // Specular
     QRadialGradient spec(QPointF(r.left() + r.width() * 0.22, r.top() + r.height() * 0.14), r.width() * 0.15);
-    spec.setColorAt(0.0, QColor(255, 255, 255, int(200 * m_intensity)));
-    spec.setColorAt(0.5, QColor(255, 255, 255, int(80 * m_intensity)));
+    spec.setColorAt(0.0, QColor(255, 255, 255, int(120 * m_intensity)));
+    spec.setColorAt(0.5, QColor(255, 255, 255, int(45 * m_intensity)));
     spec.setColorAt(1.0, QColor(255, 255, 255, 0));
     painter->setBrush(spec);
     double specR = r.width() * 0.12;

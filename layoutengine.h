@@ -10,6 +10,8 @@ class LayoutEngine {
 public:
     static QList<BadgeItem> autoLayout(const QList<BadgeItem>& templates, const PaperConfig& config);
     static QList<BadgeItem> fillPage(const BadgeItem& template_, const PaperConfig& config);
+    static QList<BadgeItem> autoLayoutGrid(const QList<BadgeItem>& templates, const PaperConfig& config);
+    static QList<BadgeItem> fillPageGrid(const BadgeItem& template_, const PaperConfig& config);
 };
 
 #endif

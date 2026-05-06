@@ -10,6 +10,8 @@
 #include <QDragEnterEvent>
 #include <QDropEvent>
 #include <QMimeData>
+#include <QKeyEvent>
+#include <QMouseEvent>
 #include <wobjectdefs.h>
 #include "badgeitem.h"
 #include "badgegraphicitem.h"
@@ -23,11 +25,14 @@ public:
     explicit DesignerWidget(QWidget* parent = nullptr);
     
     void addBadge(const BadgeItem& item);
+    void setBadgeItems(const QList<BadgeItem>& items, const QList<int>& selectedIndices = {});
     void clearBadges();
     void removeSelectedBadges();
     void refreshAll();
+    QList<BadgeItem> badgeItems() const;
     void syncToBadgeList(QList<BadgeItem>& badges);
     QList<BadgeGraphicItem*> graphicItems() const { return m_graphicItems; }
+    QList<BadgeGraphicItem*> selectedGraphics() const;
     BadgeGraphicItem* selectedGraphic() const;
     
     // Guides
@@ -35,6 +40,11 @@ public:
     void setGuidesVisible(bool b);
     void setBleedVisible(bool b);
     void setVisibleVisible(bool b);
+    void setGridVisible(bool b);
+    void setSnapToGrid(bool b);
+    void setGridSpacingMm(double mm);
+    bool gridVisible() const { return m_gridVisible; }
+    bool snapToGrid() const { return m_snapToGrid; }
     
     // Lighting
     void setLightingEnabled(bool on);
@@ -54,10 +64,15 @@ Q_SIGNALS:
     void badgeDeselected() W_SIGNAL(badgeDeselected);
     void badgeDoubleClicked(BadgeGraphicItem* item) W_SIGNAL(badgeDoubleClicked, item);
     void badgeMoved(BadgeGraphicItem* item) W_SIGNAL(badgeMoved, item);
+    void selectionChanged() W_SIGNAL(selectionChanged);
+    void nudgeRequested(double dxMm, double dyMm) W_SIGNAL(nudgeRequested, dxMm, dyMm);
 
 protected:
     void wheelEvent(QWheelEvent* event) override;
     void mousePressEvent(QMouseEvent* event) override;
+    void mouseMoveEvent(QMouseEvent* event) override;
+    void mouseReleaseEvent(QMouseEvent* event) override;
+    void keyPressEvent(QKeyEvent* event) override;
     void resizeEvent(QResizeEvent* event) override;
     void drawBackground(QPainter* painter, const QRectF& rect) override;
     void drawForeground(QPainter* painter, const QRectF& rect) override;
@@ -74,12 +89,19 @@ private:
     QGraphicsItem* m_lightingOverlay = nullptr;
     int m_glitterPattern = 0;
     double m_lightAngle = 0;
-    double m_lightIntensity = 0.5;
+    double m_lightIntensity = 0.35;
     bool m_lightingEnabled = false;
+    bool m_glitterEnabled = false;
+    bool m_gridVisible = true;
+    bool m_snapToGrid = true;
+    double m_gridSpacingMm = 5.0;
     QList<BadgeGraphicItem*> m_graphicItems;
     double m_zoomLevel = 1.0;
-    double m_badgeSizeMm = 57.0;
+    double m_badgeSizeMm = 65.0;
     bool m_batchMode = false;
+    bool m_panning = false;
+    QPoint m_panLastPos;
+    bool m_guideUpdatePending = false;
     
     void createGlitter(int pattern);
     QPainterPath createStar(double size);

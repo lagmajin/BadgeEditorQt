@@ -11,6 +11,18 @@ export module badge.qtbridge;
 export import badge.model;
 export import badge.layout;
 
+namespace badge::qt::detail {
+
+inline void migrateLegacyImageToLayers(QString& imagePath, QList<LayerItem>& layers) {
+    if (imagePath.isEmpty()) {
+        return;
+    }
+    layers.prepend(layerFromImagePath(imagePath));
+    imagePath.clear();
+}
+
+}
+
 export namespace badge::qt {
 
 export inline badge::LayerData toCoreLayer(const LayerItem& layer) {
@@ -39,19 +51,28 @@ export inline badge::BadgeData toCoreBadge(const BadgeItem& item) {
     badge::BadgeData core;
     core.widthMm = item.widthMm;
     core.heightMm = item.heightMm;
+    core.imageScale = item.imageScale;
+    core.materialPreset = item.materialPreset;
+    core.specularStrength = item.specularStrength;
+    core.envReflectionStrength = item.envReflectionStrength;
+    core.glitterStrength = item.glitterStrength;
     core.xMm = item.xMm;
     core.yMm = item.yMm;
     core.rotation = item.rotation;
     core.label = item.label.toStdString();
-    core.imagePath = item.imagePath.toStdString();
+    core.imagePath.clear();
     core.displayText = item.displayText.toStdString();
     core.clipToCircle = item.clipToCircle;
     core.brightness = item.brightness;
     core.contrast = item.contrast;
     core.saturation = item.saturation;
+    core.flattenedForLayoutTransfer = item.flattenedForLayoutTransfer;
     core.isSelected = item.isSelected;
-    core.layers.reserve(item.layers.size());
-    for (const auto& layer : item.layers) {
+    QList<LayerItem> layers = item.layers;
+    QString legacyImagePath = item.imagePath;
+    detail::migrateLegacyImageToLayers(legacyImagePath, layers);
+    core.layers.reserve(static_cast<size_t>(layers.size()));
+    for (const auto& layer : layers) {
         core.layers.push_back(toCoreLayer(layer));
     }
     return core;
@@ -61,6 +82,11 @@ export inline BadgeItem fromCoreBadge(const badge::BadgeData& item) {
     BadgeItem qt;
     qt.widthMm = item.widthMm;
     qt.heightMm = item.heightMm;
+    qt.imageScale = item.imageScale;
+    qt.materialPreset = item.materialPreset;
+    qt.specularStrength = item.specularStrength;
+    qt.envReflectionStrength = item.envReflectionStrength;
+    qt.glitterStrength = item.glitterStrength;
     qt.xMm = item.xMm;
     qt.yMm = item.yMm;
     qt.rotation = item.rotation;
@@ -71,8 +97,13 @@ export inline BadgeItem fromCoreBadge(const badge::BadgeData& item) {
     qt.brightness = item.brightness;
     qt.contrast = item.contrast;
     qt.saturation = item.saturation;
+    qt.flattenedForLayoutTransfer = item.flattenedForLayoutTransfer;
     qt.isSelected = item.isSelected;
-    qt.layers.reserve(static_cast<int>(item.layers.size()));
+    qt.layers.reserve(static_cast<int>(item.layers.size() + (item.imagePath.empty() ? 0 : 1)));
+    if (!item.imagePath.empty()) {
+        qt.layers.prepend(layerFromImagePath(qt.imagePath));
+        qt.imagePath.clear();
+    }
     for (const auto& layer : item.layers) {
         qt.layers.append(fromCoreLayer(layer));
     }

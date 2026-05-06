@@ -13,6 +13,7 @@ public:
     explicit BadgeGraphicItem(const BadgeItem& badge, QGraphicsItem* parent = nullptr);
     
     QRectF boundingRect() const override;
+    QPainterPath shape() const override;
     void paint(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget* widget) override;
     
     BadgeItem& badge() { return m_badge; }
@@ -21,6 +22,9 @@ public:
     void syncFromBadge();
     void applyColorCorrection();
     void updateHandles();
+    void setGridVisible(bool on) { m_gridVisible = on; }
+    void setSnapToGrid(bool on) { m_snapToGrid = on; }
+    void setGridSpacingMm(double mm) { m_gridSpacingMm = mm; }
 
 Q_SIGNALS:
     void badgeClicked(BadgeGraphicItem* item) W_SIGNAL(badgeClicked, item);
@@ -39,6 +43,14 @@ private:
     QString m_loadedImagePath;
     QString m_colorSpaceLabel;
     QList<QGraphicsRectItem*> m_handles;
+    bool m_gridVisible = true;
+    bool m_snapToGrid = true;
+    double m_gridSpacingMm = 5.0;
+    bool m_dragging = false;
+    QRectF contentRectPx() const;
+    QRectF imageRectPx() const;
+    QRectF visualRectPx() const;
+    bool shouldClipDesignerPreview() const;
     void loadImage();
     void renderCore(QPainter* painter, const QRectF& rect);
 };

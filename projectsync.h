@@ -5,6 +5,7 @@
 #include <QComboBox>
 #include <QCheckBox>
 #include <QDoubleSpinBox>
+#include "badgeitem.h"
 
 class DesignerWidget;
 class LayoutWorkspaceWidget;
@@ -15,7 +16,7 @@ struct DocumentData;
 
 namespace projectsync {
 
-badge::DocumentData currentDocument(const DesignerWidget& designer,
+badge::DocumentData currentDocument(const QList<BadgeItem>& badges,
                                    const QComboBox& paperSize,
                                    const QCheckBox& landscape,
                                    const QDoubleSpinBox& marginMm,

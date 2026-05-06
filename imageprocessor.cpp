@@ -1,8 +1,16 @@
 #include "imageprocessor.h"
+#include <QFileInfo>
+#include <QBuffer>
+#include <QFile>
 #include <QColorSpace>
 #include <QImageReader>
 #include <QImage>
+#include <QPainter>
 #include <cmath>
+
+#ifdef BADGEEDITOR_HAS_QTSVG
+#include <QSvgRenderer>
+#endif
 
 import badge.imageio;
 
@@ -58,6 +66,47 @@ QImage loadViaQtReader(const QString& path) {
     return normalizeToSrgb(std::move(image));
 }
 
+QImage loadViaQtBytes(const QString& path) {
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly)) {
+        return {};
+    }
+
+    const QByteArray bytes = file.readAll();
+    if (bytes.isEmpty()) {
+        return {};
+    }
+
+    // Try a device-backed reader first so Qt can inspect the encoded stream directly.
+    QBuffer buffer;
+    buffer.setData(bytes);
+    if (buffer.open(QIODevice::ReadOnly)) {
+        QImageReader reader(&buffer);
+        reader.setAutoTransform(true);
+        reader.setDecideFormatFromContent(true);
+        QImage image = reader.read();
+        if (!image.isNull()) {
+            return normalizeToSrgb(std::move(image));
+        }
+    }
+
+    // Fall back to raw byte decoding. Some PNGs decode here even when file/path-based
+    // readers reject them.
+    QImage image = QImage::fromData(bytes);
+    if (!image.isNull()) {
+        return normalizeToSrgb(std::move(image));
+    }
+
+    if (path.endsWith(".png", Qt::CaseInsensitive)) {
+        image = QImage::fromData(bytes, "PNG");
+        if (!image.isNull()) {
+            return normalizeToSrgb(std::move(image));
+        }
+    }
+
+    return {};
+}
+
 QImage loadViaOiio(const QString& path) {
     const auto raw = badge::load_image(path.toUtf8().constData());
     if (!raw) {
@@ -92,6 +141,59 @@ QImage loadViaOiio(const QString& path) {
 }
 
 QImage ImageProcessor::loadImage(const QString& path, QString* colorSpaceLabel) {
+    const QString suffix = QFileInfo(path).suffix().toLower();
+#ifdef BADGEEDITOR_HAS_QTSVG
+    if (suffix == "svg" || suffix == "svgz") {
+        QSvgRenderer renderer(path);
+        if (renderer.isValid()) {
+            QSize size = renderer.defaultSize();
+            if (!size.isValid() || size.width() <= 0 || size.height() <= 0) {
+                const QSize viewBox = renderer.viewBoxF().size().toSize();
+                if (viewBox.isValid() && viewBox.width() > 0 && viewBox.height() > 0) {
+                    size = viewBox;
+                }
+            }
+            if (!size.isValid() || size.width() <= 0 || size.height() <= 0) {
+                size = QSize(1024, 1024);
+            }
+
+            const int maxSide = 2048;
+            if (size.width() > maxSide || size.height() > maxSide) {
+                const double scale = std::min(double(maxSide) / double(size.width()),
+                                              double(maxSide) / double(size.height()));
+                size = QSize(std::max(1, int(size.width() * scale)),
+                             std::max(1, int(size.height() * scale)));
+            }
+
+            QImage image(size, QImage::Format_ARGB32_Premultiplied);
+            image.fill(Qt::transparent);
+            QPainter painter(&image);
+            renderer.render(&painter);
+            painter.end();
+            image = normalizeToSrgb(std::move(image));
+            if (!image.isNull()) {
+                if (colorSpaceLabel) {
+                    *colorSpaceLabel = QStringLiteral("SVG / sRGB");
+                }
+                return image;
+            }
+        }
+    }
+#else
+    if (suffix == "svg" || suffix == "svgz") {
+        if (colorSpaceLabel) {
+            *colorSpaceLabel = QStringLiteral("SVG未対応");
+        }
+    }
+#endif
+
+    if (QImage viaOiio = loadViaOiio(path); !viaOiio.isNull()) {
+        if (colorSpaceLabel) {
+            *colorSpaceLabel = QStringLiteral("OIIO / sRGB前提");
+        }
+        return viaOiio;
+    }
+
     if (QImage viaQt = loadViaQtReader(path); !viaQt.isNull()) {
         if (colorSpaceLabel) {
             *colorSpaceLabel = describeColorSpace(viaQt);
@@ -99,11 +201,11 @@ QImage ImageProcessor::loadImage(const QString& path, QString* colorSpaceLabel) 
         return viaQt;
     }
 
-    if (QImage viaOiio = loadViaOiio(path); !viaOiio.isNull()) {
+    if (QImage viaQtBytes = loadViaQtBytes(path); !viaQtBytes.isNull()) {
         if (colorSpaceLabel) {
-            *colorSpaceLabel = QStringLiteral("OIIO / sRGB前提");
+            *colorSpaceLabel = describeColorSpace(viaQtBytes);
         }
-        return viaOiio;
+        return viaQtBytes;
     }
 
     QImage fallback;
