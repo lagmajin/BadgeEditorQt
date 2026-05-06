@@ -6,12 +6,25 @@
 #include <QImageReader>
 #include <QSet>
 #include <QKeySequence>
+#include <QApplication>
+#include <QFontMetricsF>
 #include <QScrollBar>
 #include <QTimer>
+#include <QPalette>
 #include <algorithm>
 #include <cmath>
 #include <utility>
 #include <wobjectimpl.h>
+
+static QColor blend(const QColor& a, const QColor& b, qreal ratio) {
+    const qreal clamped = std::clamp(ratio, 0.0, 1.0);
+    return QColor::fromRgbF(
+        a.redF()   * (1.0 - clamped) + b.redF()   * clamped,
+        a.greenF() * (1.0 - clamped) + b.greenF() * clamped,
+        a.blueF()  * (1.0 - clamped) + b.blueF()  * clamped,
+        a.alphaF() * (1.0 - clamped) + b.alphaF() * clamped
+    );
+}
 
 class LightingOverlayItem : public QGraphicsItem {
 public:
@@ -90,6 +103,7 @@ static bool isImageFile(const QString& path) {
 
 DesignerWidget::DesignerWidget(QWidget* parent) : QGraphicsView(parent) {
     m_scene = new QGraphicsScene(-500, -500, 1000, 1000, this);
+    m_scene->setItemIndexMethod(QGraphicsScene::NoIndex);
     setScene(m_scene);
     setRenderHints(QPainter::Antialiasing | QPainter::SmoothPixmapTransform);
     setDragMode(QGraphicsView::RubberBandDrag);
@@ -100,7 +114,7 @@ DesignerWidget::DesignerWidget(QWidget* parent) : QGraphicsView(parent) {
     setCacheMode(QGraphicsView::CacheBackground);
     setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
     setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
-    setBackgroundBrush(Qt::lightGray);
+    setBackgroundBrush(Qt::NoBrush);
     scale(1.25, 1.25);
     setFocusPolicy(Qt::StrongFocus);
 
@@ -117,6 +131,15 @@ DesignerWidget::DesignerWidget(QWidget* parent) : QGraphicsView(parent) {
 }
 
 W_OBJECT_IMPL(DesignerWidget)
+
+void DesignerWidget::applyThemePalette(const QPalette& palette) {
+    setPalette(palette);
+    viewport()->setPalette(palette);
+    setBackgroundBrush(palette.brush(QPalette::Window));
+    m_scene->setBackgroundBrush(palette.brush(QPalette::Window));
+    viewport()->setAutoFillBackground(true);
+    viewport()->update();
+}
 
 void DesignerWidget::addBadge(const BadgeItem& item) {
     auto* gi = new BadgeGraphicItem(item);
@@ -521,8 +544,10 @@ void DesignerWidget::mouseReleaseEvent(QMouseEvent* event) {
 
 void DesignerWidget::drawBackground(QPainter* painter, const QRectF& rect) {
     const int tileSize = 16;
-    QColor c1(255, 255, 255);
-    QColor c2(191, 191, 191);
+    const QColor windowColor = palette().color(QPalette::Window);
+    const QColor baseColor = palette().color(QPalette::Base);
+    const QColor c1 = blend(windowColor, baseColor, 0.16);
+    const QColor c2 = blend(windowColor, baseColor, 0.26);
 
     int left = int(rect.left()) - ((int(rect.left()) % tileSize + tileSize) % tileSize);
     int top = int(rect.top()) - ((int(rect.top()) % tileSize + tileSize) % tileSize);
@@ -544,19 +569,23 @@ void DesignerWidget::drawBackground(QPainter* painter, const QRectF& rect) {
 
     painter->save();
     painter->setRenderHint(QPainter::Antialiasing, false);
+    const QColor majorGridBase = palette().color(QPalette::Mid);
+    const QColor minorGridBase = blend(palette().color(QPalette::Mid), palette().color(QPalette::Highlight), 0.10);
+    const QColor majorGridColor = QColor::fromRgb(majorGridBase.red(), majorGridBase.green(), majorGridBase.blue(), 150);
+    const QColor minorGridColor = QColor::fromRgb(minorGridBase.red(), minorGridBase.green(), minorGridBase.blue(), 86);
 
     const int gridLeft = int(std::floor(rect.left() / stepPx) * stepPx);
     const int gridTop = int(std::floor(rect.top() / stepPx) * stepPx);
 
     for (double x = gridLeft; x <= rect.right(); x += stepPx) {
         const bool major = std::fmod(std::abs(x), majorStepPx) < 0.5 || std::fmod(std::abs(x), majorStepPx) > majorStepPx - 0.5;
-        painter->setPen(QPen(major ? QColor(120, 120, 120, 110) : QColor(170, 170, 170, 70), major ? 1.0 : 0.5));
+        painter->setPen(QPen(major ? majorGridColor : minorGridColor, major ? 1.0 : 0.5));
         painter->drawLine(QPointF(x, rect.top()), QPointF(x, rect.bottom()));
     }
 
     for (double y = gridTop; y <= rect.bottom(); y += stepPx) {
         const bool major = std::fmod(std::abs(y), majorStepPx) < 0.5 || std::fmod(std::abs(y), majorStepPx) > majorStepPx - 0.5;
-        painter->setPen(QPen(major ? QColor(120, 120, 120, 110) : QColor(170, 170, 170, 70), major ? 1.0 : 0.5));
+        painter->setPen(QPen(major ? majorGridColor : minorGridColor, major ? 1.0 : 0.5));
         painter->drawLine(QPointF(rect.left(), y), QPointF(rect.right(), y));
     }
 
@@ -594,7 +623,9 @@ void DesignerWidget::drawForeground(QPainter* painter, const QRectF& rect) {
 
     if (m_graphicItems.isEmpty()) {
         painter->save();
-        painter->setPen(QColor(255, 255, 255, 220));
+        QColor titleColor = palette().color(QPalette::WindowText);
+        titleColor.setAlpha(230);
+        painter->setPen(titleColor);
         QFont titleFont = painter->font();
         titleFont.setPointSizeF(titleFont.pointSizeF() + 2.0);
         titleFont.setBold(true);
@@ -610,6 +641,33 @@ void DesignerWidget::drawForeground(QPainter* painter, const QRectF& rect) {
         painter->drawText(hintRect,
                           Qt::AlignCenter,
                           QStringLiteral("画像をドラッグ&ドロップするか、ツールバーから追加できます"));
+        painter->restore();
+    }
+
+    if (!m_graphicItems.isEmpty() && !selectedGraphics().isEmpty()) {
+        const auto modifiers = QApplication::keyboardModifiers();
+        const bool altDown = modifiers & Qt::AltModifier;
+        const bool shiftDown = modifiers & Qt::ShiftModifier;
+        painter->save();
+        const QColor bg = altDown ? QColor(255, 172, 73, 220) : (shiftDown ? QColor(76, 124, 255, 220) : QColor(54, 58, 66, 220));
+        const QColor fg = altDown ? QColor(24, 24, 26, 240) : palette().color(QPalette::WindowText);
+        const QString text = altDown
+            ? QStringLiteral("Alt + ドラッグ: 非対称リサイズ")
+            : (shiftDown
+                   ? QStringLiteral("Shift + ドラッグ: 比率固定")
+                   : QStringLiteral("Alt: 非対称 / Shift: 比率固定"));
+        QFont font = painter->font();
+        font.setPointSizeF(std::max(8.0, font.pointSizeF() - 1.0));
+        font.setBold(true);
+        painter->setFont(font);
+        const QFontMetricsF fm(font);
+        const QRectF box = fm.boundingRect(text).adjusted(-10.0, -6.0, 10.0, 8.0);
+        const QRectF placed(rect.left() + 18.0, rect.bottom() - box.height() - 18.0, box.width(), box.height());
+        painter->setPen(Qt::NoPen);
+        painter->setBrush(bg);
+        painter->drawRoundedRect(placed, 8.0, 8.0);
+        painter->setPen(fg);
+        painter->drawText(placed, Qt::AlignCenter, text);
         painter->restore();
     }
 }

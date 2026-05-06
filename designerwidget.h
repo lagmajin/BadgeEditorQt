@@ -9,6 +9,7 @@
 #include <QFileInfo>
 #include <QDragEnterEvent>
 #include <QDropEvent>
+#include <QPalette>
 #include <QMimeData>
 #include <QKeyEvent>
 #include <QMouseEvent>
@@ -56,6 +57,7 @@ public:
     void setGlitterPattern(int pattern); // 0=full, 1=star, 2=snow
     void regenerateGlitter();
 
+    void applyThemePalette(const QPalette& palette);
     void updateBackground(const QBrush& brush);
     void setBatchMode(bool on);
 

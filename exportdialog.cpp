@@ -12,6 +12,7 @@
 #include <QSpinBox>
 #include <QCheckBox>
 #include <QSignalBlocker>
+#include <QPalette>
 
 namespace {
 
@@ -101,7 +102,10 @@ ExportDialog::ExportDialog(Format format, const QString& defaultPath, QWidget* p
 
         m_pdfPresetHelp = new QLabel;
         m_pdfPresetHelp->setWordWrap(true);
-        m_pdfPresetHelp->setStyleSheet(QStringLiteral("color: #666666;"));
+        auto helpPalette = m_pdfPresetHelp->palette();
+        helpPalette.setColor(QPalette::WindowText, helpPalette.color(QPalette::Mid));
+        helpPalette.setColor(QPalette::Text, helpPalette.color(QPalette::Mid));
+        m_pdfPresetHelp->setPalette(helpPalette);
         optForm->addRow(QString(), m_pdfPresetHelp);
 
         auto refreshHelp = [this]() {

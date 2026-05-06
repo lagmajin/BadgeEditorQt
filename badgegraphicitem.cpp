@@ -5,6 +5,7 @@
 #include <QGraphicsSceneHoverEvent>
 #include <QGraphicsScene>
 #include <QFileInfo>
+#include <QApplication>
 #include <QStyleOptionGraphicsItem>
 #include <QCursor>
 #include <QRandomGenerator>
@@ -112,6 +113,21 @@ public:
         }
     }
     Corner corner() const { return m_corner; }
+    void setAsymmetricMode(bool on) {
+        if (on) {
+            setBrush(QColor(255, 172, 73));
+            setPen(QPen(QColor(255, 242, 228), 1.5));
+            setCursor(Qt::SizeAllCursor);
+        } else {
+            setBrush(Qt::white);
+            setPen(QPen(Qt::blue, 1.5));
+            switch (m_corner) {
+                case TL: case BR: setCursor(Qt::SizeFDiagCursor); break;
+                case TR: case BL: setCursor(Qt::SizeBDiagCursor); break;
+            }
+        }
+        update();
+    }
 protected:
     QPointF m_startPos;
     
@@ -129,7 +145,15 @@ protected:
         m_startPos = e->scenePos();
         const double mmToPx = 96.0 / 25.4;
         BadgeItem& b = m_badge->badge();
-        if (!b.imagePath.isEmpty() || !b.layers.isEmpty()) {
+        const bool hasImageContent = !b.imagePath.isEmpty() || !b.layers.isEmpty();
+        const bool asymmetricResize = hasImageContent && (e->modifiers() & Qt::AltModifier);
+        const bool keepAspect = !asymmetricResize && (e->modifiers() & Qt::ShiftModifier);
+        const double startX = b.xMm;
+        const double startY = b.yMm;
+        const double startW = std::max(0.1, b.widthMm);
+        const double startH = std::max(0.1, b.heightMm);
+        m_badge->beginGeometryUpdate();
+        if (hasImageContent && !asymmetricResize) {
             const double signX = (m_corner == TL || m_corner == BL) ? -1.0 : 1.0;
             const double signY = (m_corner == TL || m_corner == TR) ? -1.0 : 1.0;
             const double basePx = std::max(1.0, std::max(b.widthMm, b.heightMm) * mmToPx);
@@ -137,12 +161,29 @@ protected:
             const double factor = 1.0 + (growthPx / basePx);
             b.imageScale = std::clamp(b.imageScale * factor, 0.1, 5.0);
         } else {
-            if (m_corner == TL || m_corner == BL) { b.widthMm -= deltaLocal.x() / mmToPx; b.xMm += deltaLocal.x() / mmToPx; }
-            else { b.widthMm += deltaLocal.x() / mmToPx; }
-            if (m_corner == TL || m_corner == TR) { b.heightMm -= deltaLocal.y() / mmToPx; b.yMm += deltaLocal.y() / mmToPx; }
-            else { b.heightMm += deltaLocal.y() / mmToPx; }
-            if (b.widthMm < 5) b.widthMm = 5;
-            if (b.heightMm < 5) b.heightMm = 5;
+            const double dx = deltaLocal.x() / mmToPx;
+            const double dy = deltaLocal.y() / mmToPx;
+            double nextW = startW;
+            double nextH = startH;
+            if (m_corner == TL || m_corner == BL) { nextW -= dx; b.xMm = startX + dx; }
+            else { nextW += dx; b.xMm = startX; }
+            if (m_corner == TL || m_corner == TR) { nextH -= dy; b.yMm = startY + dy; }
+            else { nextH += dy; b.yMm = startY; }
+            nextW = std::max(5.0, nextW);
+            nextH = std::max(5.0, nextH);
+            if (keepAspect) {
+                const double scale = std::max(nextW / startW, nextH / startH);
+                nextW = std::max(5.0, startW * scale);
+                nextH = std::max(5.0, startH * scale);
+            }
+            if (m_corner == TL || m_corner == BL) {
+                b.xMm = startX + (startW - nextW);
+            }
+            if (m_corner == TL || m_corner == TR) {
+                b.yMm = startY + (startH - nextH);
+            }
+            b.widthMm = nextW;
+            b.heightMm = nextH;
         }
         m_badge->updateHandles();
         m_badge->update();
@@ -172,6 +213,7 @@ BadgeGraphicItem::BadgeGraphicItem(const BadgeItem& badge, QGraphicsItem* parent
 W_OBJECT_IMPL(BadgeGraphicItem)
 
 void BadgeGraphicItem::updateHandles() {
+    const bool asymmetricMode = (QApplication::keyboardModifiers() & Qt::AltModifier);
     if (!m_badge.isSelected) {
         for (auto* h : m_handles) {
             if (h) {
@@ -193,10 +235,14 @@ void BadgeGraphicItem::updateHandles() {
         if (i < m_handles.size()) {
             m_handles[i]->setPos(corners[i]);
             m_handles[i]->setVisible(true);
+            if (auto* handle = dynamic_cast<ResizeHandle*>(m_handles[i])) {
+                handle->setAsymmetricMode(asymmetricMode);
+            }
         } else {
             auto* h = new ResizeHandle(static_cast<ResizeHandle::Corner>(types[i]), this);
             h->setPos(corners[i]);
             h->setVisible(true);
+            h->setAsymmetricMode(asymmetricMode);
             m_handles.append(h);
         }
     }
@@ -216,6 +262,10 @@ void BadgeGraphicItem::endInteractiveEdit() {
     }
     m_interactionActive = false;
     emit badgeEditFinished(this);
+}
+
+void BadgeGraphicItem::beginGeometryUpdate() {
+    prepareGeometryChange();
 }
 
 QRectF BadgeGraphicItem::contentRectPx() const {
@@ -238,8 +288,14 @@ QRectF BadgeGraphicItem::imageRectPx() const {
 
 QRectF BadgeGraphicItem::visualRectPx() const {
     QRectF rect = contentRectPx();
+    const LayerItem* primaryLayer = m_badge.layers.isEmpty() ? nullptr : &m_badge.layers.first();
     if (!m_thumbnail.isNull() || !m_processed.isNull()) {
-        rect = rect.united(imageRectPx());
+        QRectF imageRect = imageRectPx();
+        if (primaryLayer) {
+            imageRect.translate(primaryLayer->offsetX * 96.0 / 25.4,
+                                primaryLayer->offsetY * 96.0 / 25.4);
+        }
+        rect = rect.united(imageRect);
     }
 
     const QRectF content = contentRectPx();
@@ -298,10 +354,14 @@ void BadgeGraphicItem::renderCore(QPainter* painter, const QRectF& r) {
         painter->setOpacity(primaryLayer ? primaryLayer->opacity : 1.0);
         const double scale = std::max(0.1, m_badge.imageScale);
         const QSizeF scaledSize(r.width() * scale, r.height() * scale);
-        const QRectF imageRect(r.center().x() - scaledSize.width() * 0.5,
-                               r.center().y() - scaledSize.height() * 0.5,
-                               scaledSize.width(),
-                               scaledSize.height());
+        QRectF imageRect(r.center().x() - scaledSize.width() * 0.5,
+                         r.center().y() - scaledSize.height() * 0.5,
+                         scaledSize.width(),
+                         scaledSize.height());
+        if (primaryLayer) {
+            imageRect.translate(primaryLayer->offsetX * 96.0 / 25.4,
+                                primaryLayer->offsetY * 96.0 / 25.4);
+        }
         painter->drawPixmap(imageRect, baseImage, QRectF(baseImage.rect()));
         drewAnything = true;
     }

@@ -15,6 +15,7 @@
 #include <QMarginsF>
 #include <QPrinter>
 #include <QImage>
+#include <QPalette>
 #include <QColorSpace>
 #include <QFileInfo>
 #include <QString>
@@ -111,12 +112,16 @@ QPixmap renderBadgePixmap(const badge::BadgeData& badgeData, const QSize& target
         const LayerItem* primaryLayer = qtBadge.layers.isEmpty() ? nullptr : &qtBadge.layers.first();
         if (!primaryLayer || primaryLayer->visible) {
             painter.setOpacity(primaryLayer ? primaryLayer->opacity : 1.0);
-            const QRectF imageRect = qtBadge.flattenedForLayoutTransfer
+            QRectF imageRect = qtBadge.flattenedForLayoutTransfer
                 ? contentRect
                 : QRectF(contentRect.center().x() - (contentRect.width() * std::max(0.1, qtBadge.imageScale)) * 0.5,
                          contentRect.center().y() - (contentRect.height() * std::max(0.1, qtBadge.imageScale)) * 0.5,
                          contentRect.width() * std::max(0.1, qtBadge.imageScale),
                          contentRect.height() * std::max(0.1, qtBadge.imageScale));
+            if (primaryLayer && !qtBadge.flattenedForLayoutTransfer) {
+                imageRect.translate(primaryLayer->offsetX * kSceneDpi * kMmToInch,
+                                    primaryLayer->offsetY * kSceneDpi * kMmToInch);
+            }
             painter.drawPixmap(imageRect, basePixmap, QRectF(basePixmap.rect()));
         }
     }
@@ -275,9 +280,10 @@ LayoutWorkspaceWidget::LayoutWorkspaceWidget(QWidget* parent)
     layout->setContentsMargins(0, 0, 0, 0);
 
     m_scene = new QGraphicsScene(this);
+    m_scene->setItemIndexMethod(QGraphicsScene::NoIndex);
     m_view = new QGraphicsView(m_scene, this);
     m_view->setRenderHints(QPainter::Antialiasing);
-    m_view->setBackgroundBrush(Qt::darkGray);
+    m_view->setBackgroundBrush(palette().brush(QPalette::Window));
     layout->addWidget(m_view);
 
     m_impl = new Impl;
@@ -286,6 +292,22 @@ LayoutWorkspaceWidget::LayoutWorkspaceWidget(QWidget* parent)
 
 LayoutWorkspaceWidget::~LayoutWorkspaceWidget() {
     delete m_impl;
+}
+
+void LayoutWorkspaceWidget::applyThemePalette(const QPalette& palette) {
+    setPalette(palette);
+    setAutoFillBackground(true);
+    if (m_view) {
+        m_view->setPalette(palette);
+        m_view->setBackgroundBrush(palette.brush(QPalette::Window));
+        if (auto* viewport = m_view->viewport()) {
+            viewport->setPalette(palette);
+            viewport->setAutoFillBackground(true);
+        }
+    }
+    if (m_scene) {
+        m_scene->setBackgroundBrush(palette.brush(QPalette::Window));
+    }
 }
 
 void LayoutWorkspaceWidget::setDocument(const badge::DocumentData& document) {

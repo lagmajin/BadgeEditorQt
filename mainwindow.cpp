@@ -20,11 +20,18 @@
 #include <QSizePolicy>
 #include <QListWidget>
 #include <QApplication>
+#include <QBrush>
+#include <QColor>
+#include <QDir>
+#include <QHash>
+#include <QIcon>
 #include <QMimeData>
 #include <QDragEnterEvent>
 #include <QDropEvent>
 #include <QPushButton>
 #include <QShortcut>
+#include <QSize>
+#include <QStyle>
 #include <QInputDialog>
 #include <QTimer>
 #include <QSettings>
@@ -63,6 +70,7 @@
 #include <DockAreaWidget.h>
 #include <DockWidget.h>
 #include <QFileInfo>
+#include <QPalette>
 #include <wobjectimpl.h>
 
 import badge.documentio;
@@ -95,6 +103,99 @@ void showFileWarning(QWidget* parent, const QString& title, const QString& actio
         ? QStringLiteral("%1に失敗しました").arg(action)
         : QStringLiteral("%1に失敗しました。\n%2").arg(action, path);
     QMessageBox::warning(parent, title, message);
+}
+
+QColor blend(const QColor& a, const QColor& b, qreal ratio) {
+    const qreal clamped = qBound<qreal>(0.0, ratio, 1.0);
+    return QColor::fromRgbF(
+        a.redF()   * (1.0 - clamped) + b.redF()   * clamped,
+        a.greenF() * (1.0 - clamped) + b.greenF() * clamped,
+        a.blueF()  * (1.0 - clamped) + b.blueF()  * clamped,
+        a.alphaF() * (1.0 - clamped) + b.alphaF() * clamped
+    );
+}
+
+QPalette makeCinema4DDarkPalette() {
+    const QColor window(0x29, 0x2B, 0x31);
+    const QColor panel(0x1D, 0x1F, 0x24);
+    const QColor button(0x33, 0x36, 0x3C);
+    const QColor text(0xF1, 0xF1, 0xF1);
+    const QColor border(0x48, 0x4C, 0x55);
+    const QColor highlight(0xE0, 0x8C, 0x2B);
+    const QColor highlightText(0x19, 0x1A, 0x1E);
+
+    QPalette pal;
+    pal.setColor(QPalette::Window, window);
+    pal.setColor(QPalette::WindowText, text);
+    pal.setColor(QPalette::Base, panel);
+    pal.setColor(QPalette::AlternateBase, blend(panel, window, 0.42));
+    pal.setColor(QPalette::ToolTipBase, blend(window, panel, 0.15));
+    pal.setColor(QPalette::ToolTipText, text);
+    pal.setColor(QPalette::Text, text);
+    pal.setColor(QPalette::Button, button);
+    pal.setColor(QPalette::ButtonText, text);
+    pal.setColor(QPalette::BrightText, Qt::white);
+    pal.setColor(QPalette::Link, QColor(0x90, 0xBC, 0xFF));
+    pal.setColor(QPalette::LinkVisited, QColor(0xB8, 0x94, 0xD8));
+    pal.setColor(QPalette::Highlight, highlight);
+    pal.setColor(QPalette::HighlightedText, highlightText);
+    pal.setColor(QPalette::Mid, border);
+    pal.setColor(QPalette::Dark, blend(panel, Qt::black, 0.42));
+    pal.setColor(QPalette::Light, blend(button, Qt::white, 0.14));
+    pal.setColor(QPalette::Midlight, blend(button, Qt::white, 0.08));
+    pal.setColor(QPalette::Shadow, blend(panel, Qt::black, 0.68));
+    return pal;
+}
+
+QIcon standardToolbarIcon(QStyle::StandardPixmap pixmap) {
+    return QApplication::style() ? QApplication::style()->standardIcon(pixmap) : QIcon();
+}
+
+void configureToolbar(QToolBar* toolbar, Qt::ToolButtonStyle style) {
+    if (!toolbar) {
+        return;
+    }
+    toolbar->setMovable(false);
+    toolbar->setFloatable(false);
+    toolbar->setToolButtonStyle(style);
+    toolbar->setIconSize(QSize(18, 18));
+    toolbar->setContentsMargins(6, 4, 6, 4);
+    if (auto* layout = toolbar->layout()) {
+        layout->setSpacing(6);
+    }
+}
+
+void setToolbarIcon(QAction* action, QStyle::StandardPixmap pixmap) {
+    if (action) {
+        action->setIcon(standardToolbarIcon(pixmap));
+    }
+}
+
+QString materialIconAssetPath(const QString& name) {
+    const QString sourceDir = QString::fromUtf8(BADGEEDITOR_SOURCE_DIR);
+    return QDir(sourceDir).filePath(QStringLiteral("assets/material-icons/%1.svg").arg(name));
+}
+
+QIcon loadMaterialIcon(const QString& name) {
+    static QHash<QString, QIcon> cache;
+    const auto it = cache.constFind(name);
+    if (it != cache.cend()) {
+        return *it;
+    }
+
+    QIcon icon(materialIconAssetPath(name));
+    if (icon.isNull()) {
+        icon = standardToolbarIcon(QStyle::SP_FileIcon);
+    }
+    cache.insert(name, icon);
+    return icon;
+}
+
+void setMaterialIcon(QAction* action, const QString& name) {
+    if (action) {
+        action->setIcon(loadMaterialIcon(name));
+        action->setIconVisibleInMenu(true);
+    }
 }
 
 class DocumentSnapshotCommand final : public QUndoCommand {
@@ -207,10 +308,15 @@ QRectF badgePrimaryImageRectPx(const BadgeItem& badge) {
     const QRectF content = badgeContentRectPx(badge);
     const double scale = std::max(0.1, badge.imageScale);
     const QSizeF scaledSize(content.width() * scale, content.height() * scale);
-    return QRectF(content.center().x() - scaledSize.width() * 0.5,
-                  content.center().y() - scaledSize.height() * 0.5,
-                  scaledSize.width(),
-                  scaledSize.height());
+    QRectF imageRect(content.center().x() - scaledSize.width() * 0.5,
+                     content.center().y() - scaledSize.height() * 0.5,
+                     scaledSize.width(),
+                     scaledSize.height());
+    if (!badge.layers.isEmpty()) {
+        imageRect.translate(badge.layers.first().offsetX * 96.0 / 25.4,
+                            badge.layers.first().offsetY * 96.0 / 25.4);
+    }
+    return imageRect;
 }
 
 QPixmap correctedPixmapForBadge(const BadgeItem& badge, const QString& path) {
@@ -487,34 +593,51 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
 
     // --- Menu ---
     auto* fileMenu = menuBar()->addMenu("ファイル(&F)");
-    fileMenu->addAction("新規(&N)", this, &MainWindow::onNew, QKeySequence::New);
-    fileMenu->addAction("開く(&O)...", this, &MainWindow::onOpen, QKeySequence::Open);
-    fileMenu->addAction("保存(&S)", this, &MainWindow::onSave, QKeySequence::Save);
-    fileMenu->addAction("名前を付けて保存(&A)...", this, &MainWindow::onSaveAs, QKeySequence("Ctrl+Shift+S"));
+    auto* actNew = fileMenu->addAction("新規(&N)", this, &MainWindow::onNew, QKeySequence::New);
+    auto* actOpen = fileMenu->addAction("開く(&O)...", this, &MainWindow::onOpen, QKeySequence::Open);
+    auto* actSave = fileMenu->addAction("保存(&S)", this, &MainWindow::onSave, QKeySequence::Save);
+    auto* actSaveAs = fileMenu->addAction("名前を付けて保存(&A)...", this, &MainWindow::onSaveAs, QKeySequence("Ctrl+Shift+S"));
     fileMenu->addSeparator();
-    fileMenu->addAction("PDF出力...", this, &MainWindow::onExportPdf);
-    fileMenu->addAction("画像出力...", this, &MainWindow::onExportPng);
-    fileMenu->addAction("印刷プレビュー...", this, &MainWindow::onPrintPreview, QKeySequence("Ctrl+Shift+P"));
-    fileMenu->addAction("印刷...", this, &MainWindow::onPrint, QKeySequence::Print);
+    auto* actExportPdf = fileMenu->addAction("PDF出力...", this, &MainWindow::onExportPdf);
+    auto* actExportPng = fileMenu->addAction("画像出力...", this, &MainWindow::onExportPng);
+    auto* actPrintPreview = fileMenu->addAction("印刷プレビュー...", this, &MainWindow::onPrintPreview, QKeySequence("Ctrl+Shift+P"));
+    auto* actPrint = fileMenu->addAction("印刷...", this, &MainWindow::onPrint, QKeySequence::Print);
+    setMaterialIcon(actNew, QStringLiteral("add_circle"));
+    setMaterialIcon(actOpen, QStringLiteral("folder_open"));
+    setMaterialIcon(actSave, QStringLiteral("save"));
+    setMaterialIcon(actSaveAs, QStringLiteral("save"));
+    setMaterialIcon(actExportPdf, QStringLiteral("picture_as_pdf"));
+    setMaterialIcon(actExportPng, QStringLiteral("image"));
+    setMaterialIcon(actPrintPreview, QStringLiteral("print"));
+    setMaterialIcon(actPrint, QStringLiteral("print"));
 
     auto* editMenu = menuBar()->addMenu("編集(&E)");
-    editMenu->addAction("元に戻す(&U)", this, &MainWindow::onUndo, QKeySequence::Undo);
-    editMenu->addAction("やり直し(&R)", this, &MainWindow::onRedo, QKeySequence::Redo);
+    auto* actUndo = editMenu->addAction("元に戻す(&U)", this, &MainWindow::onUndo, QKeySequence::Undo);
+    auto* actRedo = editMenu->addAction("やり直し(&R)", this, &MainWindow::onRedo, QKeySequence::Redo);
     editMenu->addSeparator();
-    editMenu->addAction("削除", this, &MainWindow::onDelete, QKeySequence::Delete);
+    auto* actDelete = editMenu->addAction("削除", this, &MainWindow::onDelete, QKeySequence::Delete);
     editMenu->addSeparator();
-    editMenu->addAction("左揃え", this, &MainWindow::onAlignLeft, QKeySequence("Ctrl+Alt+Left"));
-    editMenu->addAction("中央揃え(横)", this, &MainWindow::onAlignHCenter, QKeySequence("Ctrl+Alt+H"));
-    editMenu->addAction("右揃え", this, &MainWindow::onAlignRight, QKeySequence("Ctrl+Alt+Right"));
-    editMenu->addAction("上揃え", this, &MainWindow::onAlignTop, QKeySequence("Ctrl+Alt+Up"));
-    editMenu->addAction("中央揃え(縦)", this, &MainWindow::onAlignVCenter, QKeySequence("Ctrl+Alt+V"));
-    editMenu->addAction("下揃え", this, &MainWindow::onAlignBottom, QKeySequence("Ctrl+Alt+Down"));
+    auto* actAlignLeft = editMenu->addAction("左揃え", this, &MainWindow::onAlignLeft, QKeySequence("Ctrl+Alt+Left"));
+    auto* actAlignHCenter = editMenu->addAction("中央揃え(横)", this, &MainWindow::onAlignHCenter, QKeySequence("Ctrl+Alt+H"));
+    auto* actAlignRight = editMenu->addAction("右揃え", this, &MainWindow::onAlignRight, QKeySequence("Ctrl+Alt+Right"));
+    auto* actAlignTop = editMenu->addAction("上揃え", this, &MainWindow::onAlignTop, QKeySequence("Ctrl+Alt+Up"));
+    auto* actAlignVCenter = editMenu->addAction("中央揃え(縦)", this, &MainWindow::onAlignVCenter, QKeySequence("Ctrl+Alt+V"));
+    auto* actAlignBottom = editMenu->addAction("下揃え", this, &MainWindow::onAlignBottom, QKeySequence("Ctrl+Alt+Down"));
     auto* backspaceShortcut = new QShortcut(QKeySequence(Qt::Key_Backspace), this);
     connect(backspaceShortcut, &QShortcut::activated, this, [this]{ onDelete(); });
+    setMaterialIcon(actUndo, QStringLiteral("undo"));
+    setMaterialIcon(actRedo, QStringLiteral("redo"));
+    setMaterialIcon(actDelete, QStringLiteral("delete"));
+    setMaterialIcon(actAlignLeft, QStringLiteral("format_align_left"));
+    setMaterialIcon(actAlignHCenter, QStringLiteral("format_align_center"));
+    setMaterialIcon(actAlignRight, QStringLiteral("format_align_right"));
+    setMaterialIcon(actAlignTop, QStringLiteral("vertical_align_top"));
+    setMaterialIcon(actAlignVCenter, QStringLiteral("vertical_align_center"));
+    setMaterialIcon(actAlignBottom, QStringLiteral("vertical_align_bottom"));
 
     auto* viewMenu = menuBar()->addMenu("表示(&V)");
-    viewMenu->addAction("ズームイン", this, [this]{ m_zoomScale *= 1.2; m_zoomLabel->setText(QString::number(m_zoomScale*100,'f',0)+"%"); });
-    viewMenu->addAction("ズームアウト", this, [this]{ m_zoomScale /= 1.2; m_zoomLabel->setText(QString::number(m_zoomScale*100,'f',0)+"%"); });
+    auto* actViewZoomIn = viewMenu->addAction("ズームイン", this, [this]{ m_zoomScale *= 1.2; m_zoomLabel->setText(QString::number(m_zoomScale*100,'f',0)+"%"); });
+    auto* actViewZoomOut = viewMenu->addAction("ズームアウト", this, [this]{ m_zoomScale /= 1.2; m_zoomLabel->setText(QString::number(m_zoomScale*100,'f',0)+"%"); });
     viewMenu->addSeparator();
     m_actTheme = viewMenu->addAction("テーマ切替", this, &MainWindow::onToggleTheme);
     m_actAppSettings = viewMenu->addAction("アプリ設定...", this, &MainWindow::onAppSettings, QKeySequence("Ctrl+,"));
@@ -536,63 +659,89 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     });
     auto* perspectiveMenu = viewMenu->addMenu("Perspective");
     m_perspectiveMenu = perspectiveMenu;
-    perspectiveMenu->addAction("現在を編集として保存", this, &MainWindow::saveDesignerPerspective);
-    perspectiveMenu->addAction("現在を配置確認として保存", this, &MainWindow::saveLayoutPerspective);
-    perspectiveMenu->addAction("名前を付けて保存...", this, &MainWindow::savePerspectiveAs);
+    auto* actSaveDesignerPerspective = perspectiveMenu->addAction("現在を編集として保存", this, &MainWindow::saveDesignerPerspective);
+    auto* actSaveLayoutPerspective = perspectiveMenu->addAction("現在を配置確認として保存", this, &MainWindow::saveLayoutPerspective);
+    auto* actSavePerspectiveAs = perspectiveMenu->addAction("名前を付けて保存...", this, &MainWindow::savePerspectiveAs);
     perspectiveMenu->addSeparator();
-    perspectiveMenu->addAction("編集を開く", this, &MainWindow::openDesignerPerspective);
-    perspectiveMenu->addAction("配置確認を開く", this, &MainWindow::openLayoutPerspective);
+    auto* actOpenDesignerPerspectiveMenu = perspectiveMenu->addAction("編集を開く", this, &MainWindow::openDesignerPerspective);
+    auto* actOpenLayoutPerspectiveMenu = perspectiveMenu->addAction("配置確認を開く", this, &MainWindow::openLayoutPerspective);
+    setMaterialIcon(actViewZoomIn, QStringLiteral("zoom_in"));
+    setMaterialIcon(actViewZoomOut, QStringLiteral("zoom_out"));
+    setMaterialIcon(m_actTheme, QStringLiteral("dark_mode"));
+    setMaterialIcon(m_actAppSettings, QStringLiteral("settings"));
+    setMaterialIcon(m_actGridVisible, QStringLiteral("grid_on"));
+    setMaterialIcon(m_actSnapToGrid, QStringLiteral("center_focus_strong"));
+    setMaterialIcon(m_actTransferDebug, QStringLiteral("bug_report"));
+    setMaterialIcon(actSaveDesignerPerspective, QStringLiteral("save"));
+    setMaterialIcon(actSaveLayoutPerspective, QStringLiteral("save"));
+    setMaterialIcon(actSavePerspectiveAs, QStringLiteral("save"));
+    setMaterialIcon(actOpenDesignerPerspectiveMenu, QStringLiteral("edit"));
+    setMaterialIcon(actOpenLayoutPerspectiveMenu, QStringLiteral("grid_view"));
 
     // --- Toolbars ---
     const QFont uiFont = QApplication::font();
     menuBar()->setFont(uiFont);
 
     m_commonToolbar = addToolBar("共通");
-    m_commonToolbar->setMovable(false);
     m_commonToolbar->setFont(uiFont);
+    configureToolbar(m_commonToolbar, Qt::ToolButtonTextBesideIcon);
     m_actDesigner = m_commonToolbar->addAction("DESIGNER");
     m_actDesigner->setCheckable(true);
     m_actDesigner->setChecked(true);
+    setMaterialIcon(m_actDesigner, QStringLiteral("edit"));
     m_actLayout = m_commonToolbar->addAction("LAYOUT");
     m_actLayout->setCheckable(true);
+    setMaterialIcon(m_actLayout, QStringLiteral("grid_view"));
     connect(m_actDesigner, &QAction::triggered, this, [this]{ onModeChanged(true); });
     connect(m_actLayout, &QAction::triggered, this, [this]{ onModeChanged(false); });
     m_commonToolbar->addSeparator();
     m_commonToolbar->addAction(m_actTheme);
     m_commonToolbar->addAction(m_actAppSettings);
+    setMaterialIcon(m_actTheme, QStringLiteral("dark_mode"));
+    setMaterialIcon(m_actAppSettings, QStringLiteral("settings"));
     m_commonToolbar->addSeparator();
     m_actZoomIn = m_commonToolbar->addAction("ズームイン", this, [this]{ m_zoomScale *= 1.2; m_zoomLabel->setText(QString::number(m_zoomScale*100,'f',0)+"%"); });
+    setMaterialIcon(m_actZoomIn, QStringLiteral("zoom_in"));
     m_actZoomOut = m_commonToolbar->addAction("ズームアウト", this, [this]{ m_zoomScale /= 1.2; m_zoomLabel->setText(QString::number(m_zoomScale*100,'f',0)+"%"); });
+    setMaterialIcon(m_actZoomOut, QStringLiteral("zoom_out"));
     m_commonToolbar->addSeparator();
     m_zoomLabel = new QLabel("100%");
     m_commonToolbar->addWidget(m_zoomLabel);
 
     m_designerToolbar = addToolBar("Designer");
-    m_designerToolbar->setMovable(false);
     m_designerToolbar->setFont(uiFont);
+    configureToolbar(m_designerToolbar, Qt::ToolButtonTextUnderIcon);
     m_actAddBadge = m_designerToolbar->addAction("＋");
     connect(m_actAddBadge, &QAction::triggered, this, [this]{ onAddBadge(); });
+    setMaterialIcon(m_actAddBadge, QStringLiteral("add_circle"));
     m_actBatchAdd = m_designerToolbar->addAction("一括");
     connect(m_actBatchAdd, &QAction::triggered, this, [this]{ onBatchAdd(); });
+    setMaterialIcon(m_actBatchAdd, QStringLiteral("library_add"));
     m_designerToolbar->addSeparator();
     m_actSendToLayout = m_designerToolbar->addAction("レイアウトへ送る");
     connect(m_actSendToLayout, &QAction::triggered, this, [this]{ onSendToLayout(); });
+    setMaterialIcon(m_actSendToLayout, QStringLiteral("send"));
     m_designerToolbar->addSeparator();
     m_actOpenDesignerPerspective = m_designerToolbar->addAction("編集");
     connect(m_actOpenDesignerPerspective, &QAction::triggered, this, [this]{ openDesignerPerspective(); });
     m_actOpenDesignerPerspective->setShortcut(QKeySequence("Ctrl+E"));
+    setMaterialIcon(m_actOpenDesignerPerspective, QStringLiteral("edit"));
 
     m_layoutToolbar = addToolBar("Layout");
-    m_layoutToolbar->setMovable(false);
     m_layoutToolbar->setFont(uiFont);
+    configureToolbar(m_layoutToolbar, Qt::ToolButtonTextUnderIcon);
     m_actOpenLayoutPerspective = m_layoutToolbar->addAction("配置確認");
     connect(m_actOpenLayoutPerspective, &QAction::triggered, this, [this]{ openLayoutPerspective(); });
     m_actOpenLayoutPerspective->setShortcut(QKeySequence("Ctrl+L"));
+    setMaterialIcon(m_actOpenLayoutPerspective, QStringLiteral("grid_view"));
     m_layoutToolbar->addSeparator();
-    m_layoutToolbar->addAction("編集に戻る", this, [this]{ openDesignerPerspective(); });
-    m_layoutToolbar->addAction("送信し直す", this, [this]{ onSendToLayout(); });
+    auto* backToDesigner = m_layoutToolbar->addAction("編集に戻る", this, [this]{ openDesignerPerspective(); });
+    setMaterialIcon(backToDesigner, QStringLiteral("arrow_back"));
+    auto* resendLayout = m_layoutToolbar->addAction("送信し直す", this, [this]{ onSendToLayout(); });
+    setMaterialIcon(resendLayout, QStringLiteral("refresh"));
     m_layoutToolbar->addSeparator();
     m_actClearLayout = m_layoutToolbar->addAction("レイアウトをクリア", this, &MainWindow::onClearLayout);
+    setMaterialIcon(m_actClearLayout, QStringLiteral("delete_forever"));
 
     // Designer
     m_designer = new DesignerWidget;
@@ -1699,8 +1848,10 @@ void MainWindow::refreshLayerList() {
     if (!m_layerList) {
         return;
     }
+    const int previousRow = m_layerList->currentRow();
     m_layerList->clear();
     if (m_selected.isEmpty()) {
+        m_lastLayerRow = -1;
         return;
     }
     const auto& layers = m_selected.first()->badge().layers;
@@ -1708,6 +1859,15 @@ void MainWindow::refreshLayerList() {
         const QString label = layer.name.isEmpty() ? QFileInfo(layer.imagePath).baseName() : layer.name;
         auto* item = new QListWidgetItem(label);
         m_layerList->addItem(item);
+    }
+    if (!layers.isEmpty()) {
+        const int upper = static_cast<int>(layers.size()) - 1;
+        const int candidate = previousRow >= 0 ? previousRow : m_lastLayerRow;
+        const int restoredRow = std::clamp(candidate, 0, upper);
+        m_layerList->setCurrentRow(restoredRow);
+        m_lastLayerRow = restoredRow;
+    } else {
+        m_lastLayerRow = -1;
     }
 }
 
@@ -1937,27 +2097,19 @@ void MainWindow::onClearLayout() {
 
 void MainWindow::applyTheme(bool dark) {
     m_isDark = dark;
-    QPalette pal;
-    if (dark) {
-        pal.setColor(QPalette::Window, QColor(0x1E, 0x1E, 0x1E));
-        pal.setColor(QPalette::WindowText, QColor(0xE0, 0xE0, 0xE0));
-        pal.setColor(QPalette::Base, QColor(0x3F, 0x3F, 0x46));
-        pal.setColor(QPalette::AlternateBase, QColor(0x2D, 0x2D, 0x30));
-        pal.setColor(QPalette::ToolTipBase, QColor(0x2D, 0x2D, 0x30));
-        pal.setColor(QPalette::ToolTipText, QColor(0xE0, 0xE0, 0xE0));
-        pal.setColor(QPalette::Text, QColor(0xE0, 0xE0, 0xE0));
-        pal.setColor(QPalette::Button, QColor(0x3F, 0x3F, 0x46));
-        pal.setColor(QPalette::ButtonText, QColor(0xE0, 0xE0, 0xE0));
-        pal.setColor(QPalette::BrightText, Qt::red);
-        pal.setColor(QPalette::Link, QColor(0x55, 0x55, 0xFF));
-        pal.setColor(QPalette::Highlight, QColor(0x55, 0x55, 0x66));
-        pal.setColor(QPalette::HighlightedText, QColor(0xE0, 0xE0, 0xE0));
-    } else {
-        pal = QApplication::style()->standardPalette();
-    }
+    QPalette pal = dark ? makeCinema4DDarkPalette() : QApplication::style()->standardPalette();
     QApplication::setPalette(pal);
     if (m_dockStyleManager) {
         m_dockStyleManager->applyTheme(QApplication::palette());
+    }
+    if (m_designer) {
+        m_designer->applyThemePalette(pal);
+    }
+    if (m_layoutWorkspace) {
+        m_layoutWorkspace->applyThemePalette(pal);
+    }
+    if (m_actTheme) {
+        setMaterialIcon(m_actTheme, dark ? QStringLiteral("dark_mode") : QStringLiteral("light_mode"));
     }
     m_actTheme->setText(dark ? "☀ テーマ切替" : "☾ テーマ切替");
     applyWindowsBackdrop();
@@ -2122,6 +2274,9 @@ void MainWindow::openDesignerPerspective() {
     if (!m_dockManager || !m_designerDock) {
         return;
     }
+    refreshDocumentFromDesigner();
+    m_layoutPreviewMode = LayoutPreviewMode::CurrentDesign;
+    m_layoutBadges = m_badges;
     m_designerDock->setAsCurrentTab();
     m_dockManager->openPerspective("designer");
     syncPerspectiveUiDeferred("designer");
@@ -2231,6 +2386,10 @@ void MainWindow::syncPerspectiveUi(const QString& name) {
     if (designer) {
         m_designer->setGuidesVisible(true);
         m_skipNextLayoutSync = false;
+        m_layoutPreviewMode = LayoutPreviewMode::CurrentDesign;
+        if (m_layoutBadges.isEmpty() || m_layoutPreviewMode == LayoutPreviewMode::CurrentDesign) {
+            m_layoutBadges = m_badges;
+        }
     }
     updateInspectorMode();
     updateToolbarsForMode();

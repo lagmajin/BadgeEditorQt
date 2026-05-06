@@ -83,3 +83,7 @@ target_include_directories(BadgeEditorQt PRIVATE
 if (MSVC)
     target_compile_options(BadgeEditorQt PRIVATE /wd4616)
 endif()
+
+set(BADGEEDITOR_SOURCE_DIR_CMAKE "${CMAKE_CURRENT_SOURCE_DIR}")
+file(TO_CMAKE_PATH "${BADGEEDITOR_SOURCE_DIR_CMAKE}" BADGEEDITOR_SOURCE_DIR_CMAKE)
+target_compile_definitions(BadgeEditorQt PRIVATE BADGEEDITOR_SOURCE_DIR="${BADGEEDITOR_SOURCE_DIR_CMAKE}")

@@ -221,6 +221,7 @@ private:
     QList<BadgeGraphicItem*> m_selected;
     QList<BadgeItem> m_badges;
     QList<BadgeItem> m_layoutBadges;
+    int m_lastLayerRow = -1;
     QList<BadgeItem> m_pendingEditBeforeBadges;
     QList<int> m_pendingEditBeforeSelection;
     BadgeGraphicItem* m_pendingEditItem = nullptr;

@@ -3,6 +3,7 @@
 
 #include <QWidget>
 #include <QPdfWriter>
+#include <QPalette>
 
 class QGraphicsView;
 class QGraphicsScene;
@@ -19,6 +20,7 @@ public:
     explicit LayoutWorkspaceWidget(QWidget* parent = nullptr);
     ~LayoutWorkspaceWidget() override;
 
+    void applyThemePalette(const QPalette& palette);
     void setDocument(const badge::DocumentData& document);
     void refresh();
     bool exportPdf(const QString& filePath, int dpi = 300, QPdfWriter::ColorModel colorModel = QPdfWriter::ColorModel::RGB) const;

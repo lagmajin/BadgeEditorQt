@@ -22,6 +22,7 @@ public:
     void syncFromBadge();
     void applyColorCorrection();
     void updateHandles();
+    void beginGeometryUpdate();
     void setGridVisible(bool on) { m_gridVisible = on; }
     void setSnapToGrid(bool on) { m_snapToGrid = on; }
     void setGridSpacingMm(double mm) { m_gridSpacingMm = mm; }

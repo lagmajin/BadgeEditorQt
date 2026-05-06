@@ -34,6 +34,16 @@ public:
             return QProxyStyle::pixelMetric(metric, option, widget) + 1;
         case PM_SmallIconSize:
             return 18;
+        case PM_SplitterWidth:
+            return qMax(6, QProxyStyle::pixelMetric(metric, option, widget));
+        case PM_ToolBarFrameWidth:
+            return 1;
+        case PM_ToolBarItemSpacing:
+            return QProxyStyle::pixelMetric(metric, option, widget) + 3;
+        case PM_ToolBarSeparatorExtent:
+            return QProxyStyle::pixelMetric(metric, option, widget) + 2;
+        case PM_DefaultFrameWidth:
+            return qMax(1, QProxyStyle::pixelMetric(metric, option, widget));
         default:
             break;
         }
@@ -204,9 +214,12 @@ void DockStyleManager::refreshDockDecorations() {
         const QColor textColor = m_palette.color(QPalette::WindowText);
         const QColor borderColor = m_palette.color(QPalette::Mid);
         const QColor baseColor = m_palette.color(QPalette::Base);
-        const QColor activeTabBg = blend(m_palette.color(QPalette::Button), m_palette.color(QPalette::Highlight), 0.12);
-        const QColor inactiveTabBg = blend(windowColor, baseColor, 0.72);
-        const QColor inactiveTextColor = textColor.lighter(108);
+        const QColor buttonColor = m_palette.color(QPalette::Button);
+        const QColor accentColor = m_palette.color(QPalette::Highlight);
+        const QColor accentTextColor = m_palette.color(QPalette::HighlightedText);
+        const QColor activeTabBg = blend(buttonColor, accentColor, 0.18);
+        const QColor inactiveTabBg = blend(windowColor, baseColor, 0.58);
+        const QColor inactiveTextColor = textColor.lighter(112);
         const bool isActiveTab = dock->tabWidget() && dock->tabWidget()->isActiveTab();
         const QColor tabBg = isActiveTab ? activeTabBg : inactiveTabBg;
 
@@ -215,10 +228,10 @@ void DockStyleManager::refreshDockDecorations() {
         dockPalette.setColor(QPalette::WindowText, textColor);
         dockPalette.setColor(QPalette::Base, baseColor);
         dockPalette.setColor(QPalette::Button, tabBg);
-        dockPalette.setColor(QPalette::ButtonText, textColor);
-        dockPalette.setColor(QPalette::Mid, borderColor.lighter(125));
-        dockPalette.setColor(QPalette::Light, tabBg.lighter(120));
-        dockPalette.setColor(QPalette::Dark, tabBg.darker(145));
+        dockPalette.setColor(QPalette::ButtonText, isActiveTab ? accentTextColor : textColor);
+        dockPalette.setColor(QPalette::Mid, borderColor.lighter(isActiveTab ? 138 : 118));
+        dockPalette.setColor(QPalette::Light, tabBg.lighter(isActiveTab ? 122 : 115));
+        dockPalette.setColor(QPalette::Dark, tabBg.darker(isActiveTab ? 140 : 150));
         dock->setPalette(dockPalette);
         dock->setAttribute(Qt::WA_StyledBackground, true);
         repolishWidget(dock);
@@ -230,12 +243,12 @@ void DockStyleManager::refreshDockDecorations() {
             tabPalette.setColor(QPalette::Button, tabBg);
             tabPalette.setColor(QPalette::WindowText, isActiveTab ? textColor : inactiveTextColor);
             tabPalette.setColor(QPalette::Text, isActiveTab ? textColor : inactiveTextColor);
-            tabPalette.setColor(QPalette::ButtonText, textColor);
-            tabPalette.setColor(QPalette::Mid, borderColor.lighter(125));
-            tabPalette.setColor(QPalette::Light, tabBg.lighter(120));
-            tabPalette.setColor(QPalette::Dark, tabBg.darker(145));
-            tabPalette.setColor(QPalette::Highlight, m_palette.color(QPalette::Highlight));
-            tabPalette.setColor(QPalette::HighlightedText, m_palette.color(QPalette::HighlightedText));
+            tabPalette.setColor(QPalette::ButtonText, isActiveTab ? accentTextColor : textColor);
+            tabPalette.setColor(QPalette::Mid, borderColor.lighter(isActiveTab ? 138 : 118));
+            tabPalette.setColor(QPalette::Light, tabBg.lighter(isActiveTab ? 122 : 115));
+            tabPalette.setColor(QPalette::Dark, tabBg.darker(isActiveTab ? 140 : 150));
+            tabPalette.setColor(QPalette::Highlight, accentColor);
+            tabPalette.setColor(QPalette::HighlightedText, accentTextColor);
             tab->setPalette(tabPalette);
             tab->setAttribute(Qt::WA_StyledBackground, true);
             repolishWidget(tab);
@@ -249,6 +262,7 @@ void DockStyleManager::refreshDockDecorations() {
                 pal.setColor(QPalette::Text, isActiveTab ? textColor : inactiveTextColor);
                 pal.setColor(QPalette::Base, tabBg);
                 pal.setColor(QPalette::Button, tabBg);
+                pal.setColor(QPalette::ButtonText, isActiveTab ? accentTextColor : textColor);
                 label->setPalette(pal);
                 auto font = label->font();
                 font.setBold(isActiveTab);
@@ -266,7 +280,7 @@ void DockStyleManager::refreshDockDecorations() {
                 pal.setColor(QPalette::Button, tabBg);
                 pal.setColor(QPalette::WindowText, isActiveTab ? textColor : inactiveTextColor);
                 pal.setColor(QPalette::Text, isActiveTab ? textColor : inactiveTextColor);
-                pal.setColor(QPalette::ButtonText, textColor);
+                pal.setColor(QPalette::ButtonText, isActiveTab ? accentTextColor : textColor);
                 button->setPalette(pal);
                 button->setAutoFillBackground(true);
                 auto font = button->font();
