@@ -7,14 +7,49 @@
 #include <QImage>
 #include <QPainter>
 #include <cmath>
+#include <string>
 
 #ifdef BADGEEDITOR_HAS_QTSVG
 #include <QSvgRenderer>
 #endif
 
+#ifdef Q_OS_WIN
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#include <wincodec.h>
+#endif
+
 import badge.imageio;
 
 namespace {
+
+#ifdef Q_OS_WIN
+struct ScopedComInit {
+    HRESULT hr = E_FAIL;
+
+    ScopedComInit() : hr(CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED)) {}
+
+    ~ScopedComInit() {
+        if (hr == S_OK || hr == S_FALSE) {
+            CoUninitialize();
+        }
+    }
+
+    bool ok() const {
+        return SUCCEEDED(hr) || hr == RPC_E_CHANGED_MODE;
+    }
+};
+
+template <typename T>
+void releaseCom(T*& ptr) {
+    if (ptr) {
+        ptr->Release();
+        ptr = nullptr;
+    }
+}
+#endif
 
 QString describeColorSpace(const QImage& image) {
     const QColorSpace srgb(QColorSpace::SRgb);
@@ -138,6 +173,77 @@ QImage loadViaOiio(const QString& path) {
     return normalizeToSrgb(std::move(out));
 }
 
+#ifdef Q_OS_WIN
+QImage loadViaWic(const QString& path) {
+    ScopedComInit com;
+    if (!com.ok()) {
+        return {};
+    }
+
+    IWICImagingFactory* factory = nullptr;
+    IWICBitmapDecoder* decoder = nullptr;
+    IWICBitmapFrameDecode* frame = nullptr;
+    IWICBitmapSource* source = nullptr;
+
+    QImage result;
+
+    do {
+        HRESULT hr = CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER,
+                                      IID_PPV_ARGS(&factory));
+        if (FAILED(hr)) {
+            break;
+        }
+
+        const std::wstring widePath = path.toStdWString();
+        hr = factory->CreateDecoderFromFilename(widePath.c_str(), nullptr, GENERIC_READ,
+                                                WICDecodeMetadataCacheOnDemand, &decoder);
+        if (FAILED(hr)) {
+            break;
+        }
+
+        hr = decoder->GetFrame(0, &frame);
+        if (FAILED(hr)) {
+            break;
+        }
+
+        UINT width = 0;
+        UINT height = 0;
+        hr = frame->GetSize(&width, &height);
+        if (FAILED(hr) || width == 0 || height == 0) {
+            break;
+        }
+
+        hr = WICConvertBitmapSource(GUID_WICPixelFormat32bppBGRA, frame, &source);
+        if (FAILED(hr) || !source) {
+            break;
+        }
+
+        result = QImage(static_cast<int>(width), static_cast<int>(height), QImage::Format_ARGB32);
+        if (result.isNull()) {
+            break;
+        }
+
+        const UINT stride = static_cast<UINT>(result.bytesPerLine());
+        const UINT bufferSize = stride * height;
+        hr = source->CopyPixels(nullptr, stride, bufferSize, result.bits());
+        if (FAILED(hr)) {
+            result = {};
+            break;
+        }
+    } while (false);
+
+    releaseCom(source);
+    releaseCom(frame);
+    releaseCom(decoder);
+    releaseCom(factory);
+
+    if (result.isNull()) {
+        return {};
+    }
+    return normalizeToSrgb(std::move(result));
+}
+#endif
+
 }
 
 QImage ImageProcessor::loadImage(const QString& path, QString* colorSpaceLabel) {
@@ -193,6 +299,15 @@ QImage ImageProcessor::loadImage(const QString& path, QString* colorSpaceLabel) 
         }
         return viaOiio;
     }
+
+#ifdef Q_OS_WIN
+    if (QImage viaWic = loadViaWic(path); !viaWic.isNull()) {
+        if (colorSpaceLabel) {
+            *colorSpaceLabel = QStringLiteral("WIC / sRGB前提");
+        }
+        return viaWic;
+    }
+#endif
 
     if (QImage viaQt = loadViaQtReader(path); !viaQt.isNull()) {
         if (colorSpaceLabel) {

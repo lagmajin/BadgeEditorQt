@@ -2,6 +2,7 @@
 #define LAYOUTWORKSPACEWIDGET_H
 
 #include <QWidget>
+#include <QPdfWriter>
 
 class QGraphicsView;
 class QGraphicsScene;
@@ -20,7 +21,7 @@ public:
 
     void setDocument(const badge::DocumentData& document);
     void refresh();
-    bool exportPdf(const QString& filePath, int dpi = 300) const;
+    bool exportPdf(const QString& filePath, int dpi = 300, QPdfWriter::ColorModel colorModel = QPdfWriter::ColorModel::RGB) const;
     bool exportPng(const QString& filePath, int dpi = 300, bool whiteBackground = true) const;
     bool print(QPrinter* printer) const;
 

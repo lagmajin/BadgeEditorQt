@@ -66,6 +66,7 @@
 #include <wobjectimpl.h>
 
 import badge.documentio;
+import badge.document;
 import badge.model;
 import badge.qtbridge;
 
@@ -88,6 +89,13 @@ namespace {
 #define DWMWCP_ROUND static_cast<DWM_WINDOW_CORNER_PREFERENCE>(2)
 #endif
 #endif
+
+void showFileWarning(QWidget* parent, const QString& title, const QString& action, const QString& path) {
+    const QString message = path.isEmpty()
+        ? QStringLiteral("%1に失敗しました").arg(action)
+        : QStringLiteral("%1に失敗しました。\n%2").arg(action, path);
+    QMessageBox::warning(parent, title, message);
+}
 
 class DocumentSnapshotCommand final : public QUndoCommand {
 public:
@@ -130,6 +138,51 @@ QList<int> indicesForSelection(const QList<BadgeGraphicItem*>& selected, const Q
         }
     }
     return indices;
+}
+
+bool badgeLayerEquals(const LayerItem& a, const LayerItem& b) {
+    return a.imagePath == b.imagePath
+        && a.name == b.name
+        && a.opacity == b.opacity
+        && a.visible == b.visible
+        && a.offsetX == b.offsetX
+        && a.offsetY == b.offsetY;
+}
+
+bool badgeEquals(const BadgeItem& a, const BadgeItem& b) {
+    return a.widthMm == b.widthMm
+        && a.heightMm == b.heightMm
+        && a.imageScale == b.imageScale
+        && a.materialPreset == b.materialPreset
+        && a.specularStrength == b.specularStrength
+        && a.envReflectionStrength == b.envReflectionStrength
+        && a.glitterStrength == b.glitterStrength
+        && a.xMm == b.xMm
+        && a.yMm == b.yMm
+        && a.rotation == b.rotation
+        && a.label == b.label
+        && a.imagePath == b.imagePath
+        && a.displayText == b.displayText
+        && a.clipToCircle == b.clipToCircle
+        && a.brightness == b.brightness
+        && a.contrast == b.contrast
+        && a.saturation == b.saturation
+        && a.flattenedForLayoutTransfer == b.flattenedForLayoutTransfer
+        && a.isSelected == b.isSelected
+        && a.layers.size() == b.layers.size()
+        && std::equal(a.layers.begin(), a.layers.end(), b.layers.begin(), badgeLayerEquals);
+}
+
+bool badgeListEquals(const QList<BadgeItem>& a, const QList<BadgeItem>& b) {
+    if (a.size() != b.size()) {
+        return false;
+    }
+    for (int i = 0; i < a.size(); ++i) {
+        if (!badgeEquals(a[i], b[i])) {
+            return false;
+        }
+    }
+    return true;
 }
 
 BadgeItem badgeForLayoutPreview(BadgeItem badge) {
@@ -548,6 +601,8 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     connect(m_designer, &DesignerWidget::badgeDeselected, this, [this]{ onBadgeDeselected(); });
     connect(m_designer, &DesignerWidget::badgeDoubleClicked, this, [this](BadgeGraphicItem*){ onSetImage(); });
     connect(m_designer, &DesignerWidget::badgeMoved, this, [this](BadgeGraphicItem* item){ onBadgeMoved(item); });
+    connect(m_designer, &DesignerWidget::badgeEditStarted, this, [this](BadgeGraphicItem* item){ onBadgeEditStarted(item); });
+    connect(m_designer, &DesignerWidget::badgeEditFinished, this, [this](BadgeGraphicItem* item){ onBadgeEditFinished(item); });
     connect(m_designer, &DesignerWidget::nudgeRequested, this, [this](double dxMm, double dyMm){ onNudgeRequested(dxMm, dyMm); });
     m_designer->updateGuides(32);
 
@@ -955,6 +1010,43 @@ void MainWindow::pushBadgeChange(const QString& label,
         }));
 }
 
+void MainWindow::onBadgeEditStarted(BadgeGraphicItem* item) {
+    if (m_pendingEditActive || !item || !m_designer) {
+        return;
+    }
+
+    m_pendingEditActive = true;
+    m_pendingEditItem = item;
+    m_pendingEditBeforeBadges = currentDesignerBadges();
+    m_pendingEditBeforeSelection = selectedBadgeIndices();
+}
+
+void MainWindow::onBadgeEditFinished(BadgeGraphicItem* item) {
+    if (!m_pendingEditActive || !m_designer) {
+        return;
+    }
+    if (m_pendingEditItem && item && m_pendingEditItem != item) {
+        return;
+    }
+
+    const auto beforeBadges = m_pendingEditBeforeBadges;
+    const auto beforeSelection = m_pendingEditBeforeSelection;
+    const auto afterBadges = currentDesignerBadges();
+    const auto afterSelection = selectedBadgeIndices();
+
+    m_pendingEditActive = false;
+    m_pendingEditItem = nullptr;
+    m_pendingEditBeforeBadges.clear();
+    m_pendingEditBeforeSelection.clear();
+
+    if (badgeListEquals(beforeBadges, afterBadges) && beforeSelection == afterSelection) {
+        return;
+    }
+
+    pushBadgeChange(QStringLiteral("編集"), beforeBadges, beforeSelection, afterBadges, afterSelection);
+    appendLog(QStringLiteral("編集内容を履歴に追加しました"));
+}
+
 void MainWindow::appendLog(const QString& message) {
     if (!m_logList) {
         return;
@@ -1048,7 +1140,7 @@ void MainWindow::onOpen() {
     if (f.open(QIODevice::ReadOnly)) {
         const auto loaded = badge::loadDocumentFromJson(f.readAll());
         if (!loaded.ok) {
-            QMessageBox::warning(this, "開く", "ファイルの読み込みに失敗しました");
+            showFileWarning(this, QStringLiteral("開く"), QStringLiteral("ファイルの読み込み"), path);
             return;
         }
         onNew();
@@ -1070,6 +1162,8 @@ void MainWindow::onSave() {
         f.write(badge::saveDocumentToJson(projectsync::currentDocument(m_badges, *m_comboPaperSize, *m_chkLandscape, *m_spinPaperMargin, *m_spinPaperSpacing, m_currentFile)));
         appendLog(QStringLiteral("保存しました: %1").arg(m_currentFile));
         refreshDiagnostics();
+    } else {
+        showFileWarning(this, QStringLiteral("保存"), QStringLiteral("ファイルの保存"), m_currentFile);
     }
 }
 
@@ -1099,8 +1193,19 @@ void MainWindow::onExportPdf() {
     if (!outPath.endsWith(".pdf", Qt::CaseInsensitive)) {
         outPath += ".pdf";
     }
-    if (!m_layoutWorkspace->exportPdf(outPath, dlg.dpi())) {
-        QMessageBox::warning(this, "PDF出力", "PDFの書き出しに失敗しました");
+    QPdfWriter::ColorModel colorModel = QPdfWriter::ColorModel::RGB;
+    switch (dlg.pdfColorModelIndex()) {
+    case 1:
+        colorModel = QPdfWriter::ColorModel::CMYK;
+        break;
+    case 2:
+        colorModel = QPdfWriter::ColorModel::Grayscale;
+        break;
+    default:
+        break;
+    }
+    if (!m_layoutWorkspace->exportPdf(outPath, dlg.dpi(), colorModel)) {
+        showFileWarning(this, QStringLiteral("PDF出力"), QStringLiteral("PDFの書き出し"), outPath);
         return;
     }
 }
@@ -1123,7 +1228,7 @@ void MainWindow::onExportPng() {
         outPath += ".png";
     }
     if (!m_layoutWorkspace->exportPng(outPath, dlg.dpi(), dlg.whiteBackground())) {
-        QMessageBox::warning(this, "画像出力", "PNGの書き出しに失敗しました");
+        showFileWarning(this, QStringLiteral("画像出力"), QStringLiteral("PNGの書き出し"), outPath);
         return;
     }
 }
@@ -1159,7 +1264,7 @@ void MainWindow::onPrint() {
     m_appSettings.printResolution = std::max(72, printer.resolution());
     saveAppSettings();
     if (!m_layoutWorkspace->print(&printer)) {
-        QMessageBox::warning(this, "印刷", "印刷に失敗しました");
+        showFileWarning(this, QStringLiteral("印刷"), QStringLiteral("印刷"), QString());
     }
 }
 

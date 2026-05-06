@@ -8,16 +8,20 @@
 #include <QVBoxLayout>
 #include <QPainter>
 #include <QPainterPath>
+#include <QPdfOutputIntent>
 #include <QPdfWriter>
 #include <QPageSize>
 #include <QPageLayout>
 #include <QMarginsF>
 #include <QPrinter>
 #include <QImage>
+#include <QColorSpace>
 #include <QFileInfo>
 #include <QString>
 #include <QFont>
 #include <QHash>
+#include <QGraphicsSimpleTextItem>
+#include <QUrl>
 #include <algorithm>
 
 import badge.imageio;
@@ -34,6 +38,7 @@ constexpr double kSceneDpi = 96.0;
 constexpr double kCircleBleedMm = 3.0;
 constexpr int kItemRole = 0;
 const char* kSafeGuideTag = "safe-guide";
+const char* kEmptyHintTag = "empty-hint";
 
 QRectF paperRectPx(const badge::DocumentData& document, double dpi) {
     const double scale = dpi * kMmToInch;
@@ -46,6 +51,32 @@ QRectF paperRectPx(const badge::DocumentData& document, double dpi) {
 void renderDocumentScene(QGraphicsScene* scene, const badge::DocumentData& document, QPainter* painter, double sourceDpi, const QRectF& target) {
     const QRectF source = paperRectPx(document, sourceDpi);
     scene->render(painter, target, source, Qt::IgnoreAspectRatio);
+}
+
+QPdfOutputIntent srgbOutputIntent() {
+    QPdfOutputIntent intent;
+    intent.setOutputConditionIdentifier(QStringLiteral("sRGB IEC61966-2.1"));
+    intent.setOutputCondition(QStringLiteral("Standard RGB output"));
+    intent.setRegistryName(QUrl(QStringLiteral("http://www.color.org")));
+    intent.setOutputProfile(QColorSpace(QColorSpace::SRgb));
+    return intent;
+}
+
+void addEmptyHint(QGraphicsScene* scene, const QRectF& paperRect) {
+    if (!scene || paperRect.isEmpty()) {
+        return;
+    }
+
+    auto* item = scene->addSimpleText(QStringLiteral("レイアウト対象がありません\nDesigner から送信してください"));
+    item->setData(kItemRole, QString::fromLatin1(kEmptyHintTag));
+    QFont font = item->font();
+    font.setPointSizeF(std::max(12.0, font.pointSizeF() + 2.0));
+    font.setBold(true);
+    item->setFont(font);
+    item->setBrush(QColor(70, 70, 70, 220));
+    const QRectF br = item->boundingRect();
+    item->setPos(paperRect.center().x() - br.width() * 0.5,
+                 paperRect.center().y() - br.height() * 0.5);
 }
 
 QPixmap renderBadgePixmap(const badge::BadgeData& badgeData, const QSize& targetSize) {
@@ -272,7 +303,11 @@ bool LayoutWorkspaceWidget::exportPng(const QString& filePath, int dpi, bool whi
     }
 
     const auto safeGuides = sceneItemsByTag(m_scene, QString::fromLatin1(kSafeGuideTag));
+    const auto emptyHints = sceneItemsByTag(m_scene, QString::fromLatin1(kEmptyHintTag));
     for (auto* item : safeGuides) {
+        item->setVisible(false);
+    }
+    for (auto* item : emptyHints) {
         item->setVisible(false);
     }
 
@@ -282,9 +317,13 @@ bool LayoutWorkspaceWidget::exportPng(const QString& filePath, int dpi, bool whi
         for (auto* item : safeGuides) {
             item->setVisible(true);
         }
+        for (auto* item : emptyHints) {
+            item->setVisible(true);
+        }
         return false;
     }
     image.fill(whiteBackground ? Qt::white : Qt::transparent);
+    image.setColorSpace(QColorSpace(QColorSpace::SRgb));
 
     QPainter painter(&image);
     painter.setRenderHints(QPainter::Antialiasing | QPainter::SmoothPixmapTransform, true);
@@ -293,22 +332,33 @@ bool LayoutWorkspaceWidget::exportPng(const QString& filePath, int dpi, bool whi
     for (auto* item : safeGuides) {
         item->setVisible(true);
     }
+    for (auto* item : emptyHints) {
+        item->setVisible(true);
+    }
 
     return image.save(filePath);
 }
 
-bool LayoutWorkspaceWidget::exportPdf(const QString& filePath, int dpi) const {
+bool LayoutWorkspaceWidget::exportPdf(const QString& filePath, int dpi, QPdfWriter::ColorModel colorModel) const {
     if (!m_scene || m_impl->document.paper.widthMm <= 0.0 || m_impl->document.paper.heightMm <= 0.0) {
         return false;
     }
 
     const auto safeGuides = sceneItemsByTag(m_scene, QString::fromLatin1(kSafeGuideTag));
+    const auto emptyHints = sceneItemsByTag(m_scene, QString::fromLatin1(kEmptyHintTag));
     for (auto* item : safeGuides) {
+        item->setVisible(false);
+    }
+    for (auto* item : emptyHints) {
         item->setVisible(false);
     }
 
     QPdfWriter writer(filePath);
     writer.setResolution(dpi);
+    writer.setColorModel(colorModel);
+    if (colorModel == QPdfWriter::ColorModel::RGB) {
+        writer.setOutputIntent(srgbOutputIntent());
+    }
     writer.setPageSize(QPageSize(QSizeF(m_impl->document.paper.widthMm, m_impl->document.paper.heightMm), QPageSize::Millimeter));
     writer.setPageMargins(QMarginsF(0, 0, 0, 0));
 
@@ -320,6 +370,9 @@ bool LayoutWorkspaceWidget::exportPdf(const QString& filePath, int dpi) const {
     for (auto* item : safeGuides) {
         item->setVisible(true);
     }
+    for (auto* item : emptyHints) {
+        item->setVisible(true);
+    }
     return true;
 }
 
@@ -329,13 +382,21 @@ bool LayoutWorkspaceWidget::print(QPrinter* printer) const {
     }
 
     const auto safeGuides = sceneItemsByTag(m_scene, QString::fromLatin1(kSafeGuideTag));
+    const auto emptyHints = sceneItemsByTag(m_scene, QString::fromLatin1(kEmptyHintTag));
     for (auto* item : safeGuides) {
         item->setVisible(false);
     }
+    for (auto* item : emptyHints) {
+        item->setVisible(false);
+    }
 
+    printer->setColorMode(QPrinter::Color);
     QPainter painter(printer);
     if (!painter.isActive()) {
         for (auto* item : safeGuides) {
+            item->setVisible(true);
+        }
+        for (auto* item : emptyHints) {
             item->setVisible(true);
         }
         return false;
@@ -348,6 +409,9 @@ bool LayoutWorkspaceWidget::print(QPrinter* printer) const {
     painter.end();
 
     for (auto* item : safeGuides) {
+        item->setVisible(true);
+    }
+    for (auto* item : emptyHints) {
         item->setVisible(true);
     }
     return true;
@@ -381,6 +445,13 @@ void LayoutWorkspaceWidget::rebuildScene() {
                                        safeHeightPx,
                                        safePen, Qt::NoBrush);
     safeGuide->setData(kItemRole, QString::fromLatin1(kSafeGuideTag));
+
+    if (m_impl->document.badges.empty()) {
+        addEmptyHint(m_scene, QRectF(0.0,
+                                     0.0,
+                                     m_impl->document.paper.widthMm * mmToPx,
+                                     m_impl->document.paper.heightMm * mmToPx));
+    }
 
     for (const auto& b : m_impl->document.badges) {
         const double x = b.xMm * mmToPx;

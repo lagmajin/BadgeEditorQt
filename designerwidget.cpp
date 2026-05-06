@@ -129,6 +129,8 @@ void DesignerWidget::addBadge(const BadgeItem& item) {
     connect(gi, &BadgeGraphicItem::badgeClicked, this, &DesignerWidget::badgeSelected);
     connect(gi, &BadgeGraphicItem::badgeDoubleClicked, this, &DesignerWidget::badgeDoubleClicked);
     connect(gi, &BadgeGraphicItem::badgeMoved, this, &DesignerWidget::badgeMoved);
+    connect(gi, &BadgeGraphicItem::badgeEditStarted, this, &DesignerWidget::badgeEditStarted);
+    connect(gi, &BadgeGraphicItem::badgeEditFinished, this, &DesignerWidget::badgeEditFinished);
 }
 
 void DesignerWidget::setBadgeItems(const QList<BadgeItem>& items, const QList<int>& selectedIndices) {
@@ -588,6 +590,27 @@ void DesignerWidget::drawForeground(QPainter* painter, const QRectF& rect) {
         painter->setPen(pen);
         painter->setBrush(Qt::NoBrush);
         painter->drawEllipse(QPointF(cx, cy), rv, rv);
+    }
+
+    if (m_graphicItems.isEmpty()) {
+        painter->save();
+        painter->setPen(QColor(255, 255, 255, 220));
+        QFont titleFont = painter->font();
+        titleFont.setPointSizeF(titleFont.pointSizeF() + 2.0);
+        titleFont.setBold(true);
+        painter->setFont(titleFont);
+        const QRectF titleRect(rect.center().x() - 220.0, rect.center().y() - 36.0, 440.0, 30.0);
+        painter->drawText(titleRect, Qt::AlignCenter, QStringLiteral("ここにバッジを追加してください"));
+
+        QFont hintFont = painter->font();
+        hintFont.setPointSizeF(std::max(8.0, hintFont.pointSizeF() - 1.0));
+        hintFont.setBold(false);
+        painter->setFont(hintFont);
+        const QRectF hintRect(rect.center().x() - 260.0, rect.center().y() - 4.0, 520.0, 30.0);
+        painter->drawText(hintRect,
+                          Qt::AlignCenter,
+                          QStringLiteral("画像をドラッグ&ドロップするか、ツールバーから追加できます"));
+        painter->restore();
     }
 }
 

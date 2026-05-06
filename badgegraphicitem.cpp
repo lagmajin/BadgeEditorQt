@@ -118,6 +118,9 @@ protected:
     void mousePressEvent(QGraphicsSceneMouseEvent* e) override {
         m_dragging = true;
         m_startPos = e->scenePos();
+        if (m_badge) {
+            m_badge->beginInteractiveEdit();
+        }
         e->accept();
     }
     void mouseMoveEvent(QGraphicsSceneMouseEvent* e) override {
@@ -147,6 +150,9 @@ protected:
     void mouseReleaseEvent(QGraphicsSceneMouseEvent*) override {
         m_dragging = false;
         m_badge->syncFromBadge();
+        if (m_badge) {
+            m_badge->endInteractiveEdit();
+        }
     }
 private:
     Corner m_corner;
@@ -194,6 +200,22 @@ void BadgeGraphicItem::updateHandles() {
             m_handles.append(h);
         }
     }
+}
+
+void BadgeGraphicItem::beginInteractiveEdit() {
+    if (m_interactionActive) {
+        return;
+    }
+    m_interactionActive = true;
+    emit badgeEditStarted(this);
+}
+
+void BadgeGraphicItem::endInteractiveEdit() {
+    if (!m_interactionActive) {
+        return;
+    }
+    m_interactionActive = false;
+    emit badgeEditFinished(this);
 }
 
 QRectF BadgeGraphicItem::contentRectPx() const {
@@ -381,13 +403,22 @@ void BadgeGraphicItem::syncFromBadge() {
 
 void BadgeGraphicItem::mousePressEvent(QGraphicsSceneMouseEvent* event) {
     QGraphicsObject::mousePressEvent(event);
-    if (event->button() == Qt::LeftButton)
+    if (event->button() == Qt::LeftButton) {
+        beginInteractiveEdit();
         emit badgeClicked(this);
+    }
 }
 
 void BadgeGraphicItem::mouseDoubleClickEvent(QGraphicsSceneMouseEvent* event) {
     Q_UNUSED(event);
     emit badgeDoubleClicked(this);
+}
+
+void BadgeGraphicItem::mouseReleaseEvent(QGraphicsSceneMouseEvent* event) {
+    QGraphicsObject::mouseReleaseEvent(event);
+    if (event->button() == Qt::LeftButton) {
+        endInteractiveEdit();
+    }
 }
 
 QVariant BadgeGraphicItem::itemChange(GraphicsItemChange change, const QVariant& value) {

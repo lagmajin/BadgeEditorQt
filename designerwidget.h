@@ -64,6 +64,8 @@ Q_SIGNALS:
     void badgeDeselected() W_SIGNAL(badgeDeselected);
     void badgeDoubleClicked(BadgeGraphicItem* item) W_SIGNAL(badgeDoubleClicked, item);
     void badgeMoved(BadgeGraphicItem* item) W_SIGNAL(badgeMoved, item);
+    void badgeEditStarted(BadgeGraphicItem* item) W_SIGNAL(badgeEditStarted, item);
+    void badgeEditFinished(BadgeGraphicItem* item) W_SIGNAL(badgeEditFinished, item);
     void selectionChanged() W_SIGNAL(selectionChanged);
     void nudgeRequested(double dxMm, double dyMm) W_SIGNAL(nudgeRequested, dxMm, dyMm);
 

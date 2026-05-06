@@ -25,15 +25,20 @@ public:
     void setGridVisible(bool on) { m_gridVisible = on; }
     void setSnapToGrid(bool on) { m_snapToGrid = on; }
     void setGridSpacingMm(double mm) { m_gridSpacingMm = mm; }
+    void beginInteractiveEdit();
+    void endInteractiveEdit();
 
 Q_SIGNALS:
     void badgeClicked(BadgeGraphicItem* item) W_SIGNAL(badgeClicked, item);
     void badgeDoubleClicked(BadgeGraphicItem* item) W_SIGNAL(badgeDoubleClicked, item);
     void badgeMoved(BadgeGraphicItem* item) W_SIGNAL(badgeMoved, item);
+    void badgeEditStarted(BadgeGraphicItem* item) W_SIGNAL(badgeEditStarted, item);
+    void badgeEditFinished(BadgeGraphicItem* item) W_SIGNAL(badgeEditFinished, item);
 
 protected:
     void mousePressEvent(QGraphicsSceneMouseEvent* event) override;
     void mouseDoubleClickEvent(QGraphicsSceneMouseEvent* event) override;
+    void mouseReleaseEvent(QGraphicsSceneMouseEvent* event) override;
     QVariant itemChange(GraphicsItemChange change, const QVariant& value) override;
 
 private:
@@ -47,6 +52,7 @@ private:
     bool m_snapToGrid = true;
     double m_gridSpacingMm = 5.0;
     bool m_dragging = false;
+    bool m_interactionActive = false;
     QRectF contentRectPx() const;
     QRectF imageRectPx() const;
     QRectF visualRectPx() const;

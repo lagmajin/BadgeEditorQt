@@ -66,6 +66,8 @@ private:
     void onSelectionChanged();
     void onBadgeDeselected();
     void onBadgeMoved(BadgeGraphicItem* item);
+    void onBadgeEditStarted(BadgeGraphicItem* item);
+    void onBadgeEditFinished(BadgeGraphicItem* item);
     void onInspectorChanged();
     void onSetImage();
     void onNudgeRequested(double dxMm, double dyMm);
@@ -219,6 +221,10 @@ private:
     QList<BadgeGraphicItem*> m_selected;
     QList<BadgeItem> m_badges;
     QList<BadgeItem> m_layoutBadges;
+    QList<BadgeItem> m_pendingEditBeforeBadges;
+    QList<int> m_pendingEditBeforeSelection;
+    BadgeGraphicItem* m_pendingEditItem = nullptr;
+    bool m_pendingEditActive = false;
     enum class LayoutPreviewMode {
         CurrentDesign,
         FillPageFromSelection,

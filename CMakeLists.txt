@@ -67,7 +67,7 @@ target_sources(BadgeEditorQt
 target_link_libraries(BadgeEditorQt PRIVATE Qt6::Widgets Qt6::Core Qt6::PrintSupport ads::qtadvanceddocking-qt6 OpenImageIO::OpenImageIO)
 
 if (WIN32)
-    target_link_libraries(BadgeEditorQt PRIVATE dwmapi)
+    target_link_libraries(BadgeEditorQt PRIVATE dwmapi ole32 windowscodecs)
 endif()
 
 if (TARGET Qt6::Svg)

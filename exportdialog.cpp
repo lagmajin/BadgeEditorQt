@@ -5,11 +5,49 @@
 #include <QFormLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
+#include <QComboBox>
 #include <QLabel>
 #include <QLineEdit>
 #include <QPushButton>
 #include <QSpinBox>
 #include <QCheckBox>
+#include <QSignalBlocker>
+
+namespace {
+
+QString pdfPresetHelpText(int index) {
+    switch (index) {
+    case 1:
+        return QStringLiteral("印刷所向けの設定です。高めの DPI と CMYK を使います。");
+    case 2:
+        return QStringLiteral("白黒印刷や確認用です。色は落として扱います。");
+    default:
+        return QStringLiteral("通常のPDF出力です。まずはこれを選べば大丈夫です。");
+    }
+}
+
+QString pdfColorModelHelpText(int index) {
+    switch (index) {
+    case 1:
+        return QStringLiteral("CMYK を指定します。入稿先の指定があるとき向けです。");
+    case 2:
+        return QStringLiteral("グレースケールで出力します。確認用途に向きます。");
+    default:
+        return QStringLiteral("RGB で出力します。画面の見え方に近い出力です。");
+    }
+}
+
+void updatePdfHelpLabel(QLabel* label, int presetIndex, int colorModelIndex, int dpi) {
+    if (!label) {
+        return;
+    }
+    label->setText(QStringLiteral("%1\n%2\n現在の解像度: %3 DPI")
+                       .arg(pdfPresetHelpText(presetIndex),
+                            pdfColorModelHelpText(colorModelIndex),
+                            QString::number(dpi)));
+}
+
+}
 
 ExportDialog::ExportDialog(Format format, const QString& defaultPath, QWidget* parent)
     : QDialog(parent), m_format(format) {
@@ -51,6 +89,59 @@ ExportDialog::ExportDialog(Format format, const QString& defaultPath, QWidget* p
         m_whiteBackground = new QCheckBox("白背景で出力");
         m_whiteBackground->setChecked(true);
         optForm->addRow(m_whiteBackground);
+    } else {
+        m_pdfPreset = new QComboBox;
+        m_pdfPreset->addItems({"標準", "印刷向け", "グレースケール"});
+        optForm->addRow("プリセット:", m_pdfPreset);
+
+        m_pdfColorModel = new QComboBox;
+        m_pdfColorModel->addItems({"RGB", "CMYK", "グレースケール"});
+        m_pdfColorModel->setCurrentIndex(0);
+        optForm->addRow("色モード:", m_pdfColorModel);
+
+        m_pdfPresetHelp = new QLabel;
+        m_pdfPresetHelp->setWordWrap(true);
+        m_pdfPresetHelp->setStyleSheet(QStringLiteral("color: #666666;"));
+        optForm->addRow(QString(), m_pdfPresetHelp);
+
+        auto refreshHelp = [this]() {
+            updatePdfHelpLabel(m_pdfPresetHelp,
+                               m_pdfPreset ? m_pdfPreset->currentIndex() : 0,
+                               m_pdfColorModel ? m_pdfColorModel->currentIndex() : 0,
+                               m_dpiSpin ? m_dpiSpin->value() : 300);
+        };
+
+        connect(m_pdfPreset, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this, refreshHelp](int index) {
+            if (!m_dpiSpin || !m_pdfColorModel) {
+                return;
+            }
+
+            QSignalBlocker dpiBlock(m_dpiSpin);
+            QSignalBlocker colorBlock(m_pdfColorModel);
+            switch (index) {
+            case 1:
+                m_dpiSpin->setValue(600);
+                m_pdfColorModel->setCurrentIndex(1);
+                break;
+            case 2:
+                m_dpiSpin->setValue(300);
+                m_pdfColorModel->setCurrentIndex(2);
+                break;
+            default:
+                m_dpiSpin->setValue(300);
+                m_pdfColorModel->setCurrentIndex(0);
+                break;
+            }
+            refreshHelp();
+        });
+        connect(m_pdfColorModel, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [refreshHelp](int) {
+            refreshHelp();
+        });
+        connect(m_dpiSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, [refreshHelp](int) {
+            refreshHelp();
+        });
+        m_pdfPreset->setCurrentIndex(0);
+        refreshHelp();
     }
     root->addWidget(optGroup);
 
@@ -70,4 +161,8 @@ int ExportDialog::dpi() const {
 
 bool ExportDialog::whiteBackground() const {
     return m_whiteBackground ? m_whiteBackground->isChecked() : true;
+}
+
+int ExportDialog::pdfColorModelIndex() const {
+    return m_pdfColorModel ? m_pdfColorModel->currentIndex() : 0;
 }
