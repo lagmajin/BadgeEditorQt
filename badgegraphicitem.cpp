@@ -99,7 +99,7 @@ class ResizeHandle : public QGraphicsRectItem {
 public:
     enum Corner { TL, TR, BL, BR };
     ResizeHandle(Corner c, BadgeGraphicItem* parent) : QGraphicsRectItem(parent), m_corner(c), m_badge(parent) {
-        setRect(-6, -6, 12, 12);
+        setRect(-8, -8, 16, 16);
         setBrush(Qt::white);
         setPen(QPen(Qt::blue, 1.5));
         setFlag(ItemIgnoresTransformations, true);
@@ -148,6 +148,8 @@ protected:
         const bool hasImageContent = !b.imagePath.isEmpty() || !b.layers.isEmpty();
         const bool asymmetricResize = hasImageContent && (e->modifiers() & Qt::AltModifier);
         const bool keepAspect = !asymmetricResize && (e->modifiers() & Qt::ShiftModifier);
+        const bool precisionMode = e->modifiers() & Qt::ControlModifier;
+        const double sensitivity = precisionMode ? 0.25 : 1.0;
         const double startX = b.xMm;
         const double startY = b.yMm;
         const double startW = std::max(0.1, b.widthMm);
@@ -157,12 +159,12 @@ protected:
             const double signX = (m_corner == TL || m_corner == BL) ? -1.0 : 1.0;
             const double signY = (m_corner == TL || m_corner == TR) ? -1.0 : 1.0;
             const double basePx = std::max(1.0, std::max(b.widthMm, b.heightMm) * mmToPx);
-            const double growthPx = std::max(signX * deltaLocal.x(), signY * deltaLocal.y());
+            const double growthPx = std::max(signX * deltaLocal.x(), signY * deltaLocal.y()) * sensitivity;
             const double factor = 1.0 + (growthPx / basePx);
             b.imageScale = std::clamp(b.imageScale * factor, 0.1, 5.0);
         } else {
-            const double dx = deltaLocal.x() / mmToPx;
-            const double dy = deltaLocal.y() / mmToPx;
+            const double dx = (deltaLocal.x() * sensitivity) / mmToPx;
+            const double dy = (deltaLocal.y() * sensitivity) / mmToPx;
             double nextW = startW;
             double nextH = startH;
             if (m_corner == TL || m_corner == BL) { nextW -= dx; b.xMm = startX + dx; }
@@ -486,6 +488,9 @@ void BadgeGraphicItem::mouseReleaseEvent(QGraphicsSceneMouseEvent* event) {
 
 QVariant BadgeGraphicItem::itemChange(GraphicsItemChange change, const QVariant& value) {
     if (change == ItemPositionChange && m_snapToGrid && m_gridSpacingMm > 0.0) {
+        if (QApplication::keyboardModifiers() & Qt::ControlModifier) {
+            return value;
+        }
         const double mmToPx = 96.0 / 25.4;
         const double stepPx = m_gridSpacingMm * mmToPx;
         if (stepPx > 0.0) {

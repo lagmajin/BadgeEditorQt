@@ -24,6 +24,7 @@
 #include <QGraphicsSimpleTextItem>
 #include <QUrl>
 #include <algorithm>
+#include "viewportbackend.h"
 
 import badge.imageio;
 import badge.document;
@@ -284,6 +285,7 @@ LayoutWorkspaceWidget::LayoutWorkspaceWidget(QWidget* parent)
     m_view = new QGraphicsView(m_scene, this);
     m_view->setRenderHints(QPainter::Antialiasing);
     m_view->setBackgroundBrush(palette().brush(QPalette::Window));
+    viewportbackend::applySceneViewportProfile(m_view, viewportbackend::experimentalGpuViewportEnabled());
     layout->addWidget(m_view);
 
     m_impl = new Impl;
@@ -317,6 +319,10 @@ void LayoutWorkspaceWidget::setDocument(const badge::DocumentData& document) {
 
 void LayoutWorkspaceWidget::refresh() {
     rebuildScene();
+}
+
+void LayoutWorkspaceWidget::setExperimentalGpuViewport(bool on) {
+    viewportbackend::applySceneViewportProfile(m_view, on);
 }
 
 bool LayoutWorkspaceWidget::exportPng(const QString& filePath, int dpi, bool whiteBackground) const {

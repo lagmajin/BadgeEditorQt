@@ -7,6 +7,7 @@
 #include "layoutengine.h"
 #include "projectsync.h"
 #include "transferdebugdialog.h"
+#include "viewportbackend.h"
 #include <QMenuBar>
 #include <QMenu>
 #include <QAction>
@@ -510,6 +511,16 @@ int badgeSizePresetIndex(double widthMm, double heightMm) {
 
 double badgeGuideSizeMm(const BadgeItem& badge) {
     return std::max(badge.widthMm, badge.heightMm);
+}
+
+double activeGuideSizeMmFromBadges(const QList<BadgeItem>& badges, const QList<BadgeGraphicItem*>& selected) {
+    if (!selected.isEmpty() && selected.first()) {
+        return badgeGuideSizeMm(selected.first()->badge());
+    }
+    if (!badges.isEmpty()) {
+        return badgeGuideSizeMm(badges.first());
+    }
+    return 32.0;
 }
 
 bool badgeInsideCentralGuide(const BadgeItem& badge, double guideSizeMm) {
@@ -1509,6 +1520,7 @@ void MainWindow::onSelectionChanged() {
         return;
     }
 
+    setInspectorControlsEnabled(true);
     m_updatingUI = true;
     BadgeItem& b = m_selected.first()->badge();
     m_propX->setValue(b.xMm); m_propY->setValue(b.yMm);
@@ -1551,6 +1563,7 @@ void MainWindow::onSelectionChanged() {
 
 void MainWindow::onBadgeDeselected() {
     m_selected.clear();
+    setInspectorControlsEnabled(false);
     m_updatingUI = true;
     m_propX->setValue(0); m_propY->setValue(0);
     m_propW->setValue(32); m_propH->setValue(32);
@@ -1588,7 +1601,7 @@ void MainWindow::onBadgeDeselected() {
     if (m_comboGlitter) {
         m_comboGlitter->setEnabled(false);
     }
-    m_designer->updateGuides(32.0);
+    m_designer->updateGuides(activeGuideSizeMmFromBadges(currentDesignerBadges(), m_selected));
     m_updatingUI = false;
     if (m_layerList) {
         m_layerList->clear();
@@ -1617,33 +1630,76 @@ void MainWindow::onInspectorChanged() {
         return;
     }
 
+    const QObject* source = sender();
+    const bool geometrySource = source == m_propX
+        || source == m_propY
+        || source == m_propW
+        || source == m_propH
+        || source == m_sizePreset;
+    const bool appearanceSource = source == m_propImageScale
+        || source == m_propRotation
+        || source == m_propText
+        || source == m_propClipCircle
+        || source == m_propBrightness
+        || source == m_propContrast
+        || source == m_propSaturation
+        || source == m_comboMaterial
+        || source == m_sliderSpecular
+        || source == m_sliderEnvReflection
+        || source == m_sliderGlitterStrength;
+
     auto after = before;
     for (int index : selected) {
         if (index < 0 || index >= after.size()) {
             continue;
         }
+        const auto& prior = before[index];
         auto& b = after[index];
-        b.xMm = m_propX->value();
-        b.yMm = m_propY->value();
-        b.widthMm = m_propW->value();
-        b.heightMm = m_propH->value();
-        b.imageScale = m_propImageScale ? (m_propImageScale->value() / 100.0) : b.imageScale;
-        b.materialPreset = m_comboMaterial ? m_comboMaterial->currentIndex() : b.materialPreset;
-        b.specularStrength = m_sliderSpecular ? (m_sliderSpecular->value() / 100.0) : b.specularStrength;
-        b.envReflectionStrength = m_sliderEnvReflection ? (m_sliderEnvReflection->value() / 100.0) : b.envReflectionStrength;
-        b.glitterStrength = m_sliderGlitterStrength ? (m_sliderGlitterStrength->value() / 100.0) : b.glitterStrength;
-        b.rotation = m_propRotation->value();
-        b.displayText = m_propText->text();
-        b.clipToCircle = m_propClipCircle ? m_propClipCircle->isChecked() : b.clipToCircle;
-        b.brightness = m_propBrightness->value();
-        b.contrast = m_propContrast->value();
-        b.saturation = m_propSaturation->value();
+        if (geometrySource || !appearanceSource) {
+            const bool sizeChanged = !qFuzzyCompare(prior.widthMm, m_propW->value())
+                || !qFuzzyCompare(prior.heightMm, m_propH->value());
+            b.xMm = m_propX->value();
+            b.yMm = m_propY->value();
+            b.widthMm = m_propW->value();
+            b.heightMm = m_propH->value();
+            if (sizeChanged) {
+                const double centerX = prior.xMm + prior.widthMm * 0.5;
+                const double centerY = prior.yMm + prior.heightMm * 0.5;
+                b.xMm = centerX - b.widthMm * 0.5;
+                b.yMm = centerY - b.heightMm * 0.5;
+            }
+        }
+        if (appearanceSource || !geometrySource) {
+            b.imageScale = m_propImageScale ? (m_propImageScale->value() / 100.0) : b.imageScale;
+            b.materialPreset = m_comboMaterial ? m_comboMaterial->currentIndex() : b.materialPreset;
+            b.specularStrength = m_sliderSpecular ? (m_sliderSpecular->value() / 100.0) : b.specularStrength;
+            b.envReflectionStrength = m_sliderEnvReflection ? (m_sliderEnvReflection->value() / 100.0) : b.envReflectionStrength;
+            b.glitterStrength = m_sliderGlitterStrength ? (m_sliderGlitterStrength->value() / 100.0) : b.glitterStrength;
+            b.rotation = m_propRotation->value();
+            b.displayText = m_propText->text();
+            b.clipToCircle = m_propClipCircle ? m_propClipCircle->isChecked() : b.clipToCircle;
+            b.brightness = m_propBrightness->value();
+            b.contrast = m_propContrast->value();
+            b.saturation = m_propSaturation->value();
+        }
     }
 
     m_designer->updateGuides(std::max(m_propW->value(), m_propH->value()));
 
     pushBadgeChange("プロパティ変更", before, selected, after, selected);
     appendLog(QStringLiteral("オブジェクト情報を更新しました"));
+}
+
+void MainWindow::setInspectorControlsEnabled(bool on) {
+    if (m_propGroup) m_propGroup->setEnabled(on);
+    if (m_colorGroup) m_colorGroup->setEnabled(on);
+    if (m_layerGroup) m_layerGroup->setEnabled(on);
+    if (m_guideGroup) m_guideGroup->setEnabled(on);
+    if (m_effectGroup) m_effectGroup->setEnabled(on);
+}
+
+double MainWindow::activeGuideSizeMm() const {
+    return activeGuideSizeMmFromBadges(currentDesignerBadges(), m_selected);
 }
 
 void MainWindow::onSetImage() {
@@ -2130,6 +2186,13 @@ void MainWindow::applyAppSettings(const AppSettings& settings) {
     m_appSettings = settings;
 
     applyTheme(settings.darkTheme);
+    const bool experimentalGpuViewport = viewportbackend::resolvedGpuViewportEnabled(settings.experimentalGpuViewport);
+    if (m_designer) {
+        m_designer->setExperimentalGpuViewport(experimentalGpuViewport);
+    }
+    if (m_layoutWorkspace) {
+        m_layoutWorkspace->setExperimentalGpuViewport(experimentalGpuViewport);
+    }
 
     if (m_actGridVisible) {
         const QSignalBlocker blocker(m_actGridVisible);
@@ -2239,6 +2302,7 @@ void MainWindow::loadAppSettings() {
     loaded.glitterEnabled = settings.value("app/glitterEnabled", loaded.glitterEnabled).toBool();
     loaded.glitterPattern = settings.value("app/glitterPattern", loaded.glitterPattern).toInt();
     loaded.printResolution = settings.value("app/printResolution", loaded.printResolution).toInt();
+    loaded.experimentalGpuViewport = settings.value("app/experimentalGpuViewport", loaded.experimentalGpuViewport).toBool();
     applyAppSettings(loaded);
 }
 
@@ -2254,6 +2318,7 @@ void MainWindow::saveAppSettings() {
     settings.setValue("app/glitterEnabled", m_appSettings.glitterEnabled);
     settings.setValue("app/glitterPattern", m_appSettings.glitterPattern);
     settings.setValue("app/printResolution", std::max(72, m_appSettings.printResolution));
+    settings.setValue("app/experimentalGpuViewport", m_appSettings.experimentalGpuViewport);
 }
 
 void MainWindow::resetDockState() {

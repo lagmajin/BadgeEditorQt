@@ -60,6 +60,7 @@ public:
     void applyThemePalette(const QPalette& palette);
     void updateBackground(const QBrush& brush);
     void setBatchMode(bool on);
+    void setExperimentalGpuViewport(bool on);
 
 Q_SIGNALS:
     void badgeSelected(BadgeGraphicItem* item) W_SIGNAL(badgeSelected, item);
@@ -106,12 +107,15 @@ private:
     bool m_panning = false;
     QPoint m_panLastPos;
     bool m_guideUpdatePending = false;
+    int m_interactiveEditDepth = 0;
     
     void createGlitter(int pattern);
     QPainterPath createStar(double size);
     QPainterPath createSnowflake(double size);
     QPointF guideSceneCenter() const;
     void positionGuideOverlays();
+    void setInteractiveViewportMode(bool on);
+    bool isNearSelectedItem(const QPoint& viewPos) const;
 };
 
 #endif

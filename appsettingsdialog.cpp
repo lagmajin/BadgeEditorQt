@@ -121,6 +121,20 @@ AppSettingsDialog::AppSettingsDialog(const AppSettings& settings, QWidget* paren
     printForm->addRow("解像度:", m_printResolution);
     root->addWidget(printGroup);
 
+    auto* advancedGroup = new QGroupBox("実験");
+    auto* advancedForm = new QFormLayout(advancedGroup);
+    m_experimentalGpuViewport = new QCheckBox("GPU viewport を使う");
+    m_experimentalGpuViewport->setChecked(settings.experimentalGpuViewport);
+    m_experimentalGpuViewport->setToolTip("描画が乱れる場合はオフに戻してください。");
+    advancedForm->addRow(m_experimentalGpuViewport);
+    auto* advancedHint = new QLabel("Designer と Layout の両方に効きます。");
+    advancedHint->setWordWrap(true);
+    QPalette hintPalette = advancedHint->palette();
+    hintPalette.setColor(QPalette::WindowText, hintPalette.color(QPalette::Mid));
+    advancedHint->setPalette(hintPalette);
+    advancedForm->addRow(advancedHint);
+    root->addWidget(advancedGroup);
+
     auto updateEnabledState = [this]() {
         const bool lightingOn = m_lightingEnabled && m_lightingEnabled->isChecked();
         const bool glitterOn = m_glitterEnabled && m_glitterEnabled->isChecked();
@@ -182,5 +196,6 @@ AppSettings AppSettingsDialog::settings() const {
     result.glitterEnabled = m_glitterEnabled ? m_glitterEnabled->isChecked() : false;
     result.glitterPattern = m_glitterPattern ? m_glitterPattern->currentIndex() : 0;
     result.printResolution = m_printResolution ? m_printResolution->value() : 300;
+    result.experimentalGpuViewport = m_experimentalGpuViewport ? m_experimentalGpuViewport->isChecked() : false;
     return result;
 }

@@ -132,6 +132,8 @@ private:
     void deleteSavedPerspective();
     void refreshPerspectiveMenu();
     void updateToolbarsForMode();
+    void setInspectorControlsEnabled(bool on);
+    double activeGuideSizeMm() const;
 
     // UI
     ads::CDockManager* m_dockManager = nullptr;

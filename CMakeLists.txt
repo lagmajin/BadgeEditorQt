@@ -8,7 +8,7 @@ set(CMAKE_AUTOMOC OFF)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC OFF)
 
-find_package(Qt6 REQUIRED COMPONENTS Widgets Core PrintSupport)
+find_package(Qt6 REQUIRED COMPONENTS Widgets Core PrintSupport OpenGLWidgets)
 find_package(Qt6 COMPONENTS Svg QUIET)
 find_package(qtadvanceddocking-qt6 REQUIRED)
 find_package(OpenImageIO CONFIG REQUIRED)
@@ -19,6 +19,7 @@ set(SOURCES
     dockstylemanager.cpp
     designerwidget.cpp
     layoutworkspacewidget.cpp
+    viewportbackend.cpp
     batchlayoutdialog.cpp
     exportdialog.cpp
     appsettingsdialog.cpp
@@ -37,6 +38,7 @@ set(HEADERS
     dockstylemanager.h
     designerwidget.h
     layoutworkspacewidget.h
+    viewportbackend.h
     batchlayoutdialog.h
     exportdialog.h
     appsettingsdialog.h
@@ -64,7 +66,7 @@ target_sources(BadgeEditorQt
             badge.qtbridge.ixx
 )
 
-target_link_libraries(BadgeEditorQt PRIVATE Qt6::Widgets Qt6::Core Qt6::PrintSupport ads::qtadvanceddocking-qt6 OpenImageIO::OpenImageIO)
+target_link_libraries(BadgeEditorQt PRIVATE Qt6::Widgets Qt6::Core Qt6::PrintSupport Qt6::OpenGLWidgets ads::qtadvanceddocking-qt6 OpenImageIO::OpenImageIO)
 
 if (WIN32)
     target_link_libraries(BadgeEditorQt PRIVATE dwmapi ole32 windowscodecs)

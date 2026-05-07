@@ -15,6 +15,7 @@
 #include <cmath>
 #include <utility>
 #include <wobjectimpl.h>
+#include "viewportbackend.h"
 
 static QColor blend(const QColor& a, const QColor& b, qreal ratio) {
     const qreal clamped = std::clamp(ratio, 0.0, 1.0);
@@ -110,8 +111,7 @@ DesignerWidget::DesignerWidget(QWidget* parent) : QGraphicsView(parent) {
     setAcceptDrops(true);
     viewport()->setAcceptDrops(true);
     setTransformationAnchor(QGraphicsView::AnchorUnderMouse);
-    setViewportUpdateMode(QGraphicsView::BoundingRectViewportUpdate);
-    setCacheMode(QGraphicsView::CacheBackground);
+    viewportbackend::applySceneViewportProfile(this, viewportbackend::experimentalGpuViewportEnabled());
     setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
     setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
     setBackgroundBrush(Qt::NoBrush);
@@ -152,8 +152,18 @@ void DesignerWidget::addBadge(const BadgeItem& item) {
     connect(gi, &BadgeGraphicItem::badgeClicked, this, &DesignerWidget::badgeSelected);
     connect(gi, &BadgeGraphicItem::badgeDoubleClicked, this, &DesignerWidget::badgeDoubleClicked);
     connect(gi, &BadgeGraphicItem::badgeMoved, this, &DesignerWidget::badgeMoved);
-    connect(gi, &BadgeGraphicItem::badgeEditStarted, this, &DesignerWidget::badgeEditStarted);
-    connect(gi, &BadgeGraphicItem::badgeEditFinished, this, &DesignerWidget::badgeEditFinished);
+    connect(gi, &BadgeGraphicItem::badgeEditStarted, this, [this](BadgeGraphicItem* item) {
+        if (m_interactiveEditDepth++ == 0) {
+            setInteractiveViewportMode(true);
+        }
+        emit badgeEditStarted(item);
+    });
+    connect(gi, &BadgeGraphicItem::badgeEditFinished, this, [this](BadgeGraphicItem* item) {
+        if (m_interactiveEditDepth > 0 && --m_interactiveEditDepth == 0) {
+            setInteractiveViewportMode(false);
+        }
+        emit badgeEditFinished(item);
+    });
 }
 
 void DesignerWidget::setBadgeItems(const QList<BadgeItem>& items, const QList<int>& selectedIndices) {
@@ -357,7 +367,9 @@ void DesignerWidget::setLightingEnabled(bool on) {
     if (m_lightingOverlay) {
         m_lightingOverlay->setVisible(on);
     }
-    setViewportUpdateMode(on ? QGraphicsView::BoundingRectViewportUpdate : QGraphicsView::SmartViewportUpdate);
+    if (m_interactiveEditDepth == 0) {
+        setViewportUpdateMode(QGraphicsView::SmartViewportUpdate);
+    }
     viewport()->update();
 }
 void DesignerWidget::setLightAngle(int degrees) {
@@ -512,7 +524,7 @@ void DesignerWidget::mousePressEvent(QMouseEvent* event) {
         event->accept();
         return;
     }
-    if (event->button() == Qt::LeftButton && !itemAt(event->pos())) {
+    if (event->button() == Qt::LeftButton && !itemAt(event->pos()) && !isNearSelectedItem(event->pos())) {
         m_scene->clearSelection();
         emit badgeDeselected();
     }
@@ -620,6 +632,42 @@ void DesignerWidget::drawForeground(QPainter* painter, const QRectF& rect) {
         painter->drawEllipse(QPointF(cx, cy), rv, rv);
     }
 
+    // Small left-top HUD for editor context.
+    {
+        const QList<BadgeGraphicItem*> selection = selectedGraphics();
+        const int selectionCount = selection.size();
+        const double zoomPercent = transform().m11() * 100.0;
+        const QString hudText = QStringLiteral("Zoom %1% | Snap %2 | Grid %3 mm | Sel %4 | Badge %5 mm")
+                                    .arg(zoomPercent, 0, 'f', 0)
+                                    .arg(m_snapToGrid ? QStringLiteral("ON") : QStringLiteral("OFF"))
+                                    .arg(m_gridSpacingMm, 0, 'f', 1)
+                                    .arg(selectionCount)
+                                    .arg(m_badgeSizeMm, 0, 'f', 0);
+
+        painter->save();
+        QFont hudFont = painter->font();
+        hudFont.setPointSizeF(std::max(8.0, hudFont.pointSizeF() - 1.0));
+        hudFont.setBold(true);
+        painter->setFont(hudFont);
+        const QFontMetricsF fm(hudFont);
+        const QRectF hudBox = fm.boundingRect(hudText).adjusted(-10.0, -7.0, 10.0, 9.0);
+        const QRectF hudRect(rect.left() + 14.0, rect.top() + 14.0, hudBox.width(), hudBox.height());
+
+        QColor hudBg = palette().color(QPalette::Window);
+        hudBg.setAlpha(208);
+        QColor hudBorder = palette().color(QPalette::Mid);
+        hudBorder.setAlpha(180);
+        QColor hudTextColor = palette().color(QPalette::WindowText);
+        hudTextColor.setAlpha(230);
+
+        painter->setPen(QPen(hudBorder, 1.0));
+        painter->setBrush(hudBg);
+        painter->drawRoundedRect(hudRect, 8.0, 8.0);
+        painter->setPen(hudTextColor);
+        painter->drawText(hudRect, Qt::AlignCenter, hudText);
+        painter->restore();
+    }
+
     if (m_graphicItems.isEmpty()) {
         painter->save();
         QColor titleColor = palette().color(QPalette::WindowText);
@@ -672,6 +720,30 @@ void DesignerWidget::drawForeground(QPainter* painter, const QRectF& rect) {
 }
 
 void DesignerWidget::setBatchMode(bool on) { m_batchMode = on; viewport()->update(); }
+
+void DesignerWidget::setExperimentalGpuViewport(bool on) {
+    viewportbackend::applySceneViewportProfile(this, on);
+}
+
+void DesignerWidget::setInteractiveViewportMode(bool on) {
+    setViewportUpdateMode(on ? QGraphicsView::FullViewportUpdate : QGraphicsView::SmartViewportUpdate);
+    viewport()->update();
+}
+
+bool DesignerWidget::isNearSelectedItem(const QPoint& viewPos) const {
+    constexpr int kTolerancePx = 10;
+    for (auto* gi : selectedGraphics()) {
+        if (!gi) {
+            continue;
+        }
+        const QRectF sceneRect = gi->sceneBoundingRect();
+        const QRect viewRect = mapFromScene(sceneRect).boundingRect().adjusted(-kTolerancePx, -kTolerancePx, kTolerancePx, kTolerancePx);
+        if (viewRect.contains(viewPos)) {
+            return true;
+        }
+    }
+    return false;
+}
 
 void DesignerWidget::dragEnterEvent(QDragEnterEvent* event) {
     if (event->mimeData()->hasUrls()) {
