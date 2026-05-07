@@ -259,8 +259,7 @@ void DesignerWidget::keyPressEvent(QKeyEvent* event) {
     const bool hasSelection = !selectedGraphics().isEmpty();
     if (hasSelection) {
         const bool fast = (event->modifiers() & Qt::ShiftModifier);
-        const double baseStep = m_snapToGrid ? std::max(0.1, m_gridSpacingMm) : 1.0;
-        const double step = fast ? baseStep * 5.0 : baseStep;
+        const double step = fast ? 1.0 : 0.1;
         double dx = 0.0;
         double dy = 0.0;
         switch (event->key()) {

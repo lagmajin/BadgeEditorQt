@@ -224,7 +224,7 @@ public:
 
     void paint(QPainter* painter, const QStyleOptionGraphicsItem*, QWidget*) override {
         painter->save();
-        painter->setPen(QPen(Qt::black));
+        painter->setPen(Qt::NoPen);
         painter->setBrush(m_clipToCircle ? Qt::NoBrush : QBrush(Qt::white));
         if (m_clipToCircle) {
             painter->drawEllipse(m_rect);

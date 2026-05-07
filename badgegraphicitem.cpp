@@ -448,7 +448,10 @@ void BadgeGraphicItem::syncFromBadge() {
     double px = m_badge.xMm * 96.0 / 25.4;
     double py = m_badge.yMm * 96.0 / 25.4;
     if (qAbs(pos().x() - px) > 0.1 || qAbs(pos().y() - py) > 0.1) {
+        const bool snapToGrid = m_snapToGrid;
+        m_snapToGrid = false;
         setPos(px, py);
+        m_snapToGrid = snapToGrid;
         changed = true;
     }
     if (qAbs(rotation() - m_badge.rotation) > 0.1) {
