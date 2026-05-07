@@ -1487,7 +1487,6 @@ void MainWindow::onModeChanged(bool designer) {
     updateInspectorMode();
     updateToolbarsForMode();
     if (designer) {
-        m_layoutPreviewMode = LayoutPreviewMode::CurrentDesign;
         openDesignerPerspective();
     } else {
         syncLayoutWorkspace();
@@ -2275,8 +2274,6 @@ void MainWindow::openDesignerPerspective() {
         return;
     }
     refreshDocumentFromDesigner();
-    m_layoutPreviewMode = LayoutPreviewMode::CurrentDesign;
-    m_layoutBadges = m_badges;
     m_designerDock->setAsCurrentTab();
     m_dockManager->openPerspective("designer");
     syncPerspectiveUiDeferred("designer");
@@ -2386,17 +2383,15 @@ void MainWindow::syncPerspectiveUi(const QString& name) {
     if (designer) {
         m_designer->setGuidesVisible(true);
         m_skipNextLayoutSync = false;
-        m_layoutPreviewMode = LayoutPreviewMode::CurrentDesign;
-        if (m_layoutBadges.isEmpty() || m_layoutPreviewMode == LayoutPreviewMode::CurrentDesign) {
-            m_layoutBadges = m_badges;
-        }
     }
     updateInspectorMode();
     updateToolbarsForMode();
-    if (!designer && m_skipNextLayoutSync) {
-        m_skipNextLayoutSync = false;
-    } else {
-        syncLayoutWorkspace();
+    if (!designer) {
+        if (m_skipNextLayoutSync) {
+            m_skipNextLayoutSync = false;
+        } else {
+            syncLayoutWorkspace();
+        }
     }
 }
 
