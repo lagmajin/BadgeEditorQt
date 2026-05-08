@@ -255,8 +255,17 @@ bool badgeLayerEquals(const LayerItem& a, const LayerItem& b) {
         && a.blendMode == b.blendMode;
 }
 
+bool badgeGuideEquals(const GuideItemData& a, const GuideItemData& b) {
+    return a.shape == b.shape
+        && a.bleedMm == b.bleedMm
+        && a.safeInsetMm == b.safeInsetMm
+        && a.cornerRadiusMm == b.cornerRadiusMm;
+}
+
 bool badgeEquals(const BadgeItem& a, const BadgeItem& b) {
-    return a.widthMm == b.widthMm
+    return a.productMode == b.productMode
+        && badgeGuideEquals(a.guide, b.guide)
+        && a.widthMm == b.widthMm
         && a.heightMm == b.heightMm
         && a.imageScale == b.imageScale
         && a.materialPreset == b.materialPreset
@@ -630,7 +639,12 @@ int badgeSizePresetIndex(double widthMm, double heightMm) {
 }
 
 double badgeGuideSizeMm(const BadgeItem& badge) {
-    return std::max(badge.widthMm, badge.heightMm);
+    const double widthMm = std::max(0.1, badge.widthMm);
+    const double heightMm = std::max(0.1, badge.heightMm);
+    if (std::abs(widthMm - heightMm) > 0.1) {
+        return std::min(widthMm, heightMm);
+    }
+    return widthMm;
 }
 
 double activeGuideSizeMmFromBadges(const QList<BadgeItem>& badges, const QList<BadgeGraphicItem*>& selected) {
@@ -1903,7 +1917,9 @@ void MainWindow::onInspectorChanged() {
         }
     }
 
-    m_designer->updateGuides(std::max(m_propW->value(), m_propH->value()));
+    if (!selected.isEmpty() && selected.first() >= 0 && selected.first() < after.size()) {
+        m_designer->updateGuides(badgeGuideSizeMm(after[selected.first()]));
+    }
 
     pushBadgeChange("プロパティ変更", before, selected, after, selected);
     appendLog(QStringLiteral("オブジェクト情報を更新しました"));

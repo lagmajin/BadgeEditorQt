@@ -48,7 +48,28 @@ inline LayerItem layerFromImagePath(const QString& imagePath) {
     return layer;
 }
 
+enum class ProductMode {
+    Badge = 0,
+    Sticker = 1,
+};
+
+enum class GuideShape {
+    Circle = 0,
+    Rectangle = 1,
+    RoundedRectangle = 2,
+    Oval = 3,
+};
+
+struct GuideItemData {
+    GuideShape shape = GuideShape::Circle;
+    double bleedMm = 3.0;
+    double safeInsetMm = 2.0;
+    double cornerRadiusMm = 3.0;
+};
+
 struct BadgeItem {
+    ProductMode productMode = ProductMode::Badge;
+    GuideItemData guide;
     double widthMm = 32.0;
     double heightMm = 32.0;
     double imageScale = 1.0;

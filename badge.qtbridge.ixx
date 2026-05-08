@@ -21,6 +21,54 @@ inline void migrateLegacyImageToLayers(QString& imagePath, QList<LayerItem>& lay
     imagePath.clear();
 }
 
+inline badge::ProductMode toCoreProductMode(::ProductMode mode) {
+    switch (mode) {
+    case ::ProductMode::Sticker:
+        return badge::ProductMode::Sticker;
+    case ::ProductMode::Badge:
+    default:
+        return badge::ProductMode::Badge;
+    }
+}
+
+inline ::ProductMode fromCoreProductMode(badge::ProductMode mode) {
+    switch (mode) {
+    case badge::ProductMode::Sticker:
+        return ::ProductMode::Sticker;
+    case badge::ProductMode::Badge:
+    default:
+        return ::ProductMode::Badge;
+    }
+}
+
+inline badge::GuideShape toCoreGuideShape(::GuideShape shape) {
+    switch (shape) {
+    case ::GuideShape::Rectangle:
+        return badge::GuideShape::Rectangle;
+    case ::GuideShape::RoundedRectangle:
+        return badge::GuideShape::RoundedRectangle;
+    case ::GuideShape::Oval:
+        return badge::GuideShape::Oval;
+    case ::GuideShape::Circle:
+    default:
+        return badge::GuideShape::Circle;
+    }
+}
+
+inline ::GuideShape fromCoreGuideShape(badge::GuideShape shape) {
+    switch (shape) {
+    case badge::GuideShape::Rectangle:
+        return ::GuideShape::Rectangle;
+    case badge::GuideShape::RoundedRectangle:
+        return ::GuideShape::RoundedRectangle;
+    case badge::GuideShape::Oval:
+        return ::GuideShape::Oval;
+    case badge::GuideShape::Circle:
+    default:
+        return ::GuideShape::Circle;
+    }
+}
+
 }
 
 export namespace badge::qt {
@@ -51,6 +99,11 @@ export inline LayerItem fromCoreLayer(const badge::LayerData& layer) {
 
 export inline badge::BadgeData toCoreBadge(const BadgeItem& item) {
     badge::BadgeData core;
+    core.productMode = detail::toCoreProductMode(item.productMode);
+    core.guide.shape = detail::toCoreGuideShape(item.guide.shape);
+    core.guide.bleedMm = item.guide.bleedMm;
+    core.guide.safeInsetMm = item.guide.safeInsetMm;
+    core.guide.cornerRadiusMm = item.guide.cornerRadiusMm;
     core.widthMm = item.widthMm;
     core.heightMm = item.heightMm;
     core.imageScale = item.imageScale;
@@ -82,6 +135,11 @@ export inline badge::BadgeData toCoreBadge(const BadgeItem& item) {
 
 export inline BadgeItem fromCoreBadge(const badge::BadgeData& item) {
     BadgeItem qt;
+    qt.productMode = detail::fromCoreProductMode(item.productMode);
+    qt.guide.shape = detail::fromCoreGuideShape(item.guide.shape);
+    qt.guide.bleedMm = item.guide.bleedMm;
+    qt.guide.safeInsetMm = item.guide.safeInsetMm;
+    qt.guide.cornerRadiusMm = item.guide.cornerRadiusMm;
     qt.widthMm = item.widthMm;
     qt.heightMm = item.heightMm;
     qt.imageScale = item.imageScale;

@@ -8,6 +8,25 @@ export module badge.model;
 
 export namespace badge {
 
+enum class ProductMode {
+    Badge = 0,
+    Sticker = 1,
+};
+
+enum class GuideShape {
+    Circle = 0,
+    Rectangle = 1,
+    RoundedRectangle = 2,
+    Oval = 3,
+};
+
+struct GuideData {
+    GuideShape shape = GuideShape::Circle;
+    double bleedMm = 3.0;
+    double safeInsetMm = 2.0;
+    double cornerRadiusMm = 3.0;
+};
+
 struct LayerData {
     std::string imagePath;
     std::string name;
@@ -19,6 +38,8 @@ struct LayerData {
 };
 
 struct BadgeData {
+    ProductMode productMode = ProductMode::Badge;
+    GuideData guide;
     double widthMm = 32.0;
     double heightMm = 32.0;
     double imageScale = 1.0;

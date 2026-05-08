@@ -185,9 +185,14 @@ QPixmap renderBadgePixmap(const badge::BadgeData& badgeData, const QSize& target
 QString badgeRenderCacheKey(const badge::BadgeData& badgeData, const QSize& targetSize) {
     QString key;
     key.reserve(256);
-    key += QStringLiteral("%1x%2|%3|%4|%5|%6|%7|%8|%9|%10|%11|%12|%13")
+    key += QStringLiteral("%1x%2|%3|%4|%5|%6|%7|%8|%9|%10|%11|%12|%13|%14|%15|%16|%17|%18|%19|%20|%21")
                .arg(targetSize.width())
                .arg(targetSize.height())
+               .arg(static_cast<int>(badgeData.productMode))
+               .arg(static_cast<int>(badgeData.guide.shape))
+               .arg(badgeData.guide.bleedMm, 0, 'f', 3)
+               .arg(badgeData.guide.safeInsetMm, 0, 'f', 3)
+               .arg(badgeData.guide.cornerRadiusMm, 0, 'f', 3)
                .arg(badgeData.widthMm, 0, 'f', 3)
                .arg(badgeData.heightMm, 0, 'f', 3)
                .arg(badgeData.imageScale, 0, 'f', 3)
