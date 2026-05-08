@@ -429,28 +429,31 @@ bool LayoutWorkspaceWidget::exportPdf(const QString& filePath, int dpi, QPdfWrit
     return true;
 }
 
-bool LayoutWorkspaceWidget::print(QPrinter* printer) const {
+bool LayoutWorkspaceWidget::print(QPrinter* printer, bool includeGuides) const {
     if (!m_scene || !printer || m_impl->document.paper.widthMm <= 0.0 || m_impl->document.paper.heightMm <= 0.0) {
         return false;
     }
 
     const auto safeGuides = sceneItemsByTag(m_scene, QString::fromLatin1(kSafeGuideTag));
     const auto emptyHints = sceneItemsByTag(m_scene, QString::fromLatin1(kEmptyHintTag));
-    for (auto* item : safeGuides) {
-        item->setVisible(false);
-    }
-    for (auto* item : emptyHints) {
-        item->setVisible(false);
-    }
-
-    printer->setColorMode(QPrinter::Color);
-    QPainter painter(printer);
-    if (!painter.isActive()) {
+    if (!includeGuides) {
         for (auto* item : safeGuides) {
-            item->setVisible(true);
+            item->setVisible(false);
         }
         for (auto* item : emptyHints) {
-            item->setVisible(true);
+            item->setVisible(false);
+        }
+    }
+
+    QPainter painter(printer);
+    if (!painter.isActive()) {
+        if (!includeGuides) {
+            for (auto* item : safeGuides) {
+                item->setVisible(true);
+            }
+            for (auto* item : emptyHints) {
+                item->setVisible(true);
+            }
         }
         return false;
     }
@@ -461,11 +464,13 @@ bool LayoutWorkspaceWidget::print(QPrinter* printer) const {
     renderDocumentScene(m_scene, m_impl->document, &painter, kSceneDpi, target);
     painter.end();
 
-    for (auto* item : safeGuides) {
-        item->setVisible(true);
-    }
-    for (auto* item : emptyHints) {
-        item->setVisible(true);
+    if (!includeGuides) {
+        for (auto* item : safeGuides) {
+            item->setVisible(true);
+        }
+        for (auto* item : emptyHints) {
+            item->setVisible(true);
+        }
     }
     return true;
 }

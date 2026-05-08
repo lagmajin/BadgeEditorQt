@@ -26,7 +26,7 @@ public:
     void setExperimentalGpuViewport(bool on);
     bool exportPdf(const QString& filePath, int dpi = 300, QPdfWriter::ColorModel colorModel = QPdfWriter::ColorModel::RGB) const;
     bool exportPng(const QString& filePath, int dpi = 300, bool whiteBackground = true) const;
-    bool print(QPrinter* printer) const;
+    bool print(QPrinter* printer, bool includeGuides = false) const;
 
 private:
     QGraphicsView* m_view = nullptr;

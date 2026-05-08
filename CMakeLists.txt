@@ -22,6 +22,7 @@ set(SOURCES
     viewportbackend.cpp
     batchlayoutdialog.cpp
     exportdialog.cpp
+    printdialog.cpp
     appsettingsdialog.cpp
     transferdebugdialog.cpp
     badgeitem.cpp
@@ -41,6 +42,7 @@ set(HEADERS
     viewportbackend.h
     batchlayoutdialog.h
     exportdialog.h
+    printdialog.h
     appsettingsdialog.h
     transferdebugdialog.h
     badgeitem.h

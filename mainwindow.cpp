@@ -5,6 +5,7 @@
 #include "exportdialog.h"
 #include "imageprocessor.h"
 #include "layoutengine.h"
+#include "printdialog.h"
 #include "projectsync.h"
 #include "transferdebugdialog.h"
 #include "viewportbackend.h"
@@ -42,7 +43,6 @@
 #include <QPageSize>
 #include <QPageLayout>
 #include <QPrinter>
-#include <QPrintDialog>
 #include <QPrintPreviewDialog>
 #include <QGraphicsScene>
 #include <QPainter>
@@ -424,7 +424,7 @@ LayerBlendMode inferLayerBlendMode(const QString& path, const QString& name) {
     return LayerBlendMode::Normal;
 }
 
-QPixmap renderLayerPreviewPixmap(const LayerItem& layer, const QPalette& palette, int sizePx = 128) {
+QPixmap renderLayerPreviewPixmap(const BadgeItem& badge, int layerIndex, const QPalette& palette, int sizePx = 128) {
     QPixmap preview(sizePx, sizePx);
     preview.fill(Qt::transparent);
 
@@ -443,18 +443,90 @@ QPixmap renderLayerPreviewPixmap(const LayerItem& layer, const QPalette& palette
         }
     }
 
-    const QImage loaded = ImageProcessor::loadImage(layer.imagePath, nullptr);
-    if (loaded.isNull()) {
+    if (layerIndex < 0 || layerIndex >= badge.layers.size()) {
         painter.setPen(palette.color(QPalette::WindowText));
         painter.drawText(preview.rect(), Qt::AlignCenter, QStringLiteral("No Preview"));
         return preview;
     }
 
-    const QPixmap pix = QPixmap::fromImage(loaded);
-    const QSize targetSize = pix.size().scaled(sizePx - 18, sizePx - 18, Qt::KeepAspectRatio);
-    const QRect targetRect(QPoint((sizePx - targetSize.width()) / 2, (sizePx - targetSize.height()) / 2), targetSize);
-    painter.setOpacity(std::clamp(layer.opacity, 0.0, 1.0));
-    painter.drawPixmap(targetRect, pix);
+    BadgeItem previewBadge = badge;
+    previewBadge.isSelected = false;
+
+    const QRectF contentRect = badgeContentRectPx(previewBadge);
+    const QRectF targetBounds = preview.rect().adjusted(8, 8, -8, -8);
+    const qreal scale = std::min(targetBounds.width() / std::max(1.0, contentRect.width()),
+                                 targetBounds.height() / std::max(1.0, contentRect.height()));
+    const QSizeF scaledSize(contentRect.width() * scale, contentRect.height() * scale);
+    const QRectF targetRect(QPointF(targetBounds.center().x() - scaledSize.width() * 0.5,
+                                    targetBounds.center().y() - scaledSize.height() * 0.5),
+                            scaledSize);
+
+    painter.save();
+    painter.translate(targetRect.left(), targetRect.top());
+    painter.scale(scale, scale);
+    painter.translate(-contentRect.left(), -contentRect.top());
+
+    if (previewBadge.clipToCircle) {
+        QPainterPath path;
+        path.addEllipse(contentRect);
+        painter.setClipPath(path);
+    }
+
+    const QString primaryPath = !previewBadge.layers.isEmpty() ? previewBadge.layers.first().imagePath : previewBadge.imagePath;
+    const QPixmap basePixmap = correctedPixmapForBadge(previewBadge, primaryPath);
+    const LayerItem* primaryLayer = previewBadge.layers.isEmpty() ? nullptr : &previewBadge.layers.first();
+    if (!basePixmap.isNull() && (!primaryLayer || primaryLayer->visible)) {
+        painter.save();
+        painter.setOpacity(primaryLayer ? primaryLayer->opacity : 1.0);
+        painter.setCompositionMode(primaryLayer ? compositionModeForLayer(primaryLayer->blendMode) : QPainter::CompositionMode_SourceOver);
+        const QRectF imageRect = badgePrimaryImageRectPx(previewBadge);
+        painter.drawPixmap(imageRect, basePixmap, QRectF(basePixmap.rect()));
+        painter.restore();
+    }
+
+    const int startLayer = previewBadge.layers.isEmpty() ? 0 : 1;
+    for (int i = startLayer; i < previewBadge.layers.size(); ++i) {
+        const auto& layer = previewBadge.layers[i];
+        if (!layer.visible) {
+            continue;
+        }
+        const QPixmap layerPixmap = correctedPixmapForBadge(previewBadge, layer.imagePath);
+        if (layerPixmap.isNull()) {
+            continue;
+        }
+        painter.save();
+        painter.setOpacity(layer.opacity);
+        painter.setCompositionMode(compositionModeForLayer(layer.blendMode));
+        const QRectF layerRect = contentRect.translated(layer.offsetX * 96.0 / 25.4,
+                                                        layer.offsetY * 96.0 / 25.4);
+        painter.drawPixmap(layerRect, layerPixmap, QRectF(layerPixmap.rect()));
+        painter.restore();
+    }
+
+    painter.setOpacity(1.0);
+    if (!previewBadge.displayText.isEmpty()) {
+        QFont font("Arial", 10);
+        painter.setFont(font);
+        painter.setPen(Qt::white);
+        painter.drawText(contentRect.adjusted(1, 1, 1, 1), Qt::AlignCenter, previewBadge.displayText);
+        painter.setPen(Qt::black);
+        painter.drawText(contentRect, Qt::AlignCenter, previewBadge.displayText);
+    }
+
+    const LayerItem& selectedLayer = previewBadge.layers[layerIndex];
+    const QString labelText = QStringLiteral("%1\n%2")
+        .arg(selectedLayer.name.isEmpty() ? QFileInfo(selectedLayer.imagePath).baseName() : selectedLayer.name,
+             layerItemSummary(selectedLayer));
+    const QFont labelFont = painter.font();
+    const QFontMetrics metrics(labelFont);
+    const QRect textBounds = metrics.boundingRect(QRect(0, 0, sizePx - 20, sizePx), Qt::TextWordWrap, labelText);
+    const QRect chipRect(8, 8, textBounds.width() + 14, textBounds.height() + 12);
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(QColor(20, 20, 22, 170));
+    painter.drawRoundedRect(chipRect, 8, 8);
+    painter.setPen(QColor(255, 255, 255, 230));
+    painter.drawText(chipRect.adjusted(7, 6, -7, -6), Qt::AlignLeft | Qt::AlignTop | Qt::TextWordWrap, labelText);
+    painter.restore();
     painter.end();
     return preview;
 }
@@ -1631,16 +1703,21 @@ void MainWindow::onPrintPreview() {
 void MainWindow::onPrint() {
     syncLayoutWorkspace();
     const badge::DocumentData document = projectsync::currentDocument(m_layoutBadges, *m_comboPaperSize, *m_chkLandscape, *m_spinPaperMargin, *m_spinPaperSpacing, m_currentFile);
-    QPrinter printer(QPrinter::HighResolution);
-    configurePrinterForDocument(printer, document, m_appSettings.printResolution);
-    QPrintDialog dlg(&printer, this);
-    dlg.setWindowTitle(QStringLiteral("印刷"));
+    PrintDialog dlg(document.paper.widthMm, document.paper.heightMm, m_appSettings.printResolution, this);
     if (dlg.exec() != QDialog::Accepted) {
         return;
     }
-    m_appSettings.printResolution = std::max(72, printer.resolution());
+    QPrinter printer(QPrinter::HighResolution);
+    const QString printerName = dlg.printerName();
+    if (!printerName.isEmpty()) {
+        printer.setPrinterName(printerName);
+    }
+    configurePrinterForDocument(printer, document, dlg.resolution());
+    printer.setColorMode(dlg.grayScale() ? QPrinter::GrayScale : QPrinter::Color);
+    printer.setCopyCount(std::max(1, dlg.copies()));
+    m_appSettings.printResolution = std::max(72, dlg.resolution());
     saveAppSettings();
-    if (!m_layoutWorkspace->print(&printer)) {
+    if (!m_layoutWorkspace->print(&printer, dlg.includeGuides())) {
         showFileWarning(this, QStringLiteral("印刷"), QStringLiteral("印刷"), QString());
     }
 }
@@ -2209,12 +2286,12 @@ void MainWindow::updateLayerPreviewUi() {
     const bool valid = hasSelection && row >= 0 && row < m_selected.first()->badge().layers.size();
     if (!valid) {
         m_layerPreviewLabel->setPixmap({});
-        m_layerPreviewLabel->setText(QStringLiteral("Layer Preview"));
+        m_layerPreviewLabel->setText(QStringLiteral("Composite Preview"));
         return;
     }
 
-    const auto& layer = m_selected.first()->badge().layers[row];
-    const QPixmap preview = renderLayerPreviewPixmap(layer, m_layerPreviewLabel->palette(), 128);
+    const auto& badge = m_selected.first()->badge();
+    const QPixmap preview = renderLayerPreviewPixmap(badge, row, m_layerPreviewLabel->palette(), 128);
     m_layerPreviewLabel->setText(QString());
     m_layerPreviewLabel->setPixmap(preview);
 }
