@@ -37,7 +37,6 @@ struct LayoutWorkspaceWidget::Impl {
 namespace {
 constexpr double kMmToInch = 1.0 / 25.4;
 constexpr double kSceneDpi = 96.0;
-constexpr double kCircleBleedMm = 3.0;
 constexpr int kItemRole = 0;
 const char* kSafeGuideTag = "safe-guide";
 const char* kEmptyHintTag = "empty-hint";
@@ -94,6 +93,30 @@ void addEmptyHint(QGraphicsScene* scene, const QRectF& paperRect) {
                  paperRect.center().y() - br.height() * 0.5);
 }
 
+QPainterPath guideShapePath(const QRectF& rect, badge::GuideShape shape, double cornerRadiusPx = 0.0) {
+    QPainterPath path;
+    switch (shape) {
+    case badge::GuideShape::Circle:
+    case badge::GuideShape::Oval:
+        path.addEllipse(rect);
+        break;
+    case badge::GuideShape::RoundedRectangle: {
+        const double radius = std::clamp(cornerRadiusPx, 0.0, std::min(rect.width(), rect.height()) * 0.5);
+        path.addRoundedRect(rect, radius, radius);
+        break;
+    }
+    case badge::GuideShape::Rectangle:
+    default:
+        path.addRect(rect);
+        break;
+    }
+    return path;
+}
+
+bool guideShapeUsesCropMarks(badge::GuideShape shape) {
+    return shape == badge::GuideShape::Rectangle || shape == badge::GuideShape::RoundedRectangle;
+}
+
 QPixmap renderBadgePixmap(const badge::BadgeData& badgeData, const QSize& targetSize) {
     if (!targetSize.isValid() || targetSize.width() <= 0 || targetSize.height() <= 0) {
         return {};
@@ -109,13 +132,12 @@ QPixmap renderBadgePixmap(const badge::BadgeData& badgeData, const QSize& target
 
     const QRectF rect(QPointF(0.0, 0.0), QSizeF(targetSize));
     const QRectF contentRect = rect;
-    if (qtBadge.clipToCircle && !qtBadge.flattenedForLayoutTransfer) {
-        constexpr double kSafeInsetMm = 3.5;
-        const double safeInsetPx = kSafeInsetMm * kSceneDpi * kMmToInch;
+    const badge::GuideShape guideShape = badge::effectiveGuideShape(badgeData);
+    if (guideShape != badge::GuideShape::Rectangle && !qtBadge.flattenedForLayoutTransfer) {
+        const double safeInsetPx = badge::effectiveGuideSafeInsetMm(badgeData) * kSceneDpi * kMmToInch;
         const QRectF safeRect = rect.adjusted(safeInsetPx, safeInsetPx, -safeInsetPx, -safeInsetPx);
-        QPainterPath clip;
-        clip.addEllipse(safeRect.isValid() ? safeRect : rect);
-        painter.setClipPath(clip);
+        const double cornerRadiusPx = badge::effectiveGuideCornerRadiusMm(badgeData) * kSceneDpi * kMmToInch;
+        painter.setClipPath(guideShapePath(safeRect.isValid() ? safeRect : rect, guideShape, cornerRadiusPx));
     }
 
     QString colorSpaceLabel;
@@ -237,9 +259,13 @@ QList<QGraphicsItem*> sceneItemsByTag(QGraphicsScene* scene, const QString& tag)
 
 class LayoutBadgeItem final : public QGraphicsItem {
 public:
-    LayoutBadgeItem(double x, double y, double w, double h, bool clipToCircle, const QPixmap& pixmap)
-        : m_rect(0.0, 0.0, clipToCircle ? std::max(w, h) : w, clipToCircle ? std::max(w, h) : h),
-          m_clipToCircle(clipToCircle),
+    LayoutBadgeItem(double x, double y, double w, double h, badge::GuideShape shape, double cornerRadiusPx, const QPixmap& pixmap)
+        : m_rect(0.0,
+                 0.0,
+                 shape == badge::GuideShape::Circle ? std::max(w, h) : w,
+                 shape == badge::GuideShape::Circle ? std::max(w, h) : h),
+          m_shape(shape),
+          m_cornerRadiusPx(cornerRadiusPx),
           m_pixmap(pixmap) {
         setPos(x, y);
     }
@@ -250,36 +276,28 @@ public:
 
     void paint(QPainter* painter, const QStyleOptionGraphicsItem*, QWidget*) override {
         painter->save();
+        const QPainterPath shapePath = guideShapePath(m_rect, m_shape, m_cornerRadiusPx);
         painter->setPen(Qt::NoPen);
-        painter->setBrush(m_clipToCircle ? Qt::NoBrush : QBrush(Qt::white));
-        if (m_clipToCircle) {
-            painter->drawEllipse(m_rect);
-        } else {
-            painter->drawRect(m_rect);
-        }
+        painter->setBrush(m_shape == badge::GuideShape::Circle ? Qt::NoBrush : QBrush(Qt::white));
+        painter->drawPath(shapePath);
 
         if (!m_pixmap.isNull()) {
+            painter->save();
             painter->setRenderHint(QPainter::SmoothPixmapTransform, true);
-            if (m_clipToCircle) {
-                QPainterPath clip;
-                clip.addEllipse(m_rect);
-                painter->setClipPath(clip);
+            if (m_shape != badge::GuideShape::Rectangle) {
+                painter->setClipPath(shapePath);
             }
             painter->drawPixmap(m_rect, m_pixmap, QRectF(m_pixmap.rect()));
+            painter->restore();
         }
 
         // Manual cut line around each badge.
         QPen cutPen(QColor(210, 0, 0), 1.4);
         painter->setPen(cutPen);
         painter->setBrush(Qt::NoBrush);
-        if (m_clipToCircle) {
-            painter->drawEllipse(m_rect.adjusted(0.5, 0.5, -0.5, -0.5));
-        } else {
-            painter->drawRect(m_rect.adjusted(0.5, 0.5, -0.5, -0.5));
-        }
+        painter->drawPath(guideShapePath(m_rect.adjusted(0.5, 0.5, -0.5, -0.5), m_shape, m_cornerRadiusPx));
 
-        // Crop marks are useful for rectangular badges; for round badges they just look noisy.
-        if (!m_clipToCircle) {
+        if (guideShapeUsesCropMarks(m_shape)) {
             const qreal mark = 6.0;
             painter->drawLine(QPointF(m_rect.left(), m_rect.top() + mark), QPointF(m_rect.left(), m_rect.top()));
             painter->drawLine(QPointF(m_rect.left(), m_rect.top()), QPointF(m_rect.left() + mark, m_rect.top()));
@@ -296,7 +314,8 @@ public:
 
 private:
     QRectF m_rect;
-    bool m_clipToCircle = false;
+    badge::GuideShape m_shape = badge::GuideShape::Rectangle;
+    double m_cornerRadiusPx = 0.0;
     QPixmap m_pixmap;
 };
 
@@ -509,8 +528,10 @@ void LayoutWorkspaceWidget::rebuildScene() {
     for (const auto& b : m_impl->document.badges) {
         const double x = b.xMm * mmToPx;
         const double y = b.yMm * mmToPx;
-        const double w = (b.clipToCircle ? std::max(b.widthMm, b.heightMm) + kCircleBleedMm : b.widthMm) * mmToPx;
-        const double h = (b.clipToCircle ? std::max(b.widthMm, b.heightMm) + kCircleBleedMm : b.heightMm) * mmToPx;
+        const double w = badge::guideFootprintWidthMm(b) * mmToPx;
+        const double h = badge::guideFootprintHeightMm(b) * mmToPx;
+        const badge::GuideShape guideShape = badge::effectiveGuideShape(b);
+        const double cornerRadiusPx = badge::effectiveGuideCornerRadiusMm(b) * mmToPx;
         const QSize renderSize(std::max(1, int(std::round(w))), std::max(1, int(std::round(h))));
         const QString cacheKey = badgeRenderCacheKey(b, renderSize);
         const auto it = renderCache.constFind(cacheKey);
@@ -519,6 +540,6 @@ void LayoutWorkspaceWidget::rebuildScene() {
             renderCache.insert(cacheKey, pixmap);
         }
 
-        m_scene->addItem(new LayoutBadgeItem(x, y, w, h, b.clipToCircle, pixmap));
+        m_scene->addItem(new LayoutBadgeItem(x, y, w, h, guideShape, cornerRadiusPx, pixmap));
     }
 }

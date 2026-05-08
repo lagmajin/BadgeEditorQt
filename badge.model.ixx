@@ -62,4 +62,55 @@ struct BadgeData {
     std::vector<LayerData> layers;
 };
 
+inline GuideShape effectiveGuideShape(const BadgeData& badge) {
+    if (badge.productMode == ProductMode::Sticker) {
+        return badge.guide.shape;
+    }
+    return badge.clipToCircle ? GuideShape::Circle : GuideShape::Rectangle;
+}
+
+inline double effectiveGuideBleedMm(const BadgeData& badge) {
+    if (badge.productMode == ProductMode::Sticker) {
+        return std::max(0.0, badge.guide.bleedMm);
+    }
+    return badge.clipToCircle ? 3.0 : 0.0;
+}
+
+inline double effectiveGuideSafeInsetMm(const BadgeData& badge) {
+    if (badge.productMode == ProductMode::Sticker) {
+        return std::max(0.0, badge.guide.safeInsetMm);
+    }
+    return badge.clipToCircle ? 3.5 : 0.0;
+}
+
+inline double effectiveGuideCornerRadiusMm(const BadgeData& badge) {
+    return effectiveGuideShape(badge) == GuideShape::RoundedRectangle
+        ? std::max(0.0, badge.guide.cornerRadiusMm)
+        : 0.0;
+}
+
+inline bool guideUsesCircularPacking(const BadgeData& badge) {
+    return effectiveGuideShape(badge) == GuideShape::Circle;
+}
+
+inline double guideFinishWidthMm(const BadgeData& badge) {
+    const double widthMm = std::max(0.1, badge.widthMm);
+    const double heightMm = std::max(0.1, badge.heightMm);
+    return effectiveGuideShape(badge) == GuideShape::Circle ? std::max(widthMm, heightMm) : widthMm;
+}
+
+inline double guideFinishHeightMm(const BadgeData& badge) {
+    const double widthMm = std::max(0.1, badge.widthMm);
+    const double heightMm = std::max(0.1, badge.heightMm);
+    return effectiveGuideShape(badge) == GuideShape::Circle ? std::max(widthMm, heightMm) : heightMm;
+}
+
+inline double guideFootprintWidthMm(const BadgeData& badge) {
+    return guideFinishWidthMm(badge) + effectiveGuideBleedMm(badge);
+}
+
+inline double guideFootprintHeightMm(const BadgeData& badge) {
+    return guideFinishHeightMm(badge) + effectiveGuideBleedMm(badge);
+}
+
 }
