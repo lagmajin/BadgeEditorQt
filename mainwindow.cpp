@@ -53,7 +53,10 @@
 #include <QDockWidget>
 #include <QTabWidget>
 #include <QSignalBlocker>
+#include <QAbstractItemModel>
+#include <QAbstractItemView>
 #include <QListWidgetItem>
+#include <QPixmap>
 #include <algorithm>
 #include <iterator>
 #include <functional>
@@ -248,7 +251,8 @@ bool badgeLayerEquals(const LayerItem& a, const LayerItem& b) {
         && a.opacity == b.opacity
         && a.visible == b.visible
         && a.offsetX == b.offsetX
-        && a.offsetY == b.offsetY;
+        && a.offsetY == b.offsetY
+        && a.blendMode == b.blendMode;
 }
 
 bool badgeEquals(const BadgeItem& a, const BadgeItem& b) {
@@ -336,14 +340,127 @@ QPixmap correctedPixmapForBadge(const BadgeItem& badge, const QString& path) {
     return pixmap;
 }
 
+QPainter::CompositionMode compositionModeForLayer(LayerBlendMode mode) {
+    switch (mode) {
+    case LayerBlendMode::Multiply: return QPainter::CompositionMode_Multiply;
+    case LayerBlendMode::Screen: return QPainter::CompositionMode_Screen;
+    case LayerBlendMode::Overlay: return QPainter::CompositionMode_Overlay;
+    case LayerBlendMode::SoftLight: return QPainter::CompositionMode_SoftLight;
+    case LayerBlendMode::Add: return QPainter::CompositionMode_Plus;
+    case LayerBlendMode::Normal:
+    default:
+        return QPainter::CompositionMode_SourceOver;
+    }
+}
+
+QString layerBlendModeText(LayerBlendMode mode) {
+    switch (mode) {
+    case LayerBlendMode::Multiply: return QStringLiteral("Multiply");
+    case LayerBlendMode::Screen: return QStringLiteral("Screen");
+    case LayerBlendMode::Overlay: return QStringLiteral("Overlay");
+    case LayerBlendMode::SoftLight: return QStringLiteral("Soft Light");
+    case LayerBlendMode::Add: return QStringLiteral("Add");
+    case LayerBlendMode::Normal:
+    default:
+        return QStringLiteral("Normal");
+    }
+}
+
+QString layerItemSummary(const LayerItem& layer) {
+    return QStringLiteral("%1  [%2, %3%]")
+        .arg(layer.name.isEmpty() ? QFileInfo(layer.imagePath).baseName() : layer.name,
+             layerBlendModeText(layer.blendMode),
+             QString::number(int(std::round(std::clamp(layer.opacity, 0.0, 1.0) * 100.0))));
+}
+
+LayerBlendMode inferLayerBlendMode(const QString& path, const QString& name) {
+    const QString haystack = (name + QLatin1Char(' ') + QFileInfo(path).baseName()).toLower();
+    if (haystack.contains("shadow") || haystack.contains("shade") || haystack.contains("dark")
+        || haystack.contains("mask") || haystack.contains("ink") || haystack.contains("line")) {
+        return LayerBlendMode::Multiply;
+    }
+    if (haystack.contains("spark") || haystack.contains("flare") || haystack.contains("add")) {
+        return LayerBlendMode::Add;
+    }
+    if (haystack.contains("glow") || haystack.contains("light") || haystack.contains("shine")
+        || haystack.contains("highlight") || haystack.contains("specular")) {
+        return LayerBlendMode::Screen;
+    }
+
+    const QImage image = ImageProcessor::loadImage(path, nullptr);
+    if (image.isNull()) {
+        return LayerBlendMode::Normal;
+    }
+
+    const QImage sample = image.scaled(16, 16, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+    double luminanceSum = 0.0;
+    double alphaSum = 0.0;
+    const int pixelCount = std::max(1, sample.width() * sample.height());
+    for (int y = 0; y < sample.height(); ++y) {
+        for (int x = 0; x < sample.width(); ++x) {
+            const QColor color = sample.pixelColor(x, y);
+            const double alpha = color.alphaF();
+            luminanceSum += color.redF() * 0.2126 + color.greenF() * 0.7152 + color.blueF() * 0.0722;
+            alphaSum += alpha;
+        }
+    }
+    const double avgLum = luminanceSum / pixelCount;
+    const double avgAlpha = alphaSum / pixelCount;
+    if (avgAlpha > 0.25 && avgLum < 0.35) {
+        return LayerBlendMode::Multiply;
+    }
+    if (avgLum > 0.78) {
+        return LayerBlendMode::Screen;
+    }
+    return LayerBlendMode::Normal;
+}
+
+QPixmap renderLayerPreviewPixmap(const LayerItem& layer, const QPalette& palette, int sizePx = 128) {
+    QPixmap preview(sizePx, sizePx);
+    preview.fill(Qt::transparent);
+
+    QPainter painter(&preview);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
+
+    const QColor windowColor = palette.color(QPalette::Window);
+    const QColor baseColor = palette.color(QPalette::Base);
+    const QColor a = blend(windowColor, baseColor, 0.15);
+    const QColor b = blend(windowColor, baseColor, 0.28);
+    const int tile = 12;
+    for (int y = 0; y < sizePx; y += tile) {
+        for (int x = 0; x < sizePx; x += tile) {
+            painter.fillRect(QRect(x, y, tile, tile), ((x / tile + y / tile) & 1) ? b : a);
+        }
+    }
+
+    const QImage loaded = ImageProcessor::loadImage(layer.imagePath, nullptr);
+    if (loaded.isNull()) {
+        painter.setPen(palette.color(QPalette::WindowText));
+        painter.drawText(preview.rect(), Qt::AlignCenter, QStringLiteral("No Preview"));
+        return preview;
+    }
+
+    const QPixmap pix = QPixmap::fromImage(loaded);
+    const QSize targetSize = pix.size().scaled(sizePx - 18, sizePx - 18, Qt::KeepAspectRatio);
+    const QRect targetRect(QPoint((sizePx - targetSize.width()) / 2, (sizePx - targetSize.height()) / 2), targetSize);
+    painter.setOpacity(std::clamp(layer.opacity, 0.0, 1.0));
+    painter.drawPixmap(targetRect, pix);
+    painter.end();
+    return preview;
+}
+
 void paintTransferBadgeContent(QPainter& painter, const BadgeItem& badge) {
     const QRectF contentRect = badgeContentRectPx(badge);
     const QString primaryPath = !badge.layers.isEmpty() ? badge.layers.first().imagePath : badge.imagePath;
     const QPixmap basePixmap = correctedPixmapForBadge(badge, primaryPath);
     const LayerItem* primaryLayer = badge.layers.isEmpty() ? nullptr : &badge.layers.first();
     if (!basePixmap.isNull() && (!primaryLayer || primaryLayer->visible)) {
+        painter.save();
         painter.setOpacity(primaryLayer ? primaryLayer->opacity : 1.0);
+        painter.setCompositionMode(primaryLayer ? compositionModeForLayer(primaryLayer->blendMode) : QPainter::CompositionMode_SourceOver);
         painter.drawPixmap(badgePrimaryImageRectPx(badge), basePixmap, QRectF(basePixmap.rect()));
+        painter.restore();
     }
 
     const int startLayer = badge.layers.isEmpty() ? 0 : 1;
@@ -356,10 +473,13 @@ void paintTransferBadgeContent(QPainter& painter, const BadgeItem& badge) {
         if (layerPixmap.isNull()) {
             continue;
         }
+        painter.save();
         painter.setOpacity(layer.opacity);
+        painter.setCompositionMode(compositionModeForLayer(layer.blendMode));
         const QRectF layerRect = contentRect.translated(layer.offsetX * 96.0 / 25.4,
                                                         layer.offsetY * 96.0 / 25.4);
         painter.drawPixmap(layerRect, layerPixmap, QRectF(layerPixmap.rect()));
+        painter.restore();
     }
 
     painter.setOpacity(1.0);
@@ -861,7 +981,27 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     auto* layerLayout = new QVBoxLayout(layerGroup);
     m_layerList = new QListWidget;
     m_layerList->setMaximumHeight(120);
+    m_layerList->setDragEnabled(true);
+    m_layerList->setAcceptDrops(true);
+    m_layerList->setDropIndicatorShown(true);
+    m_layerList->setDragDropMode(QAbstractItemView::InternalMove);
+    m_layerList->setDefaultDropAction(Qt::MoveAction);
+    m_layerList->setSelectionMode(QAbstractItemView::SingleSelection);
     layerLayout->addWidget(m_layerList);
+    m_layerPreviewLabel = new QLabel;
+    m_layerPreviewLabel->setFixedSize(128, 128);
+    m_layerPreviewLabel->setAlignment(Qt::AlignCenter);
+    m_layerPreviewLabel->setAutoFillBackground(true);
+    layerLayout->addWidget(m_layerPreviewLabel);
+    auto* layerOpacityLabel = new QLabel("不透明度");
+    layerLayout->addWidget(layerOpacityLabel);
+    m_sliderLayerOpacity = new QSlider(Qt::Horizontal);
+    m_sliderLayerOpacity->setRange(0, 100);
+    m_sliderLayerOpacity->setValue(100);
+    layerLayout->addWidget(m_sliderLayerOpacity);
+    m_comboLayerBlendMode = new QComboBox;
+    m_comboLayerBlendMode->addItems({"Normal", "Multiply", "Screen", "Overlay", "Soft Light", "Add"});
+    layerLayout->addWidget(m_comboLayerBlendMode);
     auto* layerBtnRow = new QHBoxLayout;
     auto* btnAddLayer = new QPushButton("＋");
     auto* btnDelLayer = new QPushButton("－");
@@ -877,6 +1017,68 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     layerLayout->addLayout(layerBtnRow);
     inspLayout->addWidget(layerGroup);
 
+    connect(m_layerList, &QListWidget::currentRowChanged, this, [this](int) {
+        updateLayerBlendModeUi();
+        updateLayerOpacityUi();
+        updateLayerPreviewUi();
+    });
+    connect(m_comboLayerBlendMode, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int){ onInspectorChanged(); });
+    connect(m_sliderLayerOpacity, &QSlider::valueChanged, this, [this](int){ onInspectorChanged(); });
+
+    connect(m_layerList->model(), &QAbstractItemModel::rowsAboutToBeMoved, this,
+            [this](const QModelIndex&, int start, int end, const QModelIndex&, int destinationRow) {
+                if (start != end || !m_selected.size()) {
+                    return;
+                }
+                m_pendingLayerReorderActive = true;
+                m_pendingLayerReorderBeforeBadges = currentDesignerBadges();
+                m_pendingLayerReorderBeforeSelection = selectedBadgeIndices();
+                Q_UNUSED(destinationRow);
+            });
+    connect(m_layerList->model(), &QAbstractItemModel::rowsMoved, this,
+            [this](const QModelIndex&, int start, int end, const QModelIndex&, int destinationRow) {
+                if (!m_pendingLayerReorderActive || m_pendingLayerReorderBeforeBadges.isEmpty() || m_pendingLayerReorderBeforeSelection.isEmpty()) {
+                    return;
+                }
+                if (start != end) {
+                    m_pendingLayerReorderActive = false;
+                    m_pendingLayerReorderBeforeBadges.clear();
+                    m_pendingLayerReorderBeforeSelection.clear();
+                    return;
+                }
+                auto before = m_pendingLayerReorderBeforeBadges;
+                auto after = before;
+                const int badgeIndex = m_pendingLayerReorderBeforeSelection.first();
+                if (badgeIndex < 0 || badgeIndex >= after.size()) {
+                    m_pendingLayerReorderActive = false;
+                    m_pendingLayerReorderBeforeBadges.clear();
+                    m_pendingLayerReorderBeforeSelection.clear();
+                    return;
+                }
+                auto& layers = after[badgeIndex].layers;
+                if (start < 0 || start >= layers.size()) {
+                    m_pendingLayerReorderActive = false;
+                    m_pendingLayerReorderBeforeBadges.clear();
+                    m_pendingLayerReorderBeforeSelection.clear();
+                    return;
+                }
+                LayerItem moving = layers.takeAt(start);
+                int insertAt = destinationRow;
+                if (insertAt > start) {
+                    --insertAt;
+                }
+                insertAt = std::clamp(insertAt, 0, int(layers.size()));
+                layers.insert(insertAt, moving);
+
+                m_pendingLayerReorderActive = false;
+                const auto selected = m_pendingLayerReorderBeforeSelection;
+                m_pendingLayerReorderBeforeBadges.clear();
+                m_pendingLayerReorderBeforeSelection.clear();
+                pushBadgeChange(QStringLiteral("レイヤー並べ替え"), before, selected, after, selected);
+                refreshLayerList();
+                updateLayerPreviewUi();
+            });
+
     connect(btnAddLayer, &QPushButton::clicked, this, [this]{
         if (m_selected.isEmpty()) return;
         const QString path = QFileDialog::getOpenFileName(this, "レイヤー画像を選択", QString(), "すべての画像 (*.png *.jpg *.jpeg *.bmp *.gif *.webp *.tiff *.tif *.svg *.ico);;PNG (*.png);;JPEG (*.jpg *.jpeg)");
@@ -890,6 +1092,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
         LayerItem layer;
         layer.imagePath = path;
         layer.name = QFileInfo(path).baseName();
+        layer.blendMode = inferLayerBlendMode(path, layer.name);
         after[selected.first()].layers.append(layer);
         pushBadgeChange("レイヤー追加", before, selected, after, selected);
         appendLog(QStringLiteral("レイヤーを追加しました: %1").arg(path));
@@ -1606,6 +1809,8 @@ void MainWindow::onBadgeDeselected() {
     if (m_layerList) {
         m_layerList->clear();
     }
+    updateLayerBlendModeUi();
+    updateLayerPreviewUi();
 }
 
 void MainWindow::onBadgeMoved(BadgeGraphicItem* item) {
@@ -1646,7 +1851,10 @@ void MainWindow::onInspectorChanged() {
         || source == m_comboMaterial
         || source == m_sliderSpecular
         || source == m_sliderEnvReflection
-        || source == m_sliderGlitterStrength;
+        || source == m_sliderGlitterStrength
+        || source == m_comboLayerBlendMode
+        || source == m_sliderLayerOpacity;
+    const bool layerSource = source == m_comboLayerBlendMode || source == m_sliderLayerOpacity;
 
     auto after = before;
     for (int index : selected) {
@@ -1681,6 +1889,17 @@ void MainWindow::onInspectorChanged() {
             b.brightness = m_propBrightness->value();
             b.contrast = m_propContrast->value();
             b.saturation = m_propSaturation->value();
+        }
+        if (layerSource && m_layerList) {
+            const int row = m_layerList->currentRow();
+            if (row >= 0 && row < b.layers.size()) {
+                if (m_comboLayerBlendMode) {
+                    b.layers[row].blendMode = layerBlendModeFromInt(m_comboLayerBlendMode->currentIndex());
+                }
+                if (m_sliderLayerOpacity) {
+                    b.layers[row].opacity = std::clamp(m_sliderLayerOpacity->value() / 100.0, 0.0, 1.0);
+                }
+            }
         }
     }
 
@@ -1911,8 +2130,7 @@ void MainWindow::refreshLayerList() {
     }
     const auto& layers = m_selected.first()->badge().layers;
     for (const auto& layer : layers) {
-        const QString label = layer.name.isEmpty() ? QFileInfo(layer.imagePath).baseName() : layer.name;
-        auto* item = new QListWidgetItem(label);
+        auto* item = new QListWidgetItem(layerItemSummary(layer));
         m_layerList->addItem(item);
     }
     if (!layers.isEmpty()) {
@@ -1924,6 +2142,65 @@ void MainWindow::refreshLayerList() {
     } else {
         m_lastLayerRow = -1;
     }
+    updateLayerBlendModeUi();
+    updateLayerOpacityUi();
+}
+
+void MainWindow::updateLayerBlendModeUi() {
+    if (!m_comboLayerBlendMode) {
+        return;
+    }
+    const bool hasSelection = !m_selected.isEmpty();
+    const int row = m_layerList ? m_layerList->currentRow() : -1;
+    const bool valid = hasSelection && row >= 0 && row < m_selected.first()->badge().layers.size();
+    const QSignalBlocker blocker(m_comboLayerBlendMode);
+    m_comboLayerBlendMode->setEnabled(valid);
+    if (!valid) {
+        m_comboLayerBlendMode->setCurrentIndex(0);
+        updateLayerPreviewUi();
+        return;
+    }
+    const auto& layer = m_selected.first()->badge().layers[row];
+    m_comboLayerBlendMode->setCurrentIndex(layerBlendModeToInt(layer.blendMode));
+    updateLayerPreviewUi();
+}
+
+void MainWindow::updateLayerOpacityUi() {
+    if (!m_sliderLayerOpacity) {
+        return;
+    }
+    const bool hasSelection = !m_selected.isEmpty();
+    const int row = m_layerList ? m_layerList->currentRow() : -1;
+    const bool valid = hasSelection && row >= 0 && row < m_selected.first()->badge().layers.size();
+    const QSignalBlocker blocker(m_sliderLayerOpacity);
+    m_sliderLayerOpacity->setEnabled(valid);
+    if (!valid) {
+        m_sliderLayerOpacity->setValue(100);
+        updateLayerPreviewUi();
+        return;
+    }
+    const auto& layer = m_selected.first()->badge().layers[row];
+    m_sliderLayerOpacity->setValue(int(std::round(std::clamp(layer.opacity, 0.0, 1.0) * 100.0)));
+    updateLayerPreviewUi();
+}
+
+void MainWindow::updateLayerPreviewUi() {
+    if (!m_layerPreviewLabel) {
+        return;
+    }
+    const bool hasSelection = !m_selected.isEmpty();
+    const int row = m_layerList ? m_layerList->currentRow() : -1;
+    const bool valid = hasSelection && row >= 0 && row < m_selected.first()->badge().layers.size();
+    if (!valid) {
+        m_layerPreviewLabel->setPixmap({});
+        m_layerPreviewLabel->setText(QStringLiteral("Layer Preview"));
+        return;
+    }
+
+    const auto& layer = m_selected.first()->badge().layers[row];
+    const QPixmap preview = renderLayerPreviewPixmap(layer, m_layerPreviewLabel->palette(), 128);
+    m_layerPreviewLabel->setText(QString());
+    m_layerPreviewLabel->setPixmap(preview);
 }
 
 // --- Badge ---

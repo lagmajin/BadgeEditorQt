@@ -15,6 +15,19 @@
 #include <wobjectimpl.h>
 
 namespace {
+QPainter::CompositionMode compositionModeForLayer(LayerBlendMode mode) {
+    switch (mode) {
+    case LayerBlendMode::Multiply: return QPainter::CompositionMode_Multiply;
+    case LayerBlendMode::Screen: return QPainter::CompositionMode_Screen;
+    case LayerBlendMode::Overlay: return QPainter::CompositionMode_Overlay;
+    case LayerBlendMode::SoftLight: return QPainter::CompositionMode_SoftLight;
+    case LayerBlendMode::Add: return QPainter::CompositionMode_Plus;
+    case LayerBlendMode::Normal:
+    default:
+        return QPainter::CompositionMode_SourceOver;
+    }
+}
+
 void paintRealisticSurface(QPainter* painter,
                            const QRectF& r,
                            bool clipToCircle,
@@ -353,7 +366,9 @@ void BadgeGraphicItem::renderCore(QPainter* painter, const QRectF& r) {
     const QPixmap& baseImage = m_processed.isNull() ? m_thumbnail : m_processed;
     const LayerItem* primaryLayer = m_badge.layers.isEmpty() ? nullptr : &m_badge.layers.first();
     if (!baseImage.isNull() && (!primaryLayer || primaryLayer->visible)) {
+        painter->save();
         painter->setOpacity(primaryLayer ? primaryLayer->opacity : 1.0);
+        painter->setCompositionMode(primaryLayer ? compositionModeForLayer(primaryLayer->blendMode) : QPainter::CompositionMode_SourceOver);
         const double scale = std::max(0.1, m_badge.imageScale);
         const QSizeF scaledSize(r.width() * scale, r.height() * scale);
         QRectF imageRect(r.center().x() - scaledSize.width() * 0.5,
@@ -365,6 +380,7 @@ void BadgeGraphicItem::renderCore(QPainter* painter, const QRectF& r) {
                                 primaryLayer->offsetY * 96.0 / 25.4);
         }
         painter->drawPixmap(imageRect, baseImage, QRectF(baseImage.rect()));
+        painter->restore();
         drewAnything = true;
     }
 
@@ -377,10 +393,13 @@ void BadgeGraphicItem::renderCore(QPainter* painter, const QRectF& r) {
         if (!layer.imagePath.isEmpty() && QFileInfo::exists(layer.imagePath))
             img.load(layer.imagePath);
         if (!img.isNull()) {
+            painter->save();
             painter->setOpacity(layer.opacity);
+            painter->setCompositionMode(compositionModeForLayer(layer.blendMode));
             const QRectF lr = r.translated(layer.offsetX * 96.0 / 25.4,
                                            layer.offsetY * 96.0 / 25.4);
             painter->drawPixmap(lr, img, QRectF(img.rect()));
+            painter->restore();
             drewAnything = true;
         }
     }

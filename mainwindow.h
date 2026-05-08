@@ -106,6 +106,9 @@ private:
     void applyWindowsBackdrop();
     void refreshBadges();
     void refreshLayerList();
+    void updateLayerBlendModeUi();
+    void updateLayerOpacityUi();
+    void updateLayerPreviewUi();
     void updateInspectorMode();
     void syncLayoutWorkspace();
     void refreshDocumentFromDesigner();
@@ -186,6 +189,9 @@ private:
     QGroupBox* m_propGroup = nullptr;
     QGroupBox* m_colorGroup = nullptr;
     QGroupBox* m_layerGroup = nullptr;
+    QComboBox* m_comboLayerBlendMode = nullptr;
+    QSlider* m_sliderLayerOpacity = nullptr;
+    QLabel* m_layerPreviewLabel = nullptr;
     QGroupBox* m_guideGroup = nullptr;
     QGroupBox* m_effectGroup = nullptr;
     QGroupBox* m_layoutGroup = nullptr;
@@ -228,6 +234,9 @@ private:
     QList<int> m_pendingEditBeforeSelection;
     BadgeGraphicItem* m_pendingEditItem = nullptr;
     bool m_pendingEditActive = false;
+    bool m_pendingLayerReorderActive = false;
+    QList<BadgeItem> m_pendingLayerReorderBeforeBadges;
+    QList<int> m_pendingLayerReorderBeforeSelection;
     enum class LayoutPreviewMode {
         CurrentDesign,
         FillPageFromSelection,

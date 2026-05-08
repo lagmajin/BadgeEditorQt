@@ -15,6 +15,7 @@ struct LayerData {
     bool visible = true;
     double offsetX = 0.0;
     double offsetY = 0.0;
+    int blendMode = 0;
 };
 
 struct BadgeData {

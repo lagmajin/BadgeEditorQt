@@ -44,6 +44,7 @@ inline LayerData layerFromJson(const QJsonObject& obj) {
     layer.visible = obj["visible"].toBool(true);
     layer.offsetX = obj["offsetX"].toDouble(0.0);
     layer.offsetY = obj["offsetY"].toDouble(0.0);
+    layer.blendMode = obj["blendMode"].toInt(0);
     return layer;
 }
 
@@ -55,6 +56,7 @@ inline QJsonObject layerToJson(const LayerData& layer) {
         {"visible", layer.visible},
         {"offsetX", layer.offsetX},
         {"offsetY", layer.offsetY},
+        {"blendMode", layer.blendMode},
     };
 }
 

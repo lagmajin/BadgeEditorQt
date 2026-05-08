@@ -33,6 +33,7 @@ export inline badge::LayerData toCoreLayer(const LayerItem& layer) {
     core.visible = layer.visible;
     core.offsetX = layer.offsetX;
     core.offsetY = layer.offsetY;
+    core.blendMode = layerBlendModeToInt(layer.blendMode);
     return core;
 }
 
@@ -44,6 +45,7 @@ export inline LayerItem fromCoreLayer(const badge::LayerData& layer) {
     qt.visible = layer.visible;
     qt.offsetX = layer.offsetX;
     qt.offsetY = layer.offsetY;
+    qt.blendMode = layerBlendModeFromInt(layer.blendMode);
     return qt;
 }
 

@@ -42,6 +42,19 @@ constexpr int kItemRole = 0;
 const char* kSafeGuideTag = "safe-guide";
 const char* kEmptyHintTag = "empty-hint";
 
+QPainter::CompositionMode compositionModeForLayer(LayerBlendMode mode) {
+    switch (mode) {
+    case LayerBlendMode::Multiply: return QPainter::CompositionMode_Multiply;
+    case LayerBlendMode::Screen: return QPainter::CompositionMode_Screen;
+    case LayerBlendMode::Overlay: return QPainter::CompositionMode_Overlay;
+    case LayerBlendMode::SoftLight: return QPainter::CompositionMode_SoftLight;
+    case LayerBlendMode::Add: return QPainter::CompositionMode_Plus;
+    case LayerBlendMode::Normal:
+    default:
+        return QPainter::CompositionMode_SourceOver;
+    }
+}
+
 QRectF paperRectPx(const badge::DocumentData& document, double dpi) {
     const double scale = dpi * kMmToInch;
     return QRectF(0.0,
@@ -110,9 +123,11 @@ QPixmap renderBadgePixmap(const badge::BadgeData& badgeData, const QSize& target
     const QImage baseLoaded = ImageProcessor::loadImage(primaryPath, &colorSpaceLabel);
     if (!baseLoaded.isNull()) {
         QPixmap basePixmap = QPixmap::fromImage(baseLoaded);
-        const LayerItem* primaryLayer = qtBadge.layers.isEmpty() ? nullptr : &qtBadge.layers.first();
-        if (!primaryLayer || primaryLayer->visible) {
+    const LayerItem* primaryLayer = qtBadge.layers.isEmpty() ? nullptr : &qtBadge.layers.first();
+    if (!primaryLayer || primaryLayer->visible) {
+            painter.save();
             painter.setOpacity(primaryLayer ? primaryLayer->opacity : 1.0);
+            painter.setCompositionMode(primaryLayer ? compositionModeForLayer(primaryLayer->blendMode) : QPainter::CompositionMode_SourceOver);
             QRectF imageRect = qtBadge.flattenedForLayoutTransfer
                 ? contentRect
                 : QRectF(contentRect.center().x() - (contentRect.width() * std::max(0.1, qtBadge.imageScale)) * 0.5,
@@ -124,6 +139,7 @@ QPixmap renderBadgePixmap(const badge::BadgeData& badgeData, const QSize& target
                                     primaryLayer->offsetY * kSceneDpi * kMmToInch);
             }
             painter.drawPixmap(imageRect, basePixmap, QRectF(basePixmap.rect()));
+            painter.restore();
         }
     }
 
@@ -143,10 +159,13 @@ QPixmap renderBadgePixmap(const badge::BadgeData& badgeData, const QSize& target
         if (layerPixmap.isNull()) {
             continue;
         }
+        painter.save();
         painter.setOpacity(layer.opacity);
+        painter.setCompositionMode(compositionModeForLayer(layer.blendMode));
         const QRectF layerRect = contentRect.translated(layer.offsetX * kSceneDpi * kMmToInch,
                                                         layer.offsetY * kSceneDpi * kMmToInch);
         painter.drawPixmap(layerRect, layerPixmap, QRectF(layerPixmap.rect()));
+        painter.restore();
     }
 
     painter.setOpacity(1.0);
@@ -185,13 +204,14 @@ QString badgeRenderCacheKey(const badge::BadgeData& badgeData, const QSize& targ
                .arg(badgeData.saturation, 0, 'f', 3);
 
     for (const auto& layer : badgeData.layers) {
-        key += QStringLiteral("|L:%1:%2:%3:%4:%5:%6")
+        key += QStringLiteral("|L:%1:%2:%3:%4:%5:%6:%7")
                    .arg(QString::fromStdString(layer.imagePath))
                    .arg(QString::fromStdString(layer.name))
                    .arg(layer.opacity, 0, 'f', 3)
                    .arg(layer.visible ? 1 : 0)
                    .arg(layer.offsetX, 0, 'f', 3)
-                   .arg(layer.offsetY, 0, 'f', 3);
+                   .arg(layer.offsetY, 0, 'f', 3)
+                   .arg(layer.blendMode);
     }
     return key;
 }

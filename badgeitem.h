@@ -7,6 +7,30 @@
 #include <QList>
 #include <QFileInfo>
 
+enum class LayerBlendMode {
+    Normal = 0,
+    Multiply = 1,
+    Screen = 2,
+    Overlay = 3,
+    SoftLight = 4,
+    Add = 5,
+};
+
+inline LayerBlendMode layerBlendModeFromInt(int mode) {
+    switch (mode) {
+    case 1: return LayerBlendMode::Multiply;
+    case 2: return LayerBlendMode::Screen;
+    case 3: return LayerBlendMode::Overlay;
+    case 4: return LayerBlendMode::SoftLight;
+    case 5: return LayerBlendMode::Add;
+    default: return LayerBlendMode::Normal;
+    }
+}
+
+inline int layerBlendModeToInt(LayerBlendMode mode) {
+    return static_cast<int>(mode);
+}
+
 struct LayerItem {
     QString imagePath;
     QString name;
@@ -14,6 +38,7 @@ struct LayerItem {
     bool visible = true;
     double offsetX = 0.0; // mm offset within badge
     double offsetY = 0.0;
+    LayerBlendMode blendMode = LayerBlendMode::Normal;
 };
 
 inline LayerItem layerFromImagePath(const QString& imagePath) {
