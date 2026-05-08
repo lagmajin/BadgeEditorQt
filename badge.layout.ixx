@@ -11,17 +11,6 @@ export import badge.model;
 
 namespace badge_layout_detail {
 constexpr double kCirclePackFactor = 0.8660254037844386; // sqrt(3) / 2
-constexpr double kCircleBleedMm = 3.0;
-
-double footprintWidth(const badge::BadgeData& badge) {
-    return badge.clipToCircle ? std::max(badge.widthMm, badge.heightMm) + kCircleBleedMm
-                              : badge.widthMm;
-}
-
-double footprintHeight(const badge::BadgeData& badge) {
-    return badge.clipToCircle ? std::max(badge.widthMm, badge.heightMm) + kCircleBleedMm
-                              : badge.heightMm;
-}
 }
 
 export namespace badge {
@@ -36,9 +25,9 @@ export std::vector<BadgeData> auto_layout(const std::vector<BadgeData>& template
     bool shift = false;
 
     for (const auto& tpl : templates) {
-        const double tw = badge_layout_detail::footprintWidth(tpl);
-        const double th = badge_layout_detail::footprintHeight(tpl);
-        const bool circle = tpl.clipToCircle;
+        const double tw = guideFootprintWidthMm(tpl);
+        const double th = guideFootprintHeightMm(tpl);
+        const bool circle = guideUsesCircularPacking(tpl);
         const double pitch = tw + config.spacingMm;
         const double bw = pitch;
         const double bh = circle ? pitch * badge_layout_detail::kCirclePackFactor : th + config.spacingMm;
@@ -68,9 +57,9 @@ export std::vector<BadgeData> auto_layout(const std::vector<BadgeData>& template
 
 export std::vector<BadgeData> fill_page(const BadgeData& template_, const PaperConfig& config) {
     std::vector<BadgeData> result;
-    const double tw = badge_layout_detail::footprintWidth(template_);
-    const double th = badge_layout_detail::footprintHeight(template_);
-    const bool circle = template_.clipToCircle;
+    const double tw = guideFootprintWidthMm(template_);
+    const double th = guideFootprintHeightMm(template_);
+    const bool circle = guideUsesCircularPacking(template_);
     const double pitch = tw + config.spacingMm;
     const double bw = pitch;
     const double vStep = circle ? pitch * badge_layout_detail::kCirclePackFactor : th + config.spacingMm;
