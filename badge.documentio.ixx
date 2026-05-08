@@ -25,6 +25,93 @@ struct JsonDocumentResult {
 
 namespace detail {
 
+inline ProductMode productModeFromJsonValue(const QJsonValue& value) {
+    if (value.isDouble()) {
+        return value.toInt(0) == 1 ? ProductMode::Sticker : ProductMode::Badge;
+    }
+
+    const QString text = value.toString(QStringLiteral("badge")).toLower();
+    if (text == QStringLiteral("sticker")) {
+        return ProductMode::Sticker;
+    }
+    return ProductMode::Badge;
+}
+
+inline QString productModeToJsonValue(ProductMode mode) {
+    switch (mode) {
+    case ProductMode::Sticker:
+        return QStringLiteral("sticker");
+    case ProductMode::Badge:
+    default:
+        return QStringLiteral("badge");
+    }
+}
+
+inline GuideShape guideShapeFromJsonValue(const QJsonValue& value) {
+    if (value.isDouble()) {
+        switch (value.toInt(0)) {
+        case 1:
+            return GuideShape::Rectangle;
+        case 2:
+            return GuideShape::RoundedRectangle;
+        case 3:
+            return GuideShape::Oval;
+        case 0:
+        default:
+            return GuideShape::Circle;
+        }
+    }
+
+    const QString text = value.toString(QStringLiteral("circle")).toLower();
+    if (text == QStringLiteral("rectangle")) {
+        return GuideShape::Rectangle;
+    }
+    if (text == QStringLiteral("roundedrectangle") || text == QStringLiteral("rounded-rectangle") || text == QStringLiteral("rounded_rectangle")) {
+        return GuideShape::RoundedRectangle;
+    }
+    if (text == QStringLiteral("oval")) {
+        return GuideShape::Oval;
+    }
+    return GuideShape::Circle;
+}
+
+inline QString guideShapeToJsonValue(GuideShape shape) {
+    switch (shape) {
+    case GuideShape::Rectangle:
+        return QStringLiteral("rectangle");
+    case GuideShape::RoundedRectangle:
+        return QStringLiteral("roundedRectangle");
+    case GuideShape::Oval:
+        return QStringLiteral("oval");
+    case GuideShape::Circle:
+    default:
+        return QStringLiteral("circle");
+    }
+}
+
+inline GuideData guideFromJson(const QJsonObject& obj, bool clipToCircle) {
+    GuideData guide;
+    guide.shape = clipToCircle ? GuideShape::Circle : GuideShape::Rectangle;
+    if (obj.isEmpty()) {
+        return guide;
+    }
+
+    guide.shape = guideShapeFromJsonValue(obj["shape"]);
+    guide.bleedMm = obj["bleedMm"].toDouble(3.0);
+    guide.safeInsetMm = obj["safeInsetMm"].toDouble(2.0);
+    guide.cornerRadiusMm = obj["cornerRadiusMm"].toDouble(3.0);
+    return guide;
+}
+
+inline QJsonObject guideToJson(const GuideData& guide) {
+    return QJsonObject{
+        {"shape", guideShapeToJsonValue(guide.shape)},
+        {"bleedMm", guide.bleedMm},
+        {"safeInsetMm", guide.safeInsetMm},
+        {"cornerRadiusMm", guide.cornerRadiusMm},
+    };
+}
+
 inline void migrateLegacyImageToLayers(std::string& imagePath, std::vector<LayerData>& layers) {
     if (imagePath.empty()) {
         return;
@@ -62,6 +149,7 @@ inline QJsonObject layerToJson(const LayerData& layer) {
 
 inline BadgeData badgeFromJson(const QJsonObject& obj) {
     BadgeData badge;
+    badge.productMode = productModeFromJsonValue(obj["productMode"]);
     badge.widthMm = obj["widthMm"].toDouble(32.0);
     badge.heightMm = obj["heightMm"].toDouble(32.0);
     badge.imageScale = obj["imageScale"].toDouble(1.0);
@@ -76,6 +164,7 @@ inline BadgeData badgeFromJson(const QJsonObject& obj) {
     badge.imagePath = obj["imagePath"].toString().toStdString();
     badge.displayText = obj["displayText"].toString().toStdString();
     badge.clipToCircle = obj["clipToCircle"].toBool(false);
+    badge.guide = guideFromJson(obj["guide"].toObject(), badge.clipToCircle);
     badge.brightness = obj["brightness"].toDouble(0.0);
     badge.contrast = obj["contrast"].toDouble(0.0);
     badge.saturation = obj["saturation"].toDouble(0.0);
@@ -101,6 +190,8 @@ inline QJsonObject badgeToJson(const BadgeData& badge) {
     }
 
     return QJsonObject{
+        {"productMode", productModeToJsonValue(badge.productMode)},
+        {"guide", guideToJson(badge.guide)},
         {"widthMm", badge.widthMm},
         {"heightMm", badge.heightMm},
         {"imageScale", badge.imageScale},
@@ -166,6 +257,7 @@ export inline JsonDocumentResult loadDocumentFromJson(const QByteArray& json) {
 
     const QJsonObject obj = doc.object();
     result.document.title = obj["title"].toString().toStdString();
+    result.document.productMode = detail::productModeFromJsonValue(obj["productMode"]);
     result.document.paper = detail::paperFromJson(obj["paper"].toObject());
     const auto arr = obj["badges"].toArray();
     result.document.badges.reserve(arr.size());
@@ -184,6 +276,7 @@ export inline QByteArray saveDocumentToJson(const DocumentData& document) {
 
     const QJsonObject obj{
         {"title", QString::fromStdString(document.title)},
+        {"productMode", detail::productModeToJsonValue(document.productMode)},
         {"paper", detail::paperToJson(document.paper)},
         {"badges", badges},
     };
