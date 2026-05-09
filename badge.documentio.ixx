@@ -1,8 +1,5 @@
 module;
 
-#include <optional>
-#include <string>
-#include <vector>
 #include "layoutengine.h"
 
 #include <QByteArray>
@@ -13,6 +10,9 @@ module;
 #include <QString>
 
 export module badge.documentio;
+#include <optional>
+#include <string>
+#include <vector>
 
 import badge.document;
 

@@ -1,4 +1,5 @@
 #include "imageprocessor.h"
+#include "constants.h"
 #include <QFileInfo>
 #include <QBuffer>
 #include <QFile>
@@ -260,10 +261,10 @@ QImage ImageProcessor::loadImage(const QString& path, QString* colorSpaceLabel) 
                 }
             }
             if (!size.isValid() || size.width() <= 0 || size.height() <= 0) {
-                size = QSize(1024, 1024);
+                size = QSize(Constants::kDefaultSvgSize, Constants::kDefaultSvgSize);
             }
 
-            const int maxSide = 2048;
+            const int maxSide = Constants::kMaxSvgSide;
             if (size.width() > maxSide || size.height() > maxSide) {
                 const double scale = std::min(double(maxSide) / double(size.width()),
                                               double(maxSide) / double(size.height()));

@@ -1,5 +1,6 @@
 #include "badgegraphicitem.h"
 #include "imageprocessor.h"
+#include "constants.h"
 #include <QPainterPath>
 #include <QGraphicsSceneMouseEvent>
 #include <QGraphicsSceneHoverEvent>
@@ -156,7 +157,7 @@ protected:
         if (!m_dragging) return;
         QPointF deltaLocal = m_badge->mapFromScene(e->scenePos()) - m_badge->mapFromScene(m_startPos);
         m_startPos = e->scenePos();
-        const double mmToPx = 96.0 / 25.4;
+        const double mmToPx = Constants::kMmToPx;
         BadgeItem& b = m_badge->badge();
         const bool hasImageContent = !b.imagePath.isEmpty() || !b.layers.isEmpty();
         const bool asymmetricResize = hasImageContent && (e->modifiers() & Qt::AltModifier);
@@ -284,7 +285,7 @@ void BadgeGraphicItem::beginGeometryUpdate() {
 }
 
 QRectF BadgeGraphicItem::contentRectPx() const {
-    const double mmToPx = 96.0 / 25.4;
+    const double mmToPx = Constants::kMmToPx;
     const double pw = m_badge.widthMm * mmToPx;
     const double ph = m_badge.heightMm * mmToPx;
     const double margin = m_badge.isSelected ? 3.0 : 2.0;
@@ -307,16 +308,16 @@ QRectF BadgeGraphicItem::visualRectPx() const {
     if (!m_thumbnail.isNull() || !m_processed.isNull()) {
         QRectF imageRect = imageRectPx();
         if (primaryLayer) {
-            imageRect.translate(primaryLayer->offsetX * 96.0 / 25.4,
-                                primaryLayer->offsetY * 96.0 / 25.4);
+            imageRect.translate(primaryLayer->offsetX * Constants::kMmToPx,
+                                primaryLayer->offsetY * Constants::kMmToPx);
         }
         rect = rect.united(imageRect);
     }
 
     const QRectF content = contentRectPx();
     for (const auto& layer : m_badge.layers) {
-        const QRectF layerRect = content.translated(layer.offsetX * 96.0 / 25.4,
-                                                    layer.offsetY * 96.0 / 25.4);
+        const QRectF layerRect = content.translated(layer.offsetX * Constants::kMmToPx,
+                                                   layer.offsetY * Constants::kMmToPx);
         rect = rect.united(layerRect);
     }
 
@@ -376,8 +377,8 @@ void BadgeGraphicItem::renderCore(QPainter* painter, const QRectF& r) {
                          scaledSize.width(),
                          scaledSize.height());
         if (primaryLayer) {
-            imageRect.translate(primaryLayer->offsetX * 96.0 / 25.4,
-                                primaryLayer->offsetY * 96.0 / 25.4);
+            imageRect.translate(primaryLayer->offsetX * Constants::kMmToPx,
+                                primaryLayer->offsetY * Constants::kMmToPx);
         }
         painter->drawPixmap(imageRect, baseImage, QRectF(baseImage.rect()));
         painter->restore();
@@ -396,8 +397,8 @@ void BadgeGraphicItem::renderCore(QPainter* painter, const QRectF& r) {
             painter->save();
             painter->setOpacity(layer.opacity);
             painter->setCompositionMode(compositionModeForLayer(layer.blendMode));
-            const QRectF lr = r.translated(layer.offsetX * 96.0 / 25.4,
-                                           layer.offsetY * 96.0 / 25.4);
+            const QRectF lr = r.translated(layer.offsetX * Constants::kMmToPx,
+                                           layer.offsetY * Constants::kMmToPx);
             painter->drawPixmap(lr, img, QRectF(img.rect()));
             painter->restore();
             drewAnything = true;
@@ -466,8 +467,8 @@ void BadgeGraphicItem::syncFromBadge() {
         loadImage();
     }
     bool changed = false;
-    double px = m_badge.xMm * 96.0 / 25.4;
-    double py = m_badge.yMm * 96.0 / 25.4;
+    double px = m_badge.xMm * Constants::kMmToPx;
+    double py = m_badge.yMm * Constants::kMmToPx;
     if (qAbs(pos().x() - px) > 0.1 || qAbs(pos().y() - py) > 0.1) {
         const bool snapToGrid = m_snapToGrid;
         m_snapToGrid = false;
@@ -510,7 +511,7 @@ QVariant BadgeGraphicItem::itemChange(GraphicsItemChange change, const QVariant&
         if (QApplication::keyboardModifiers() & Qt::ControlModifier) {
             return value;
         }
-        const double mmToPx = 96.0 / 25.4;
+        const double mmToPx = Constants::kMmToPx;
         const double stepPx = m_gridSpacingMm * mmToPx;
         if (stepPx > 0.0) {
             QPointF p = value.toPointF();
@@ -520,7 +521,7 @@ QVariant BadgeGraphicItem::itemChange(GraphicsItemChange change, const QVariant&
         }
     }
     if (change == ItemPositionHasChanged) {
-        const double mmToPx = 96.0 / 25.4;
+        const double mmToPx = Constants::kMmToPx;
         m_badge.xMm = pos().x() / mmToPx;
         m_badge.yMm = pos().y() / mmToPx;
         emit badgeMoved(this);

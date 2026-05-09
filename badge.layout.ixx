@@ -1,8 +1,9 @@
 module;
 
+#include "layoutengine.h"
+
 #include <algorithm>
 #include <vector>
-#include "layoutengine.h"
 
 export module badge.layout;
 

@@ -88,6 +88,7 @@ private:
     // Badge
     void onAddBadge();
     void onBatchAdd();
+    void onMixedLayout();
     void onImageDropped(const QString& filePath);
     void onAutoLayout();
     void onSendToLayout();
@@ -118,6 +119,7 @@ private:
     void pushBadgeChange(const QString& label, const QList<BadgeItem>& beforeBadges, const QList<int>& beforeSelection, const QList<BadgeItem>& afterBadges, const QList<int>& afterSelection);
     void appendLog(const QString& message);
     void refreshDiagnostics();
+    void updateSafetyGuideHud();
     void updateTitle();
     void loadDockState();
     void saveDockState();
@@ -167,6 +169,7 @@ private:
     QMenu* m_savedPerspectiveMenu = nullptr;
     QAction* m_actAddBadge = nullptr;
     QAction* m_actBatchAdd = nullptr;
+    QAction* m_actMixedLayout = nullptr;
     QAction* m_actSendToLayout = nullptr;
     QAction* m_actClearLayout = nullptr;
     QAction* m_actOpenDesignerPerspective = nullptr;
@@ -187,6 +190,8 @@ private:
     QLineEdit* m_propColorSpace;
     QListWidget* m_layerList = nullptr;
     QGroupBox* m_propGroup = nullptr;
+    QGroupBox* m_checklistGroup = nullptr;
+    QGroupBox* m_safetyGuideGroup = nullptr;
     QGroupBox* m_colorGroup = nullptr;
     QGroupBox* m_layerGroup = nullptr;
     QComboBox* m_comboLayerBlendMode = nullptr;
@@ -195,6 +200,12 @@ private:
     QGroupBox* m_guideGroup = nullptr;
     QGroupBox* m_effectGroup = nullptr;
     QGroupBox* m_layoutGroup = nullptr;
+    QLabel* m_checklistDesign = nullptr;
+    QLabel* m_checklistLayout = nullptr;
+    QLabel* m_checklistColor = nullptr;
+    QLabel* m_safetyGuideDesign = nullptr;
+    QLabel* m_safetyGuideLayout = nullptr;
+    QLabel* m_safetyGuideColor = nullptr;
     ads::CDockWidget* m_logDock = nullptr;
     QListWidget* m_logList = nullptr;
     QListWidget* m_issueList = nullptr;
@@ -229,6 +240,7 @@ private:
     QList<BadgeGraphicItem*> m_selected;
     QList<BadgeItem> m_badges;
     QList<BadgeItem> m_layoutBadges;
+    double m_lastGuideSizeMm = 32.0;
     int m_lastLayerRow = -1;
     QList<BadgeItem> m_pendingEditBeforeBadges;
     QList<int> m_pendingEditBeforeSelection;

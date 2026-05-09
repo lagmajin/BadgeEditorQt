@@ -1,4 +1,5 @@
 #include "designerwidget.h"
+#include "constants.h"
 #include <QGraphicsSceneMouseEvent>
 #include <QWheelEvent>
 #include <QPainter>
@@ -325,7 +326,7 @@ void DesignerWidget::positionGuideOverlays() {
     const QPointF center = guideSceneCenter();
     if (m_glitterGroup) m_glitterGroup->setPos(center);
     if (m_lightingOverlay) {
-        const double mmToPx = 96.0 / 25.4;
+        const double mmToPx = Constants::kMmToPx;
         auto* lo = qgraphicsitem_cast<LightingOverlayItem*>(m_lightingOverlay);
         if (lo) {
             lo->setRadius((m_badgeSizeMm * mmToPx) / 2.0);
@@ -419,7 +420,7 @@ void DesignerWidget::createGlitter(int pattern) {
     }
     if (!m_glitterGroup) m_glitterGroup = m_scene->createItemGroup({});
     auto* group = qgraphicsitem_cast<QGraphicsItemGroup*>(m_glitterGroup);
-    const double mmToPx = 96.0 / 25.4;
+    const double mmToPx = Constants::kMmToPx;
     double visibleR = std::max(0.0, (m_badgeSizeMm - 4)) * mmToPx / 2.0;
     auto& rng = *QRandomGenerator::global();
     const int count = pattern == 0 ? 72 : (pattern == 1 ? 22 : 16);
@@ -574,7 +575,7 @@ void DesignerWidget::drawBackground(QPainter* painter, const QRectF& rect) {
         return;
     }
 
-    const double mmToPx = 96.0 / 25.4;
+    const double mmToPx = Constants::kMmToPx;
     const double stepPx = std::max(1.0, m_gridSpacingMm * mmToPx);
     const double majorStepPx = stepPx * 5.0;
 
@@ -605,7 +606,7 @@ void DesignerWidget::drawBackground(QPainter* painter, const QRectF& rect) {
 
 void DesignerWidget::drawForeground(QPainter* painter, const QRectF& rect) {
     Q_UNUSED(rect);
-    const double mmToPx = 96.0 / 25.4;
+    const double mmToPx = Constants::kMmToPx;
     double bleedPx = (m_badgeSizeMm + 3) * mmToPx;
     double finishPx = m_badgeSizeMm * mmToPx;
     double visiblePx = std::max(0.0, (m_badgeSizeMm - 4)) * mmToPx;
@@ -630,42 +631,6 @@ void DesignerWidget::drawForeground(QPainter* painter, const QRectF& rect) {
         painter->setPen(pen);
         painter->setBrush(Qt::NoBrush);
         painter->drawEllipse(QPointF(cx, cy), rv, rv);
-    }
-
-    // Small left-top HUD for editor context.
-    {
-        const QList<BadgeGraphicItem*> selection = selectedGraphics();
-        const int selectionCount = selection.size();
-        const double zoomPercent = transform().m11() * 100.0;
-        const QString hudText = QStringLiteral("Zoom %1% | Snap %2 | Grid %3 mm | Sel %4 | Badge %5 mm")
-                                    .arg(zoomPercent, 0, 'f', 0)
-                                    .arg(m_snapToGrid ? QStringLiteral("ON") : QStringLiteral("OFF"))
-                                    .arg(m_gridSpacingMm, 0, 'f', 1)
-                                    .arg(selectionCount)
-                                    .arg(m_badgeSizeMm, 0, 'f', 0);
-
-        painter->save();
-        QFont hudFont = painter->font();
-        hudFont.setPointSizeF(std::max(8.0, hudFont.pointSizeF() - 1.0));
-        hudFont.setBold(true);
-        painter->setFont(hudFont);
-        const QFontMetricsF fm(hudFont);
-        const QRectF hudBox = fm.boundingRect(hudText).adjusted(-10.0, -7.0, 10.0, 9.0);
-        const QRectF hudRect(rect.left() + 14.0, rect.top() + 14.0, hudBox.width(), hudBox.height());
-
-        QColor hudBg = palette().color(QPalette::Window);
-        hudBg.setAlpha(208);
-        QColor hudBorder = palette().color(QPalette::Mid);
-        hudBorder.setAlpha(180);
-        QColor hudTextColor = palette().color(QPalette::WindowText);
-        hudTextColor.setAlpha(230);
-
-        painter->setPen(QPen(hudBorder, 1.0));
-        painter->setBrush(hudBg);
-        painter->drawRoundedRect(hudRect, 8.0, 8.0);
-        painter->setPen(hudTextColor);
-        painter->drawText(hudRect, Qt::AlignCenter, hudText);
-        painter->restore();
     }
 
     if (m_graphicItems.isEmpty()) {
@@ -723,6 +688,11 @@ void DesignerWidget::setBatchMode(bool on) { m_batchMode = on; viewport()->updat
 
 void DesignerWidget::setExperimentalGpuViewport(bool on) {
     viewportbackend::applySceneViewportProfile(this, on);
+}
+
+void DesignerWidget::setSafetyGuideEntries(const QList<SafetyGuideEntry>& entries) {
+    m_safetyGuideEntries = entries;
+    viewport()->update();
 }
 
 void DesignerWidget::setInteractiveViewportMode(bool on) {

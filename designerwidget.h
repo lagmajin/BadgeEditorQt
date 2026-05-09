@@ -6,7 +6,9 @@
 #include <QGraphicsEllipseItem>
 #include <QGraphicsItemGroup>
 #include <QList>
+#include <QString>
 #include <QFileInfo>
+#include <QColor>
 #include <QDragEnterEvent>
 #include <QDropEvent>
 #include <QPalette>
@@ -23,6 +25,12 @@
 class DesignerWidget : public QGraphicsView {
     W_OBJECT(DesignerWidget)
 public:
+    struct SafetyGuideEntry {
+        QString title;
+        QString detail;
+        QColor color;
+    };
+
     explicit DesignerWidget(QWidget* parent = nullptr);
     
     void addBadge(const BadgeItem& item);
@@ -61,6 +69,7 @@ public:
     void updateBackground(const QBrush& brush);
     void setBatchMode(bool on);
     void setExperimentalGpuViewport(bool on);
+    void setSafetyGuideEntries(const QList<SafetyGuideEntry>& entries);
 
 Q_SIGNALS:
     void badgeSelected(BadgeGraphicItem* item) W_SIGNAL(badgeSelected, item);
@@ -108,6 +117,7 @@ private:
     QPoint m_panLastPos;
     bool m_guideUpdatePending = false;
     int m_interactiveEditDepth = 0;
+    QList<SafetyGuideEntry> m_safetyGuideEntries;
     
     void createGlitter(int pattern);
     QPainterPath createStar(double size);

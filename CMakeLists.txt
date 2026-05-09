@@ -21,6 +21,7 @@ set(SOURCES
     layoutworkspacewidget.cpp
     viewportbackend.cpp
     batchlayoutdialog.cpp
+    mixedlayoutdialog.cpp
     exportdialog.cpp
     printdialog.cpp
     appsettingsdialog.cpp
@@ -35,12 +36,14 @@ set(SOURCES
 )
 
 set(HEADERS
+    constants.h
     mainwindow.h
     dockstylemanager.h
     designerwidget.h
     layoutworkspacewidget.h
     viewportbackend.h
     batchlayoutdialog.h
+    mixedlayoutdialog.h
     exportdialog.h
     printdialog.h
     appsettingsdialog.h

@@ -1,6 +1,7 @@
 #include "layoutworkspacewidget.h"
 #include "badgeitem.h"
 #include "imageprocessor.h"
+#include "constants.h"
 #include <QGraphicsView>
 #include <QGraphicsScene>
 #include <QGraphicsRectItem>
@@ -35,12 +36,10 @@ struct LayoutWorkspaceWidget::Impl {
 };
 
 namespace {
-constexpr double kMmToInch = 1.0 / 25.4;
-constexpr double kSceneDpi = 96.0;
-constexpr double kCircleBleedMm = 3.0;
 constexpr int kItemRole = 0;
 const char* kSafeGuideTag = "safe-guide";
 const char* kEmptyHintTag = "empty-hint";
+const char* kBleedGuideTag = "bleed-guide";
 
 QPainter::CompositionMode compositionModeForLayer(LayerBlendMode mode) {
     switch (mode) {
@@ -56,7 +55,7 @@ QPainter::CompositionMode compositionModeForLayer(LayerBlendMode mode) {
 }
 
 QRectF paperRectPx(const badge::DocumentData& document, double dpi) {
-    const double scale = dpi * kMmToInch;
+    const double scale = dpi / Constants::kMmPerInch;
     return QRectF(0.0,
                   0.0,
                   document.paper.widthMm * scale,
@@ -94,6 +93,87 @@ void addEmptyHint(QGraphicsScene* scene, const QRectF& paperRect) {
                  paperRect.center().y() - br.height() * 0.5);
 }
 
+QPainterPath shapePathForBadge(const QRectF& rect, badge::GuideShape shape, qreal cornerRadiusPx) {
+    QPainterPath path;
+    switch (shape) {
+    case badge::GuideShape::Rectangle:
+        path.addRect(rect);
+        break;
+    case badge::GuideShape::RoundedRectangle:
+        path.addRoundedRect(rect, cornerRadiusPx, cornerRadiusPx);
+        break;
+    case badge::GuideShape::Oval:
+    case badge::GuideShape::Circle:
+    default:
+        path.addEllipse(rect);
+        break;
+    }
+    return path;
+}
+
+class LayoutBleedGuideItem final : public QGraphicsItem {
+public:
+    LayoutBleedGuideItem(double x,
+                         double y,
+                         double w,
+                         double h,
+                         const badge::GuideData& guide,
+                         bool clipToCircle)
+        : m_shape(guide.shape),
+          m_bleedPx(std::max(0.0, guide.bleedMm) * Constants::kMmToPx),
+          m_safeInsetPx(std::max(0.0, guide.safeInsetMm) * Constants::kMmToPx),
+          m_cornerRadiusPx(std::max(0.0, guide.cornerRadiusMm) * Constants::kMmToPx) {
+        const double size = clipToCircle ? std::max(w, h) : w;
+        const double height = clipToCircle ? std::max(w, h) : h;
+        m_baseRect = QRectF(0.0, 0.0, size, height);
+        m_outerRect = m_baseRect.adjusted(-m_bleedPx, -m_bleedPx, m_bleedPx, m_bleedPx);
+        setPos(x, y);
+        setZValue(2.0);
+        setAcceptedMouseButtons(Qt::NoButton);
+        setFlag(ItemIsSelectable, false);
+        setFlag(ItemIsFocusable, false);
+        setFlag(ItemStacksBehindParent, false);
+    }
+
+    QRectF boundingRect() const override {
+        return m_outerRect.adjusted(-6.0, -6.0, 6.0, 6.0);
+    }
+
+    void paint(QPainter* painter, const QStyleOptionGraphicsItem*, QWidget*) override {
+        painter->save();
+        painter->setRenderHint(QPainter::Antialiasing, true);
+        painter->setRenderHint(QPainter::SmoothPixmapTransform, true);
+        painter->setBrush(Qt::NoBrush);
+
+        const QColor bleedColor(255, 153, 51, 220);
+        const QColor safeColor(70, 178, 255, 220);
+
+        painter->setPen(QPen(bleedColor, 1.3, Qt::DashLine));
+        painter->drawPath(shapePathForBadge(m_outerRect, m_shape, m_cornerRadiusPx));
+
+        if (m_safeInsetPx > 0.0) {
+            const QRectF innerRect = m_baseRect.adjusted(m_safeInsetPx,
+                                                        m_safeInsetPx,
+                                                        -m_safeInsetPx,
+                                                        -m_safeInsetPx);
+            if (innerRect.isValid() && innerRect.width() > 0.0 && innerRect.height() > 0.0) {
+                painter->setPen(QPen(safeColor, 1.1, Qt::DashLine));
+                painter->drawPath(shapePathForBadge(innerRect, m_shape, std::max(0.0, m_cornerRadiusPx - m_safeInsetPx)));
+            }
+        }
+
+        painter->restore();
+    }
+
+private:
+    QRectF m_baseRect;
+    QRectF m_outerRect;
+    badge::GuideShape m_shape = badge::GuideShape::Circle;
+    qreal m_bleedPx = 0.0;
+    qreal m_safeInsetPx = 0.0;
+    qreal m_cornerRadiusPx = 0.0;
+};
+
 QPixmap renderBadgePixmap(const badge::BadgeData& badgeData, const QSize& targetSize) {
     if (!targetSize.isValid() || targetSize.width() <= 0 || targetSize.height() <= 0) {
         return {};
@@ -111,7 +191,7 @@ QPixmap renderBadgePixmap(const badge::BadgeData& badgeData, const QSize& target
     const QRectF contentRect = rect;
     if (qtBadge.clipToCircle && !qtBadge.flattenedForLayoutTransfer) {
         constexpr double kSafeInsetMm = 3.5;
-        const double safeInsetPx = kSafeInsetMm * kSceneDpi * kMmToInch;
+        const double safeInsetPx = kSafeInsetMm * Constants::kMmToPx;
         const QRectF safeRect = rect.adjusted(safeInsetPx, safeInsetPx, -safeInsetPx, -safeInsetPx);
         QPainterPath clip;
         clip.addEllipse(safeRect.isValid() ? safeRect : rect);
@@ -135,8 +215,8 @@ QPixmap renderBadgePixmap(const badge::BadgeData& badgeData, const QSize& target
                          contentRect.width() * std::max(0.1, qtBadge.imageScale),
                          contentRect.height() * std::max(0.1, qtBadge.imageScale));
             if (primaryLayer && !qtBadge.flattenedForLayoutTransfer) {
-                imageRect.translate(primaryLayer->offsetX * kSceneDpi * kMmToInch,
-                                    primaryLayer->offsetY * kSceneDpi * kMmToInch);
+                imageRect.translate(primaryLayer->offsetX * Constants::kMmToPx,
+                                    primaryLayer->offsetY * Constants::kMmToPx);
             }
             painter.drawPixmap(imageRect, basePixmap, QRectF(basePixmap.rect()));
             painter.restore();
@@ -162,8 +242,8 @@ QPixmap renderBadgePixmap(const badge::BadgeData& badgeData, const QSize& target
         painter.save();
         painter.setOpacity(layer.opacity);
         painter.setCompositionMode(compositionModeForLayer(layer.blendMode));
-        const QRectF layerRect = contentRect.translated(layer.offsetX * kSceneDpi * kMmToInch,
-                                                        layer.offsetY * kSceneDpi * kMmToInch);
+        const QRectF layerRect = contentRect.translated(layer.offsetX * Constants::kMmToPx,
+                                                        layer.offsetY * Constants::kMmToPx);
         painter.drawPixmap(layerRect, layerPixmap, QRectF(layerPixmap.rect()));
         painter.restore();
     }
@@ -232,6 +312,14 @@ QList<QGraphicsItem*> sceneItemsByTag(QGraphicsScene* scene, const QString& tag)
         }
     }
     return matches;
+}
+
+void setSceneItemsVisible(const QList<QGraphicsItem*>& items, bool visible) {
+    for (auto* item : items) {
+        if (item) {
+            item->setVisible(visible);
+        }
+    }
 }
 }
 
@@ -357,22 +445,17 @@ bool LayoutWorkspaceWidget::exportPng(const QString& filePath, int dpi, bool whi
 
     const auto safeGuides = sceneItemsByTag(m_scene, QString::fromLatin1(kSafeGuideTag));
     const auto emptyHints = sceneItemsByTag(m_scene, QString::fromLatin1(kEmptyHintTag));
-    for (auto* item : safeGuides) {
-        item->setVisible(false);
-    }
-    for (auto* item : emptyHints) {
-        item->setVisible(false);
-    }
+    const auto bleedGuides = sceneItemsByTag(m_scene, QString::fromLatin1(kBleedGuideTag));
+    setSceneItemsVisible(safeGuides, false);
+    setSceneItemsVisible(emptyHints, false);
+    setSceneItemsVisible(bleedGuides, false);
 
     const QRectF rect = paperRectPx(m_impl->document, dpi);
     QImage image(rect.size().toSize(), QImage::Format_ARGB32_Premultiplied);
     if (image.isNull()) {
-        for (auto* item : safeGuides) {
-            item->setVisible(true);
-        }
-        for (auto* item : emptyHints) {
-            item->setVisible(true);
-        }
+        setSceneItemsVisible(safeGuides, true);
+        setSceneItemsVisible(emptyHints, true);
+        setSceneItemsVisible(bleedGuides, true);
         return false;
     }
     image.fill(whiteBackground ? Qt::white : Qt::transparent);
@@ -380,14 +463,11 @@ bool LayoutWorkspaceWidget::exportPng(const QString& filePath, int dpi, bool whi
 
     QPainter painter(&image);
     painter.setRenderHints(QPainter::Antialiasing | QPainter::SmoothPixmapTransform, true);
-    renderDocumentScene(m_scene, m_impl->document, &painter, kSceneDpi, QRectF(QPointF(0, 0), rect.size()));
+    renderDocumentScene(m_scene, m_impl->document, &painter, Constants::kDisplayDpi, QRectF(QPointF(0, 0), rect.size()));
     painter.end();
-    for (auto* item : safeGuides) {
-        item->setVisible(true);
-    }
-    for (auto* item : emptyHints) {
-        item->setVisible(true);
-    }
+    setSceneItemsVisible(safeGuides, true);
+    setSceneItemsVisible(emptyHints, true);
+    setSceneItemsVisible(bleedGuides, true);
 
     return image.save(filePath);
 }
@@ -399,12 +479,10 @@ bool LayoutWorkspaceWidget::exportPdf(const QString& filePath, int dpi, QPdfWrit
 
     const auto safeGuides = sceneItemsByTag(m_scene, QString::fromLatin1(kSafeGuideTag));
     const auto emptyHints = sceneItemsByTag(m_scene, QString::fromLatin1(kEmptyHintTag));
-    for (auto* item : safeGuides) {
-        item->setVisible(false);
-    }
-    for (auto* item : emptyHints) {
-        item->setVisible(false);
-    }
+    const auto bleedGuides = sceneItemsByTag(m_scene, QString::fromLatin1(kBleedGuideTag));
+    setSceneItemsVisible(safeGuides, false);
+    setSceneItemsVisible(emptyHints, false);
+    setSceneItemsVisible(bleedGuides, false);
 
     QPdfWriter writer(filePath);
     writer.setResolution(dpi);
@@ -418,12 +496,15 @@ bool LayoutWorkspaceWidget::exportPdf(const QString& filePath, int dpi, QPdfWrit
     QPainter painter(&writer);
     painter.setRenderHints(QPainter::Antialiasing | QPainter::SmoothPixmapTransform, true);
     const QRectF target(QPointF(0, 0), QSizeF(writer.width(), writer.height()));
-    renderDocumentScene(m_scene, m_impl->document, &painter, kSceneDpi, target);
+    renderDocumentScene(m_scene, m_impl->document, &painter, Constants::kDisplayDpi, target);
     painter.end();
     for (auto* item : safeGuides) {
         item->setVisible(true);
     }
     for (auto* item : emptyHints) {
+        item->setVisible(true);
+    }
+    for (auto* item : bleedGuides) {
         item->setVisible(true);
     }
     return true;
@@ -436,11 +517,15 @@ bool LayoutWorkspaceWidget::print(QPrinter* printer, bool includeGuides) const {
 
     const auto safeGuides = sceneItemsByTag(m_scene, QString::fromLatin1(kSafeGuideTag));
     const auto emptyHints = sceneItemsByTag(m_scene, QString::fromLatin1(kEmptyHintTag));
+    const auto bleedGuides = sceneItemsByTag(m_scene, QString::fromLatin1(kBleedGuideTag));
     if (!includeGuides) {
         for (auto* item : safeGuides) {
             item->setVisible(false);
         }
         for (auto* item : emptyHints) {
+            item->setVisible(false);
+        }
+        for (auto* item : bleedGuides) {
             item->setVisible(false);
         }
     }
@@ -448,12 +533,9 @@ bool LayoutWorkspaceWidget::print(QPrinter* printer, bool includeGuides) const {
     QPainter painter(printer);
     if (!painter.isActive()) {
         if (!includeGuides) {
-            for (auto* item : safeGuides) {
-                item->setVisible(true);
-            }
-            for (auto* item : emptyHints) {
-                item->setVisible(true);
-            }
+            setSceneItemsVisible(safeGuides, true);
+            setSceneItemsVisible(emptyHints, true);
+            setSceneItemsVisible(bleedGuides, true);
         }
         return false;
     }
@@ -461,29 +543,26 @@ bool LayoutWorkspaceWidget::print(QPrinter* printer, bool includeGuides) const {
     const QRect fullRect = printer->pageLayout().fullRectPixels(printer->resolution());
     painter.fillRect(fullRect, Qt::white);
     const QRectF target(QPointF(0, 0), QSizeF(fullRect.size()));
-    renderDocumentScene(m_scene, m_impl->document, &painter, kSceneDpi, target);
+    renderDocumentScene(m_scene, m_impl->document, &painter, Constants::kDisplayDpi, target);
     painter.end();
 
     if (!includeGuides) {
-        for (auto* item : safeGuides) {
-            item->setVisible(true);
-        }
-        for (auto* item : emptyHints) {
-            item->setVisible(true);
-        }
+        setSceneItemsVisible(safeGuides, true);
+        setSceneItemsVisible(emptyHints, true);
+        setSceneItemsVisible(bleedGuides, true);
     }
     return true;
 }
 
 void LayoutWorkspaceWidget::updateSceneRect() {
-    const double mmToPx = 96.0 / 25.4;
+    const double mmToPx = Constants::kMmToPx;
     m_scene->setSceneRect(-50, -50,
                           m_impl->document.paper.widthMm * mmToPx + 100,
                           m_impl->document.paper.heightMm * mmToPx + 100);
 }
 
 void LayoutWorkspaceWidget::rebuildScene() {
-    const double mmToPx = 96.0 / 25.4;
+    const double mmToPx = Constants::kMmToPx;
     QHash<QString, QPixmap> renderCache;
     m_scene->clear();
     updateSceneRect();
@@ -514,8 +593,8 @@ void LayoutWorkspaceWidget::rebuildScene() {
     for (const auto& b : m_impl->document.badges) {
         const double x = b.xMm * mmToPx;
         const double y = b.yMm * mmToPx;
-        const double w = (b.clipToCircle ? std::max(b.widthMm, b.heightMm) + kCircleBleedMm : b.widthMm) * mmToPx;
-        const double h = (b.clipToCircle ? std::max(b.widthMm, b.heightMm) + kCircleBleedMm : b.heightMm) * mmToPx;
+        const double w = (b.clipToCircle ? std::max(b.widthMm, b.heightMm) + Constants::kCircleBleedMm : b.widthMm) * mmToPx;
+        const double h = (b.clipToCircle ? std::max(b.widthMm, b.heightMm) + Constants::kCircleBleedMm : b.heightMm) * mmToPx;
         const QSize renderSize(std::max(1, int(std::round(w))), std::max(1, int(std::round(h))));
         const QString cacheKey = badgeRenderCacheKey(b, renderSize);
         const auto it = renderCache.constFind(cacheKey);
@@ -525,5 +604,8 @@ void LayoutWorkspaceWidget::rebuildScene() {
         }
 
         m_scene->addItem(new LayoutBadgeItem(x, y, w, h, b.clipToCircle, pixmap));
+        auto* bleedGuide = new LayoutBleedGuideItem(x, y, w, h, b.guide, b.clipToCircle);
+        bleedGuide->setData(kItemRole, QString::fromLatin1(kBleedGuideTag));
+        m_scene->addItem(bleedGuide);
     }
 }
