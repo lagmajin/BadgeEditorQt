@@ -295,6 +295,7 @@ private:
     QImage m_lastTransferLayoutImage;
     QString m_lastTransferDebugTitle;
     QString m_lastTransferDebugDetail;
+    QString m_lastDiagnosticsFingerprint;
     int m_layoutSourceCount = 0;
     int m_layoutPlacedCount = 0;
     int m_layoutOverflowCount = 0;

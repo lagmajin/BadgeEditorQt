@@ -1756,6 +1756,28 @@ void MainWindow::appendLog(const QString& message) {
 }
 
 void MainWindow::refreshDiagnostics() {
+    auto buildFingerprint = [](const QList<BadgeItem>& badges, int layoutPageCount, const QString& overflowSummary) {
+        QString key;
+        key.reserve(256);
+        key += QString::number(badges.size());
+        key += QChar('|');
+        for (const auto& badge : badges) {
+            key += badge.imagePath;
+            key += QChar('|');
+            key += QString::number(badge.layers.size());
+            key += QChar('|');
+            for (const auto& layer : badge.layers) {
+                key += layer.imagePath;
+                key += QChar('|');
+            }
+            key += QChar(';');
+        }
+        key += QString::number(layoutPageCount);
+        key += QChar('|');
+        key += overflowSummary;
+        return key;
+    };
+
     auto populateMissing = [](QListWidget* list, const QList<BadgeItem>& badges) -> int {
         if (!list) {
             return 0;
@@ -1791,11 +1813,17 @@ void MainWindow::refreshDiagnostics() {
         return missingCount;
     };
 
+    const auto& badges = m_badges;
+    const QString diagnosticsFingerprint = buildFingerprint(badges, m_layoutPageCount, m_layoutOverflowSummary);
+    const bool widgetsReady = m_issueList && m_linkList;
+    if (widgetsReady && diagnosticsFingerprint == m_lastDiagnosticsFingerprint) {
+        return;
+    }
+
     if (m_issueList) {
         m_issueList->clear();
     }
 
-    const auto badges = currentDesignerBadges();
     const int missingCount = populateMissing(m_linkList, badges);
 
     if (m_issueList) {
@@ -1812,6 +1840,10 @@ void MainWindow::refreshDiagnostics() {
         if (!m_layoutOverflowSummary.isEmpty()) {
             m_issueList->addItem(m_layoutOverflowSummary);
         }
+    }
+
+    if (widgetsReady) {
+        m_lastDiagnosticsFingerprint = diagnosticsFingerprint;
     }
 }
 
