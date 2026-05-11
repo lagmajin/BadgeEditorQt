@@ -9,6 +9,7 @@
 #include "printdialog.h"
 #include "projectsync.h"
 #include "transferdebugdialog.h"
+#include "windowsintegration.h"
 #include "viewportbackend.h"
 #include "constants.h"
 #include <QMenuBar>
@@ -77,6 +78,7 @@
 #include <DockWidget.h>
 #include <QFileInfo>
 #include <QPalette>
+#include <QStringList>
 #include <wobjectimpl.h>
 
 import badge.documentio;
@@ -104,11 +106,20 @@ namespace {
 #endif
 #endif
 
-void showFileWarning(QWidget* parent, const QString& title, const QString& action, const QString& path) {
-    const QString message = path.isEmpty()
-        ? QStringLiteral("%1に失敗しました").arg(action)
-        : QStringLiteral("%1に失敗しました。\n%2").arg(action, path);
-    QMessageBox::warning(parent, title, message);
+void showOperationWarning(QWidget* parent,
+                          const QString& title,
+                          const QString& action,
+                          const QString& path = QString(),
+                          const QString& detail = QString()) {
+    QStringList lines;
+    lines.append(QStringLiteral("%1に失敗しました").arg(action));
+    if (!path.isEmpty()) {
+        lines.append(QDir::toNativeSeparators(path));
+    }
+    if (!detail.isEmpty()) {
+        lines.append(detail);
+    }
+    QMessageBox::warning(parent, title, lines.join(QStringLiteral("\n")));
 }
 
 QColor blend(const QColor& a, const QColor& b, qreal ratio) {
@@ -419,6 +430,38 @@ QString layerItemSummary(const LayerItem& layer) {
         .arg(layer.name.isEmpty() ? QFileInfo(layer.imagePath).baseName() : layer.name,
              layerBlendModeText(layer.blendMode),
              QString::number(int(std::round(std::clamp(layer.opacity, 0.0, 1.0) * 100.0))));
+}
+
+QString badgeSizeText(const BadgeItem& badge) {
+    return QStringLiteral("%1 × %2 mm")
+        .arg(QString::number(std::max(0.0, badge.widthMm), 'f', 1),
+             QString::number(std::max(0.0, badge.heightMm), 'f', 1));
+}
+
+QString layoutOverflowSummary(const QList<BadgeItem>& sourceBadges,
+                              int placedCount,
+                              const PaperConfig& paper,
+                              bool autoLayoutMode) {
+    const int overflowCount = std::max(0, int(sourceBadges.size()) - placedCount);
+    if (overflowCount <= 0) {
+        return QString();
+    }
+
+    const double innerWidth = std::max(0.0, paper.widthMm - paper.marginMm * 2.0);
+    const double innerHeight = std::max(0.0, paper.heightMm - paper.marginMm * 2.0);
+    if (sourceBadges.size() == 1 && placedCount == 0) {
+        return QStringLiteral("テンプレート %1 が用紙内寸 %2 × %3 mm に収まりませんでした")
+            .arg(badgeSizeText(sourceBadges.first()),
+                 QString::number(innerWidth, 'f', 1),
+                 QString::number(innerHeight, 'f', 1));
+    }
+
+    const BadgeItem& firstOverflow = sourceBadges[placedCount];
+    const QString extra = autoLayoutMode
+        ? QStringLiteral("自動配置の結果、%1 件が収まりませんでした")
+        : QStringLiteral("配置結果の一部が収まりませんでした");
+    return QStringLiteral("%1。最初の未配置サイズ: %2")
+        .arg(extra.arg(overflowCount), badgeSizeText(firstOverflow));
 }
 
 LayerBlendMode inferLayerBlendMode(const QString& path, const QString& name) {
@@ -795,6 +838,15 @@ QList<BadgeItem> badgesInsideCentralGuide(const QList<BadgeItem>& badges, double
     return filtered;
 }
 
+QList<BadgeItem> offsetLayoutPage(const QList<BadgeItem>& page, double dxMm, double dyMm) {
+    QList<BadgeItem> shifted = page;
+    for (auto& badge : shifted) {
+        badge.xMm += dxMm;
+        badge.yMm += dyMm;
+    }
+    return shifted;
+}
+
 struct MaterialPresetDefaults {
     int specular;
     int env;
@@ -843,6 +895,8 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     resize(1300, 900);
     setAcceptDrops(true);
     m_undoStack = new QUndoStack(this);
+    m_windowsIntegration = new WindowsIntegration(this);
+    m_windowsIntegration->initialize(QStringLiteral("BadgeEditorQt.BadgeEditorQt"));
     QFont appFont = QApplication::font();
     appFont.setPointSize(appFont.pointSize() + 1);
     QApplication::setFont(appFont);
@@ -881,6 +935,22 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     auto* actAlignBottom = editMenu->addAction("下揃え", this, &MainWindow::onAlignBottom, QKeySequence("Ctrl+Alt+Down"));
     auto* backspaceShortcut = new QShortcut(QKeySequence(Qt::Key_Backspace), this);
     connect(backspaceShortcut, &QShortcut::activated, this, [this]{ onDelete(); });
+    auto* layoutHomeShortcut = new QShortcut(QKeySequence(Qt::Key_Home), this);
+    connect(layoutHomeShortcut, &QShortcut::activated, this, [this]{
+        if (m_layoutPreviewMode != LayoutPreviewMode::PackedMixedPages || m_layoutPages.isEmpty()) {
+            return;
+        }
+        m_layoutPageIndex = 0;
+        syncLayoutWorkspace();
+    });
+    auto* layoutEndShortcut = new QShortcut(QKeySequence(Qt::Key_End), this);
+    connect(layoutEndShortcut, &QShortcut::activated, this, [this]{
+        if (m_layoutPreviewMode != LayoutPreviewMode::PackedMixedPages || m_layoutPages.isEmpty()) {
+            return;
+        }
+        m_layoutPageIndex = m_layoutPages.size() - 1;
+        syncLayoutWorkspace();
+    });
     setMaterialIcon(actUndo, QStringLiteral("undo"));
     setMaterialIcon(actRedo, QStringLiteral("redo"));
     setMaterialIcon(actDelete, QStringLiteral("delete"));
@@ -998,6 +1068,82 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     setMaterialIcon(backToDesigner, QStringLiteral("arrow_back"));
     auto* resendLayout = m_layoutToolbar->addAction("送信し直す", this, [this]{ onSendToLayout(); });
     setMaterialIcon(resendLayout, QStringLiteral("refresh"));
+    m_layoutToolbar->addSeparator();
+    m_actLayoutPagePrev = m_layoutToolbar->addAction("前のページ", this, [this]{ onLayoutPagePrevious(); });
+    setMaterialIcon(m_actLayoutPagePrev, QStringLiteral("chevron_left"));
+    m_actLayoutPagePrev->setShortcut(QKeySequence(Qt::Key_PageUp));
+    m_layoutPageLabel = new QLabel(QStringLiteral("1 / 1"));
+    m_layoutPageLabel->setMinimumWidth(72);
+    m_layoutPageLabel->setAlignment(Qt::AlignCenter);
+    m_layoutToolbar->addWidget(m_layoutPageLabel);
+    m_layoutPageCombo = new QComboBox;
+    m_layoutPageCombo->setMinimumWidth(120);
+    m_layoutPageCombo->setSizeAdjustPolicy(QComboBox::AdjustToContents);
+    connect(m_layoutPageCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int index) {
+        onLayoutPageSelected(index);
+    });
+    m_layoutToolbar->addWidget(m_layoutPageCombo);
+    m_layoutPageThumbList = new QListWidget;
+    m_layoutPageThumbList->setViewMode(QListView::IconMode);
+    m_layoutPageThumbList->setFlow(QListView::LeftToRight);
+    m_layoutPageThumbList->setWrapping(false);
+    m_layoutPageThumbList->setDragDropMode(QAbstractItemView::InternalMove);
+    m_layoutPageThumbList->setDefaultDropAction(Qt::MoveAction);
+    m_layoutPageThumbList->setResizeMode(QListView::Adjust);
+    m_layoutPageThumbList->setSelectionMode(QAbstractItemView::SingleSelection);
+    m_layoutPageThumbList->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    m_layoutPageThumbList->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    m_layoutPageThumbList->setIconSize(QSize(72, 72));
+    m_layoutPageThumbList->setFixedHeight(92);
+    m_layoutPageThumbList->setMinimumWidth(220);
+    m_layoutPageThumbList->setSpacing(4);
+    connect(m_layoutPageThumbList, &QListWidget::currentRowChanged, this, [this](int row) {
+        onLayoutPageSelected(row);
+    });
+    connect(m_layoutPageThumbList, &QWidget::customContextMenuRequested, this, [this](const QPoint& pos) {
+        if (m_layoutPreviewMode != LayoutPreviewMode::PackedMixedPages || m_layoutPages.isEmpty()) {
+            return;
+        }
+        const QPoint globalPos = m_layoutPageThumbList->mapToGlobal(pos);
+        const QPoint viewportPos = m_layoutPageThumbList->viewport()->mapFromGlobal(globalPos);
+        const QModelIndex index = m_layoutPageThumbList->indexAt(viewportPos);
+        const int pageIndex = index.isValid() ? index.row() : m_layoutPageThumbList->currentRow();
+        if (pageIndex < 0 || pageIndex >= m_layoutPages.size()) {
+            return;
+        }
+
+        QMenu menu(this);
+        QAction* actRename = menu.addAction(QStringLiteral("ページ名変更"));
+        menu.addSeparator();
+        QAction* actDuplicate = menu.addAction(QStringLiteral("このページを複製"));
+        QAction* actDelete = menu.addAction(QStringLiteral("このページを削除"));
+        QAction* actMoveFront = menu.addAction(QStringLiteral("先頭へ移動"));
+        QAction* actMoveBack = menu.addAction(QStringLiteral("末尾へ移動"));
+        actDelete->setEnabled(m_layoutPages.size() > 1);
+        actMoveFront->setEnabled(pageIndex > 0);
+        actMoveBack->setEnabled(pageIndex + 1 < m_layoutPages.size());
+        QAction* chosen = menu.exec(globalPos);
+        if (chosen == actRename) {
+            renameLayoutPageAt(pageIndex);
+        } else if (chosen == actDuplicate) {
+            duplicateLayoutPageAt(pageIndex);
+        } else if (chosen == actDelete) {
+            deleteLayoutPageAt(pageIndex);
+        } else if (chosen == actMoveFront) {
+            moveLayoutPageToFront(pageIndex);
+        } else if (chosen == actMoveBack) {
+            moveLayoutPageToBack(pageIndex);
+        }
+    });
+    connect(m_layoutPageThumbList->model(), &QAbstractItemModel::rowsMoved, this,
+            [this](const QModelIndex&, int, int, const QModelIndex&, int) {
+                reorderLayoutPagesFromThumbList();
+            });
+    m_layoutPageThumbList->setContextMenuPolicy(Qt::CustomContextMenu);
+    m_layoutToolbar->addWidget(m_layoutPageThumbList);
+    m_actLayoutPageNext = m_layoutToolbar->addAction("次のページ", this, [this]{ onLayoutPageNext(); });
+    setMaterialIcon(m_actLayoutPageNext, QStringLiteral("chevron_right"));
+    m_actLayoutPageNext->setShortcut(QKeySequence(Qt::Key_PageDown));
     m_layoutToolbar->addSeparator();
     m_actClearLayout = m_layoutToolbar->addAction("レイアウトをクリア", this, &MainWindow::onClearLayout);
     setMaterialIcon(m_actClearLayout, QStringLiteral("delete_forever"));
@@ -1246,6 +1392,14 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
         if (m_selected.isEmpty()) return;
         const QString path = QFileDialog::getOpenFileName(this, "レイヤー画像を選択", QString(), "すべての画像 (*.png *.jpg *.jpeg *.bmp *.gif *.webp *.tiff *.tif *.svg *.ico);;PNG (*.png);;JPEG (*.jpg *.jpeg)");
         if (path.isEmpty()) return;
+        if (ImageProcessor::loadImage(path, nullptr).isNull()) {
+            showOperationWarning(this,
+                                 QStringLiteral("レイヤー追加"),
+                                 QStringLiteral("画像の読み込み"),
+                                 path,
+                                 QStringLiteral("壊れた画像、または未対応形式の可能性があります"));
+            return;
+        }
         const auto before = currentDesignerBadges();
         const auto selected = selectedBadgeIndices();
         if (selected.isEmpty()) {
@@ -1486,6 +1640,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     loadAppSettings();
     updateInspectorMode();
     openDesignerPerspective();
+    updateLayoutPageUi();
     updateTitle();
 }
 
@@ -1631,9 +1786,17 @@ void MainWindow::refreshDiagnostics() {
 
     if (m_issueList) {
         if (badges.isEmpty()) {
-            m_issueList->addItem(QStringLiteral("編集対象がありません"));
+            m_issueList->addItem(QStringLiteral("編集対象がありません。画像を追加するか、プロジェクトを開いてください"));
         } else {
-            m_issueList->addItem(QStringLiteral("リンク切れ候補: %1 件").arg(missingCount));
+            m_issueList->addItem(missingCount == 0
+                                     ? QStringLiteral("リンク切れ候補: なし")
+                                     : QStringLiteral("リンク切れ候補: %1 件").arg(missingCount));
+        }
+        if (m_layoutPageCount > 1) {
+            m_issueList->addItem(QStringLiteral("レイアウトは %1 ページに分割されました").arg(QString::number(m_layoutPageCount)));
+        }
+        if (!m_layoutOverflowSummary.isEmpty()) {
+            m_issueList->addItem(m_layoutOverflowSummary);
         }
     }
 }
@@ -1645,6 +1808,9 @@ void MainWindow::onNew() {
     m_currentFile.clear();
     m_badges.clear();
     m_layoutBadges.clear();
+    m_layoutPages.clear();
+    m_layoutPageNames.clear();
+    m_layoutPageIndex = 0;
     m_layoutPreviewMode = LayoutPreviewMode::CurrentDesign;
     m_designer->clearBadges();
     BadgeItem blank;
@@ -1663,22 +1829,45 @@ void MainWindow::onNew() {
 void MainWindow::onOpen() {
     QString path = QFileDialog::getOpenFileName(this, "開く", QString(), "バッジエディタファイル (*.bge *.json)");
     if (path.isEmpty()) return;
+    openProjectPath(path);
+}
+
+void MainWindow::openProjectPath(const QString& path) {
+    if (path.isEmpty()) {
+        return;
+    }
+
     QFile f(path);
-    if (f.open(QIODevice::ReadOnly)) {
-        const auto loaded = badge::loadDocumentFromJson(f.readAll());
-        if (!loaded.ok) {
-            showFileWarning(this, QStringLiteral("開く"), QStringLiteral("ファイルの読み込み"), path);
-            return;
-        }
-        onNew();
-        projectsync::applyDocument(*m_designer, *m_layoutWorkspace, *m_comboPaperSize, *m_chkLandscape, *m_spinPaperMargin, *m_spinPaperSpacing, loaded.document);
-        refreshDocumentFromDesigner();
-        m_layoutBadges = m_badges;
-        m_layoutPreviewMode = LayoutPreviewMode::CurrentDesign;
-        m_currentFile = path;
-        refreshDiagnostics();
-        appendLog(QStringLiteral("開きました: %1").arg(path));
-        updateTitle();
+    if (!f.open(QIODevice::ReadOnly)) {
+        showOperationWarning(this, QStringLiteral("開く"), QStringLiteral("ファイルの読み込み"), path, f.errorString());
+        return;
+    }
+    const auto loaded = badge::loadDocumentFromJson(f.readAll());
+    if (!loaded.ok) {
+        showOperationWarning(this,
+                             QStringLiteral("開く"),
+                             QStringLiteral("ファイルの読み込み"),
+                             path,
+                             loaded.errorMessage.isEmpty() ? QStringLiteral("JSON の形式を確認してください") : loaded.errorMessage);
+        return;
+    }
+    onNew();
+    projectsync::applyDocument(*m_designer, *m_layoutWorkspace, *m_comboPaperSize, *m_chkLandscape, *m_spinPaperMargin, *m_spinPaperSpacing, loaded.document);
+    refreshDocumentFromDesigner();
+    m_layoutPages.clear();
+    m_layoutPageNames.clear();
+    m_layoutPageIndex = 0;
+    m_layoutBadges = m_badges;
+    m_layoutPreviewMode = LayoutPreviewMode::CurrentDesign;
+    m_currentFile = path;
+    refreshDiagnostics();
+    appendLog(QStringLiteral("開きました: %1").arg(path));
+    updateTitle();
+    if (m_windowsIntegration) {
+        m_windowsIntegration->rememberFile(path);
+        m_windowsIntegration->showToast(QStringLiteral("プロジェクトを開きました"),
+                                        QFileInfo(path).fileName(),
+                                        WindowsIntegration::ToastKind::Success);
     }
 }
 
@@ -1689,8 +1878,14 @@ void MainWindow::onSave() {
         f.write(badge::saveDocumentToJson(projectsync::currentDocument(m_badges, *m_comboPaperSize, *m_chkLandscape, *m_spinPaperMargin, *m_spinPaperSpacing, m_currentFile)));
         appendLog(QStringLiteral("保存しました: %1").arg(m_currentFile));
         refreshDiagnostics();
+        if (m_windowsIntegration) {
+            m_windowsIntegration->rememberFile(m_currentFile);
+            m_windowsIntegration->showToast(QStringLiteral("保存しました"),
+                                            QFileInfo(m_currentFile).fileName(),
+                                            WindowsIntegration::ToastKind::Success);
+        }
     } else {
-        showFileWarning(this, QStringLiteral("保存"), QStringLiteral("ファイルの保存"), m_currentFile);
+        showOperationWarning(this, QStringLiteral("保存"), QStringLiteral("ファイルの保存"), m_currentFile, f.errorString());
     }
 }
 
@@ -1705,6 +1900,7 @@ void MainWindow::onSaveAs() {
 
 void MainWindow::onExportPdf() {
     syncLayoutWorkspace();
+    const auto pages = currentLayoutPages();
     const QString defaultName = m_currentFile.isEmpty()
         ? QStringLiteral("layout.pdf")
         : QFileInfo(m_currentFile).completeBaseName() + QStringLiteral("_layout.pdf");
@@ -1731,9 +1927,18 @@ void MainWindow::onExportPdf() {
     default:
         break;
     }
-    if (!m_layoutWorkspace->exportPdf(outPath, dlg.dpi(), colorModel)) {
-        showFileWarning(this, QStringLiteral("PDF出力"), QStringLiteral("PDFの書き出し"), outPath);
+    if (!m_layoutWorkspace->exportPdf(pages, outPath, dlg.dpi(), colorModel)) {
+        showOperationWarning(this,
+                             QStringLiteral("PDF出力"),
+                             QStringLiteral("PDFの書き出し"),
+                             outPath,
+                             m_layoutWorkspace ? m_layoutWorkspace->lastError() : QString());
         return;
+    }
+    if (m_windowsIntegration) {
+        m_windowsIntegration->showToast(QStringLiteral("PDFを書き出しました"),
+                                        QFileInfo(outPath).fileName(),
+                                        WindowsIntegration::ToastKind::Success);
     }
 }
 
@@ -1755,13 +1960,23 @@ void MainWindow::onExportPng() {
         outPath += ".png";
     }
     if (!m_layoutWorkspace->exportPng(outPath, dlg.dpi(), dlg.whiteBackground())) {
-        showFileWarning(this, QStringLiteral("画像出力"), QStringLiteral("PNGの書き出し"), outPath);
+        showOperationWarning(this,
+                             QStringLiteral("画像出力"),
+                             QStringLiteral("PNGの書き出し"),
+                             outPath,
+                             m_layoutWorkspace ? m_layoutWorkspace->lastError() : QString());
         return;
+    }
+    if (m_windowsIntegration) {
+        m_windowsIntegration->showToast(QStringLiteral("PNGを書き出しました"),
+                                        QFileInfo(outPath).fileName(),
+                                        WindowsIntegration::ToastKind::Success);
     }
 }
 
 void MainWindow::onPrintPreview() {
     syncLayoutWorkspace();
+    const auto pages = currentLayoutPages();
     const badge::DocumentData document = projectsync::currentDocument(m_layoutBadges, *m_comboPaperSize, *m_chkLandscape, *m_spinPaperMargin, *m_spinPaperSpacing, m_currentFile);
     QPrinter printer(QPrinter::HighResolution);
     configurePrinterForDocument(printer, document, m_appSettings.printResolution);
@@ -1769,7 +1984,7 @@ void MainWindow::onPrintPreview() {
     preview.setWindowTitle(QStringLiteral("印刷プレビュー"));
     connect(&preview, &QPrintPreviewDialog::paintRequested, this, [this](QPrinter* previewPrinter) {
         if (m_layoutWorkspace) {
-            m_layoutWorkspace->print(previewPrinter);
+            m_layoutWorkspace->print(previewPrinter, currentLayoutPages());
         }
     });
     if (preview.exec() == QDialog::Accepted) {
@@ -1780,6 +1995,7 @@ void MainWindow::onPrintPreview() {
 
 void MainWindow::onPrint() {
     syncLayoutWorkspace();
+    const auto pages = currentLayoutPages();
     const badge::DocumentData document = projectsync::currentDocument(m_layoutBadges, *m_comboPaperSize, *m_chkLandscape, *m_spinPaperMargin, *m_spinPaperSpacing, m_currentFile);
     PrintDialog dlg(document.paper.widthMm, document.paper.heightMm, m_appSettings.printResolution, this);
     if (dlg.exec() != QDialog::Accepted) {
@@ -1795,8 +2011,16 @@ void MainWindow::onPrint() {
     printer.setCopyCount(std::max(1, dlg.copies()));
     m_appSettings.printResolution = std::max(72, dlg.resolution());
     saveAppSettings();
-    if (!m_layoutWorkspace->print(&printer, dlg.includeGuides())) {
-        showFileWarning(this, QStringLiteral("印刷"), QStringLiteral("印刷"), QString());
+    if (!m_layoutWorkspace->print(&printer, pages, dlg.includeGuides())) {
+        showOperationWarning(this,
+                             QStringLiteral("印刷"),
+                             QStringLiteral("印刷"),
+                             QString(),
+                             m_layoutWorkspace ? m_layoutWorkspace->lastError() : QString());
+    } else if (m_windowsIntegration) {
+        m_windowsIntegration->showToast(QStringLiteral("印刷を開始しました"),
+                                        printer.printerName(),
+                                        WindowsIntegration::ToastKind::Success);
     }
 }
 
@@ -2098,10 +2322,267 @@ double MainWindow::activeGuideSizeMm() const {
     return m_lastGuideSizeMm;
 }
 
+QList<QList<BadgeItem>> MainWindow::currentLayoutPages() const {
+    if (!m_layoutPages.isEmpty()) {
+        return m_layoutPages;
+    }
+    return QList<QList<BadgeItem>>{m_layoutBadges};
+}
+
+QString MainWindow::layoutPageTitle(int index) const {
+    const int pageNumber = index + 1;
+    QString title = QStringLiteral("ページ %1").arg(pageNumber);
+    if (index >= 0 && index < m_layoutPageNames.size()) {
+        const QString customName = m_layoutPageNames[index].trimmed();
+        if (!customName.isEmpty()) {
+            title += QStringLiteral(": %1").arg(customName);
+        }
+    }
+    return title;
+}
+
+void MainWindow::updateLayoutPageUi() {
+    const bool packedLayout = m_layoutPreviewMode == LayoutPreviewMode::PackedMixedPages && m_layoutPageCount > 0;
+    const int pageCount = std::max(1, m_layoutPageCount);
+    const int pageIndex = std::clamp(m_layoutPageIndex, 0, pageCount - 1);
+    if (m_layoutPageLabel) {
+        m_layoutPageLabel->setText(QStringLiteral("%1 / %2")
+                                       .arg(layoutPageTitle(pageIndex),
+                                            QString::number(pageCount)));
+    }
+    if (m_actLayoutPagePrev) {
+        m_actLayoutPagePrev->setEnabled(packedLayout && pageIndex > 0);
+    }
+    if (m_actLayoutPageNext) {
+        m_actLayoutPageNext->setEnabled(packedLayout && pageIndex + 1 < pageCount);
+    }
+    if (m_layoutPageCombo) {
+        const QSignalBlocker blocker(m_layoutPageCombo);
+        m_layoutPageCombo->clear();
+        if (packedLayout) {
+            for (int i = 0; i < pageCount; ++i) {
+                m_layoutPageCombo->addItem(QStringLiteral("%1 / %2")
+                                               .arg(layoutPageTitle(i),
+                                                    QString::number(pageCount)));
+            }
+            m_layoutPageCombo->setCurrentIndex(pageIndex);
+            m_layoutPageCombo->setEnabled(true);
+        } else {
+            m_layoutPageCombo->addItem(layoutPageTitle(0));
+            m_layoutPageCombo->setCurrentIndex(0);
+            m_layoutPageCombo->setEnabled(false);
+        }
+    }
+    if (m_layoutPageThumbList) {
+        const QSignalBlocker blocker(m_layoutPageThumbList);
+        m_layoutPageThumbList->clear();
+        const auto pages = currentLayoutPages();
+        for (int i = 0; i < pages.size(); ++i) {
+            auto* item = new QListWidgetItem(layoutPageTitle(i));
+            item->setToolTip(QStringLiteral("%1 / %2")
+                                 .arg(layoutPageTitle(i),
+                                      QString::number(std::max(1, m_layoutPageCount))));
+            if (m_layoutWorkspace) {
+                const QPixmap thumb = m_layoutWorkspace->renderPageThumbnail(pages[i], 96, false);
+                if (!thumb.isNull()) {
+                    item->setIcon(QIcon(thumb));
+                }
+            }
+            item->setData(Qt::UserRole, i);
+            QFont font = item->font();
+            font.setBold(i == pageIndex);
+            item->setFont(font);
+            if (i == pageIndex) {
+                item->setBackground(QBrush(QColor(86, 120, 255, 48)));
+                item->setForeground(QBrush(QColor(40, 60, 130)));
+            } else {
+                item->setBackground(QBrush(Qt::transparent));
+                item->setForeground(QBrush());
+            }
+            m_layoutPageThumbList->addItem(item);
+        }
+        m_layoutPageThumbList->setCurrentRow(pageIndex);
+        m_layoutPageThumbList->setEnabled(packedLayout);
+    }
+}
+
+void MainWindow::reorderLayoutPagesFromThumbList() {
+    if (m_layoutPreviewMode != LayoutPreviewMode::PackedMixedPages || !m_layoutPageThumbList) {
+        return;
+    }
+    const int pageCount = m_layoutPages.size();
+    if (pageCount <= 1) {
+        return;
+    }
+
+    QList<QList<BadgeItem>> reordered;
+    reordered.reserve(pageCount);
+    for (int row = 0; row < m_layoutPageThumbList->count(); ++row) {
+        const auto* item = m_layoutPageThumbList->item(row);
+        if (!item) {
+            continue;
+        }
+        const int originalIndex = item->data(Qt::UserRole).toInt();
+        if (originalIndex >= 0 && originalIndex < m_layoutPages.size()) {
+            reordered.append(m_layoutPages[originalIndex]);
+        }
+    }
+    if (reordered.size() != pageCount) {
+        return;
+    }
+
+    m_layoutPages = reordered;
+    if (m_layoutPageNames.size() == pageCount) {
+        QList<QString> reorderedNames;
+        reorderedNames.reserve(pageCount);
+        for (int row = 0; row < m_layoutPageThumbList->count(); ++row) {
+            const auto* item = m_layoutPageThumbList->item(row);
+            if (!item) {
+                continue;
+            }
+            const int originalIndex = item->data(Qt::UserRole).toInt();
+            if (originalIndex >= 0 && originalIndex < m_layoutPageNames.size()) {
+                reorderedNames.append(m_layoutPageNames[originalIndex]);
+            }
+        }
+        if (reorderedNames.size() == pageCount) {
+            m_layoutPageNames = reorderedNames;
+        }
+    }
+    m_layoutPageIndex = std::clamp(m_layoutPageThumbList->currentRow(), 0, static_cast<int>(m_layoutPages.size()) - 1);
+    syncLayoutWorkspace();
+}
+
+void MainWindow::duplicateLayoutPageAt(int index) {
+    if (m_layoutPreviewMode != LayoutPreviewMode::PackedMixedPages || index < 0 || index >= m_layoutPages.size()) {
+        return;
+    }
+    constexpr double kDuplicateOffsetMm = 2.0;
+    const QList<BadgeItem> duplicated = offsetLayoutPage(m_layoutPages[index], kDuplicateOffsetMm, kDuplicateOffsetMm);
+    m_layoutPages.insert(index + 1, duplicated);
+    const QString sourceName = index >= 0 && index < m_layoutPageNames.size() ? m_layoutPageNames[index].trimmed() : QString();
+    m_layoutPageNames.insert(index + 1, sourceName.isEmpty()
+                                            ? QStringLiteral("複製ページ")
+                                            : QStringLiteral("%1（複製）").arg(sourceName));
+    m_layoutPageIndex = index + 1;
+    syncLayoutWorkspace();
+    appendLog(QStringLiteral("ページ %1 を複製しました（少しずらしました）").arg(index + 1));
+}
+
+void MainWindow::deleteLayoutPageAt(int index) {
+    if (m_layoutPreviewMode != LayoutPreviewMode::PackedMixedPages || index < 0 || index >= m_layoutPages.size()) {
+        return;
+    }
+    if (m_layoutPages.size() <= 1) {
+        return;
+    }
+    m_layoutPages.removeAt(index);
+    if (index >= 0 && index < m_layoutPageNames.size()) {
+        m_layoutPageNames.removeAt(index);
+    }
+    m_layoutPageIndex = std::clamp(index, 0, static_cast<int>(m_layoutPages.size()) - 1);
+    syncLayoutWorkspace();
+    appendLog(QStringLiteral("ページ %1 を削除しました").arg(index + 1));
+}
+
+void MainWindow::moveLayoutPageToFront(int index) {
+    if (m_layoutPreviewMode != LayoutPreviewMode::PackedMixedPages || index <= 0 || index >= m_layoutPages.size()) {
+        return;
+    }
+    const QList<BadgeItem> page = m_layoutPages.takeAt(index);
+    m_layoutPages.prepend(page);
+    if (index >= 0 && index < m_layoutPageNames.size()) {
+        const QString name = m_layoutPageNames.takeAt(index);
+        m_layoutPageNames.prepend(name);
+    }
+    m_layoutPageIndex = 0;
+    syncLayoutWorkspace();
+    appendLog(QStringLiteral("ページ %1 を先頭へ移動しました").arg(index + 1));
+}
+
+void MainWindow::moveLayoutPageToBack(int index) {
+    if (m_layoutPreviewMode != LayoutPreviewMode::PackedMixedPages || index < 0 || index >= m_layoutPages.size() - 1) {
+        return;
+    }
+    const QList<BadgeItem> page = m_layoutPages.takeAt(index);
+    m_layoutPages.append(page);
+    if (index >= 0 && index < m_layoutPageNames.size()) {
+        const QString name = m_layoutPageNames.takeAt(index);
+        m_layoutPageNames.append(name);
+    }
+    m_layoutPageIndex = m_layoutPages.size() - 1;
+    syncLayoutWorkspace();
+    appendLog(QStringLiteral("ページ %1 を末尾へ移動しました").arg(index + 1));
+}
+
+void MainWindow::renameLayoutPageAt(int index) {
+    if (m_layoutPreviewMode != LayoutPreviewMode::PackedMixedPages || index < 0 || index >= m_layoutPages.size()) {
+        return;
+    }
+    const QString currentName = index < m_layoutPageNames.size() ? m_layoutPageNames[index].trimmed() : QString();
+    bool ok = false;
+    const QString entered = QInputDialog::getText(this,
+                                                  QStringLiteral("ページ名変更"),
+                                                  QStringLiteral("ページ名:"),
+                                                  QLineEdit::Normal,
+                                                  currentName.isEmpty() ? layoutPageTitle(index) : currentName,
+                                                  &ok);
+    if (!ok) {
+        return;
+    }
+    if (index >= m_layoutPageNames.size()) {
+        m_layoutPageNames.resize(index + 1);
+    }
+    m_layoutPageNames[index] = entered.trimmed();
+    syncLayoutWorkspace();
+    appendLog(QStringLiteral("ページ %1 の名前を変更しました").arg(index + 1));
+}
+
+void MainWindow::onLayoutPagePrevious() {
+    if (m_layoutPreviewMode != LayoutPreviewMode::PackedMixedPages || m_layoutPages.isEmpty()) {
+        return;
+    }
+    if (m_layoutPageIndex <= 0) {
+        return;
+    }
+    --m_layoutPageIndex;
+    syncLayoutWorkspace();
+}
+
+void MainWindow::onLayoutPageNext() {
+    if (m_layoutPreviewMode != LayoutPreviewMode::PackedMixedPages || m_layoutPages.isEmpty()) {
+        return;
+    }
+    if (m_layoutPageIndex + 1 >= m_layoutPages.size()) {
+        return;
+    }
+    ++m_layoutPageIndex;
+    syncLayoutWorkspace();
+}
+
+void MainWindow::onLayoutPageSelected(int index) {
+    if (m_layoutPreviewMode != LayoutPreviewMode::PackedMixedPages || m_layoutPages.isEmpty()) {
+        return;
+    }
+    if (index < 0 || index >= m_layoutPages.size() || index == m_layoutPageIndex) {
+        return;
+    }
+    m_layoutPageIndex = index;
+    syncLayoutWorkspace();
+}
+
 void MainWindow::onSetImage() {
     if (m_selected.isEmpty()) return;
     QString path = QFileDialog::getOpenFileName(this, "画像を選択", QString(), "すべての画像 (*.png *.jpg *.jpeg *.bmp *.gif *.webp *.tiff *.tif *.svg *.ico);;PNG (*.png);;JPEG (*.jpg *.jpeg)");
     if (path.isEmpty()) return;
+    if (ImageProcessor::loadImage(path, nullptr).isNull()) {
+        showOperationWarning(this,
+                             QStringLiteral("画像レイヤー変更"),
+                             QStringLiteral("画像の読み込み"),
+                             path,
+                             QStringLiteral("壊れた画像、または未対応形式の可能性があります"));
+        return;
+    }
     const auto before = currentDesignerBadges();
     const auto selected = selectedBadgeIndices();
     auto after = before;
@@ -2408,6 +2889,9 @@ void MainWindow::onBatchAdd() {
                 b.clipToCircle = dlg.clipCircle();
                 batchBadges.append(b);
         }
+        m_layoutPages.clear();
+        m_layoutPageNames.clear();
+        m_layoutPageIndex = 0;
         m_layoutPreviewMode = LayoutPreviewMode::CurrentDesign;
         m_layoutBadges = batchBadges;
         syncLayoutWorkspace();
@@ -2451,7 +2935,18 @@ void MainWindow::onMixedLayout() {
         });
     }
 
-    m_layoutPreviewMode = LayoutPreviewMode::AutoLayoutAll;
+    if (dlg.sortBySize()) {
+        const badge::DocumentData paperDocument = projectsync::currentDocument(mixed, *m_comboPaperSize, *m_chkLandscape, *m_spinPaperMargin, *m_spinPaperSpacing, m_currentFile);
+        m_layoutPages = LayoutEngine::packMixedPages(mixed, paperDocument.paper);
+        m_layoutPageNames = QList<QString>(m_layoutPages.size());
+        m_layoutPageIndex = 0;
+        m_layoutPreviewMode = LayoutPreviewMode::PackedMixedPages;
+    } else {
+        m_layoutPages.clear();
+        m_layoutPageNames.clear();
+        m_layoutPageIndex = 0;
+        m_layoutPreviewMode = LayoutPreviewMode::AutoLayoutAll;
+    }
     m_layoutBadges = mixed;
     syncLayoutWorkspace();
     m_skipNextLayoutSync = true;
@@ -2459,6 +2954,9 @@ void MainWindow::onMixedLayout() {
     appendLog(QStringLiteral("混在面付けを準備しました: %1 種類 / %2 枚")
                   .arg(sourceBadges.size())
                   .arg(mixed.size()));
+    if (m_layoutPageCount > 1) {
+        appendLog(QStringLiteral("レイアウトを %1 ページに分割しました").arg(QString::number(m_layoutPageCount)));
+    }
 }
 
 void MainWindow::onAutoLayout() {
@@ -2466,6 +2964,14 @@ void MainWindow::onAutoLayout() {
 }
 
 void MainWindow::onImageDropped(const QString& filePath) {
+    if (ImageProcessor::loadImage(filePath, nullptr).isNull()) {
+        showOperationWarning(this,
+                             QStringLiteral("画像ドロップ"),
+                             QStringLiteral("画像の読み込み"),
+                             filePath,
+                             QStringLiteral("壊れた画像、または未対応形式の可能性があります"));
+        return;
+    }
     const auto before = currentDesignerBadges();
     BadgeItem b;
     b.layers.append(layerFromImagePath(filePath));
@@ -2481,6 +2987,11 @@ void MainWindow::syncLayoutWorkspace() {
     refreshDocumentFromDesigner();
     const badge::DocumentData document = projectsync::currentDocument(m_layoutBadges, *m_comboPaperSize, *m_chkLandscape, *m_spinPaperMargin, *m_spinPaperSpacing, m_currentFile);
     badge::DocumentData layoutDocument = document;
+    const QList<BadgeItem> sourceBadges = badge::qt::fromCoreBadges(layoutDocument.badges);
+    const int sourceCount = sourceBadges.size();
+    int placedCount = sourceCount;
+    QString overflowSummary;
+    int pageCount = 1;
     const bool cutFriendly = m_chkCutFriendlyLayout && m_chkCutFriendlyLayout->isChecked();
     if (m_layoutPreviewMode == LayoutPreviewMode::FillPageFromSelection) {
         BadgeItem templateBadge;
@@ -2500,20 +3011,54 @@ void MainWindow::syncLayoutWorkspace() {
                 ? LayoutEngine::fillPageGrid(templateBadge, layoutDocument.paper)
                 : LayoutEngine::fillPage(templateBadge, layoutDocument.paper);
             layoutDocument.badges = badge::qt::toCoreBadges(laidOut);
+            placedCount = laidOut.size();
+            overflowSummary = layoutOverflowSummary(QList<BadgeItem>{templateBadge},
+                                                    placedCount,
+                                                    layoutDocument.paper,
+                                                    false);
         }
     } else if (m_layoutPreviewMode == LayoutPreviewMode::AutoLayoutAll) {
-        const QList<BadgeItem> sourceBadges = badge::qt::fromCoreBadges(layoutDocument.badges);
         const QList<BadgeItem> laidOut = cutFriendly
             ? LayoutEngine::autoLayoutGrid(sourceBadges, layoutDocument.paper)
             : LayoutEngine::autoLayout(sourceBadges, layoutDocument.paper);
         layoutDocument.badges = badge::qt::toCoreBadges(laidOut);
+        placedCount = laidOut.size();
+        overflowSummary = layoutOverflowSummary(sourceBadges,
+                                                placedCount,
+                                                layoutDocument.paper,
+                                                true);
+    } else if (m_layoutPreviewMode == LayoutPreviewMode::PackedMixedPages) {
+        if (!m_layoutPages.isEmpty()) {
+            m_layoutPageIndex = std::clamp(m_layoutPageIndex, 0, static_cast<int>(m_layoutPages.size()) - 1);
+            const QList<BadgeItem> currentPage = m_layoutPages[m_layoutPageIndex];
+            layoutDocument.badges = badge::qt::toCoreBadges(currentPage);
+            placedCount = 0;
+            for (const auto& page : m_layoutPages) {
+                placedCount += page.size();
+            }
+            pageCount = m_layoutPages.size();
+            overflowSummary = layoutOverflowSummary(sourceBadges,
+                                                    placedCount,
+                                                    layoutDocument.paper,
+                                                    true);
+            if (pageCount > 1 && placedCount == sourceCount) {
+                overflowSummary = QStringLiteral("複数ページに分割しました");
+            }
+        }
     }
+    m_layoutSourceCount = sourceCount;
+    m_layoutPlacedCount = placedCount;
+    m_layoutOverflowCount = std::max(0, sourceCount - placedCount);
+    m_layoutPageCount = std::max(1, pageCount);
+    m_layoutOverflowSummary = overflowSummary;
     m_paperWidthMm = document.paper.widthMm;
     m_paperHeightMm = document.paper.heightMm;
     m_paperMarginMm = document.paper.marginMm;
     m_paperSpacingMm = document.paper.spacingMm;
     m_layoutWorkspace->setDocument(layoutDocument);
+    updateLayoutPageUi();
     updateSafetyGuideHud();
+    refreshDiagnostics();
 }
 
 void MainWindow::refreshDocumentFromDesigner() {
@@ -2563,6 +3108,22 @@ void MainWindow::updateToolbarsForMode() {
     if (m_actClearLayout) {
         m_actClearLayout->setVisible(!designer);
     }
+    if (m_actLayoutPagePrev) {
+        m_actLayoutPagePrev->setVisible(!designer);
+    }
+    if (m_actLayoutPageNext) {
+        m_actLayoutPageNext->setVisible(!designer);
+    }
+    if (m_layoutPageLabel) {
+        m_layoutPageLabel->setVisible(!designer);
+    }
+    if (m_layoutPageCombo) {
+        m_layoutPageCombo->setVisible(!designer);
+    }
+    if (m_layoutPageThumbList) {
+        m_layoutPageThumbList->setVisible(!designer);
+    }
+    updateLayoutPageUi();
 }
 
 void MainWindow::onSendToLayout() {
@@ -2571,6 +3132,9 @@ void MainWindow::onSendToLayout() {
     m_lastTransferLayoutImage = QImage();
     m_lastTransferDebugTitle.clear();
     m_lastTransferDebugDetail.clear();
+    m_layoutPages.clear();
+    m_layoutPageNames.clear();
+    m_layoutPageIndex = 0;
     const auto document = projectsync::currentDocument(m_badges, *m_comboPaperSize, *m_chkLandscape, *m_spinPaperMargin, *m_spinPaperSpacing, m_currentFile);
     const double guideSizeMm = !m_selected.isEmpty()
         ? badgeGuideSizeMm(m_selected.first()->badge())
@@ -2610,15 +3174,22 @@ void MainWindow::onSendToLayout() {
         guideBadges.append(transferBadge);
     }
     if (guideBadges.isEmpty()) {
+        m_layoutSourceCount = 0;
+        m_layoutPlacedCount = 0;
+        m_layoutOverflowCount = 0;
+        m_layoutOverflowSummary.clear();
+        refreshDiagnostics();
         appendLog(QStringLiteral("中央ガイドの安全域内に送れるバッジがありません"));
         return;
     }
     if (guideBadges.size() <= 1) {
         m_layoutPreviewMode = LayoutPreviewMode::FillPageFromSelection;
         m_layoutBadges = QList<BadgeItem>{guideBadges.first()};
+        m_layoutPageIndex = 0;
     } else {
         m_layoutPreviewMode = LayoutPreviewMode::AutoLayoutAll;
         m_layoutBadges = LayoutEngine::autoLayout(guideBadges, document.paper);
+        m_layoutPageIndex = 0;
     }
     syncLayoutWorkspace();
     m_skipNextLayoutSync = true;
@@ -2648,6 +3219,9 @@ void MainWindow::onShowTransferDebug() {
 
 void MainWindow::onClearLayout() {
     m_layoutBadges.clear();
+    m_layoutPages.clear();
+    m_layoutPageNames.clear();
+    m_layoutPageIndex = 0;
     m_layoutPreviewMode = LayoutPreviewMode::CurrentDesign;
     syncLayoutWorkspace();
     m_skipNextLayoutSync = true;
@@ -2766,10 +3340,25 @@ void MainWindow::updateSafetyGuideHud() {
     });
 
     const bool layoutReady = m_layoutPreviewMode != LayoutPreviewMode::CurrentDesign && !m_layoutBadges.isEmpty();
+    const bool packedLayout = m_layoutPreviewMode == LayoutPreviewMode::PackedMixedPages;
+    const QString layoutDetail = m_layoutOverflowSummary.isEmpty()
+        ? (layoutReady
+               ? QStringLiteral("%1 %2/%3 / %4ページ")
+                     .arg(packedLayout ? QStringLiteral("詰め込み済み") : QStringLiteral("確認済み"),
+                          QString::number(m_layoutPlacedCount),
+                          QString::number(std::max(0, m_layoutSourceCount)),
+                          QString::number(std::max(1, m_layoutPageCount)))
+               : QStringLiteral("未確認"))
+        : QStringLiteral("%1 (%2/%3 / %4ページ)")
+              .arg(m_layoutOverflowSummary,
+                   QString::number(m_layoutPlacedCount),
+                   QString::number(std::max(0, m_layoutSourceCount)),
+                   QString::number(std::max(1, m_layoutPageCount)));
     entries.append({
         QStringLiteral("② レイアウト"),
-        layoutReady ? QStringLiteral("確認済み") : QStringLiteral("未確認"),
-        statusColor(layoutReady ? StatusLevel::Good : StatusLevel::Warning),
+        layoutDetail,
+        statusColor(!m_layoutOverflowSummary.isEmpty() ? StatusLevel::Warning
+                                                       : (layoutReady ? StatusLevel::Good : StatusLevel::Warning)),
     });
 
     bool hasImages = false;

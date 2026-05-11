@@ -33,6 +33,7 @@ set(SOURCES
     layoutengine.cpp
     imageprocessor.cpp
     projectsync.cpp
+    windowsintegration.cpp
 )
 
 set(HEADERS
@@ -55,6 +56,7 @@ set(HEADERS
     layoutengine.h
     imageprocessor.h
     projectsync.h
+    windowsintegration.h
 )
 
 add_executable(BadgeEditorQt ${SOURCES} ${HEADERS})
@@ -74,7 +76,7 @@ target_sources(BadgeEditorQt
 target_link_libraries(BadgeEditorQt PRIVATE Qt6::Widgets Qt6::Core Qt6::PrintSupport Qt6::OpenGLWidgets ads::qtadvanceddocking-qt6 OpenImageIO::OpenImageIO)
 
 if (WIN32)
-    target_link_libraries(BadgeEditorQt PRIVATE dwmapi ole32 windowscodecs)
+    target_link_libraries(BadgeEditorQt PRIVATE dwmapi ole32 shell32 windowscodecs)
 endif()
 
 if (TARGET Qt6::Svg)

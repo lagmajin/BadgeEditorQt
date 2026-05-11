@@ -33,10 +33,15 @@ class CDockAreaWidget;
 class BadgeGraphicItem;
 class QListWidget;
 class QGroupBox;
+class WindowsIntegration;
+namespace badge {
+struct DocumentData;
+}
 class MainWindow : public QMainWindow {
     W_OBJECT(MainWindow)
 public:
     explicit MainWindow(QWidget* parent = nullptr);
+    void openProjectPath(const QString& path);
 
 private:
     // File
@@ -137,8 +142,20 @@ private:
     void deleteSavedPerspective();
     void refreshPerspectiveMenu();
     void updateToolbarsForMode();
+    void updateLayoutPageUi();
+    QString layoutPageTitle(int index) const;
+    void reorderLayoutPagesFromThumbList();
+    void duplicateLayoutPageAt(int index);
+    void deleteLayoutPageAt(int index);
+    void moveLayoutPageToFront(int index);
+    void moveLayoutPageToBack(int index);
+    void renameLayoutPageAt(int index);
+    void onLayoutPagePrevious();
+    void onLayoutPageNext();
+    void onLayoutPageSelected(int index);
     void setInspectorControlsEnabled(bool on);
     double activeGuideSizeMm() const;
+    QList<QList<BadgeItem>> currentLayoutPages() const;
 
     // UI
     ads::CDockManager* m_dockManager = nullptr;
@@ -176,6 +193,11 @@ private:
     QAction* m_actOpenLayoutPerspective = nullptr;
     QAction* m_actZoomIn = nullptr;
     QAction* m_actZoomOut = nullptr;
+    QAction* m_actLayoutPagePrev = nullptr;
+    QAction* m_actLayoutPageNext = nullptr;
+    QLabel* m_layoutPageLabel = nullptr;
+    QComboBox* m_layoutPageCombo = nullptr;
+    QListWidget* m_layoutPageThumbList = nullptr;
 
     // Inspector - properties
     QDoubleSpinBox* m_propX;
@@ -240,6 +262,7 @@ private:
     QList<BadgeGraphicItem*> m_selected;
     QList<BadgeItem> m_badges;
     QList<BadgeItem> m_layoutBadges;
+    QList<QString> m_layoutPageNames;
     double m_lastGuideSizeMm = 32.0;
     int m_lastLayerRow = -1;
     QList<BadgeItem> m_pendingEditBeforeBadges;
@@ -253,12 +276,20 @@ private:
         CurrentDesign,
         FillPageFromSelection,
         AutoLayoutAll,
+        PackedMixedPages,
     };
     LayoutPreviewMode m_layoutPreviewMode = LayoutPreviewMode::CurrentDesign;
+    QList<QList<BadgeItem>> m_layoutPages;
+    int m_layoutPageIndex = 0;
     QImage m_lastTransferDesignerImage;
     QImage m_lastTransferLayoutImage;
     QString m_lastTransferDebugTitle;
     QString m_lastTransferDebugDetail;
+    int m_layoutSourceCount = 0;
+    int m_layoutPlacedCount = 0;
+    int m_layoutOverflowCount = 0;
+    int m_layoutPageCount = 0;
+    QString m_layoutOverflowSummary;
     TransferDebugDialog* m_transferDebugDialog = nullptr;
     double m_paperWidthMm = 210.0;
     double m_paperHeightMm = 297.0;
@@ -274,6 +305,7 @@ private:
     bool m_isDesigner = true;
     bool m_backdropApplied = false;
     bool m_skipNextLayoutSync = false;
+    WindowsIntegration* m_windowsIntegration = nullptr;
 };
 
 #endif

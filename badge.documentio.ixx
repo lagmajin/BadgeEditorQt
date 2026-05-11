@@ -5,6 +5,7 @@ module;
 #include <QByteArray>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QJsonParseError>
 #include <QJsonObject>
 #include <QFileInfo>
 #include <QString>
@@ -21,6 +22,7 @@ export namespace badge {
 struct JsonDocumentResult {
     DocumentData document;
     bool ok = false;
+    QString errorMessage;
 };
 
 namespace detail {
@@ -236,8 +238,16 @@ inline QJsonObject paperToJson(const PaperConfig& paper) {
 }
 
 export inline JsonDocumentResult loadDocumentFromJson(const QByteArray& json) {
-    const QJsonDocument doc = QJsonDocument::fromJson(json);
     JsonDocumentResult result;
+    QJsonParseError parseError;
+    const QJsonDocument doc = QJsonDocument::fromJson(json, &parseError);
+
+    if (parseError.error != QJsonParseError::NoError) {
+        result.errorMessage = QStringLiteral("JSON の解析に失敗しました: %1 (offset %2)")
+                                  .arg(parseError.errorString())
+                                  .arg(parseError.offset);
+        return result;
+    }
 
     if (doc.isArray()) {
         result.document.title = "";
@@ -252,6 +262,7 @@ export inline JsonDocumentResult loadDocumentFromJson(const QByteArray& json) {
     }
 
     if (!doc.isObject()) {
+        result.errorMessage = QStringLiteral("JSON 文書の形式が未対応です");
         return result;
     }
 

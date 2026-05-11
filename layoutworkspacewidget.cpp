@@ -24,6 +24,7 @@
 #include <QHash>
 #include <QGraphicsSimpleTextItem>
 #include <QUrl>
+#include <QDir>
 #include <algorithm>
 #include "viewportbackend.h"
 
@@ -33,6 +34,7 @@ import badge.qtbridge;
 
 struct LayoutWorkspaceWidget::Impl {
     badge::DocumentData document;
+    QString lastError;
 };
 
 namespace {
@@ -65,6 +67,42 @@ QRectF paperRectPx(const badge::DocumentData& document, double dpi) {
 void renderDocumentScene(QGraphicsScene* scene, const badge::DocumentData& document, QPainter* painter, double sourceDpi, const QRectF& target) {
     const QRectF source = paperRectPx(document, sourceDpi);
     scene->render(painter, target, source, Qt::IgnoreAspectRatio);
+}
+
+void drawPageNumberLabel(QPainter* painter, const QRectF& pageRect, int pageIndex, int pageCount) {
+    if (!painter || pageCount <= 1 || pageIndex < 0 || pageIndex >= pageCount) {
+        return;
+    }
+
+    const QString label = QStringLiteral("%1 / %2")
+                              .arg(QString::number(pageIndex + 1),
+                                   QString::number(pageCount));
+    painter->save();
+    QFont font = painter->font();
+    font.setPointSizeF(std::max(6.5, font.pointSizeF() > 0 ? font.pointSizeF() - 2.0 : 7.0));
+    font.setBold(false);
+    painter->setFont(font);
+
+    const QFontMetricsF fm(font);
+    const QRectF textRect = fm.boundingRect(label).adjusted(-4.0, -2.0, 4.0, 2.0);
+    const qreal marginX = std::max(8.0, pageRect.width() * 0.035);
+    const qreal marginY = std::max(8.0, pageRect.height() * 0.035);
+    QRectF box(QPointF(pageRect.right() - marginX - textRect.width(),
+                       pageRect.bottom() - marginY - textRect.height()),
+               textRect.size());
+    if (box.left() < pageRect.left() + 8.0) {
+        box.moveLeft(pageRect.left() + 8.0);
+    }
+    if (box.top() < pageRect.top() + 8.0) {
+        box.moveTop(pageRect.top() + 8.0);
+    }
+
+    painter->setPen(QPen(QColor(90, 90, 90, 120), 0.8));
+    painter->setBrush(QColor(255, 255, 255, 150));
+    painter->drawRoundedRect(box, 3.5, 3.5);
+    painter->setPen(QColor(90, 90, 90, 180));
+    painter->drawText(box, Qt::AlignCenter, label);
+    painter->restore();
 }
 
 QPdfOutputIntent srgbOutputIntent() {
@@ -321,7 +359,6 @@ void setSceneItemsVisible(const QList<QGraphicsItem*>& items, bool visible) {
         }
     }
 }
-}
 
 class LayoutBadgeItem final : public QGraphicsItem {
 public:
@@ -388,6 +425,80 @@ private:
     QPixmap m_pixmap;
 };
 
+void populateSceneForDocument(QGraphicsScene* scene,
+                              const badge::DocumentData& document,
+                              QHash<QString, QPixmap>& renderCache) {
+    const double mmToPx = Constants::kMmToPx;
+    if (!scene) {
+        return;
+    }
+
+    scene->clear();
+    scene->addRect(0, 0,
+                   document.paper.widthMm * mmToPx,
+                   document.paper.heightMm * mmToPx,
+                   QPen(Qt::black), QBrush(Qt::white));
+
+    QPen safePen(Qt::red, 1, Qt::DashLine);
+    safePen.setDashPattern({5, 5});
+    const double marginPx = document.paper.marginMm * mmToPx;
+    const double safeWidthPx = std::max(0.0, document.paper.widthMm - document.paper.marginMm * 2.0) * mmToPx;
+    const double safeHeightPx = std::max(0.0, document.paper.heightMm - document.paper.marginMm * 2.0) * mmToPx;
+    auto* safeGuide = scene->addRect(marginPx, marginPx,
+                                      safeWidthPx,
+                                      safeHeightPx,
+                                      safePen, Qt::NoBrush);
+    safeGuide->setData(kItemRole, QString::fromLatin1(kSafeGuideTag));
+
+    if (document.badges.empty()) {
+        addEmptyHint(scene, QRectF(0.0,
+                                   0.0,
+                                   document.paper.widthMm * mmToPx,
+                                   document.paper.heightMm * mmToPx));
+    }
+
+    for (const auto& b : document.badges) {
+        const double x = b.xMm * mmToPx;
+        const double y = b.yMm * mmToPx;
+        const double w = (b.clipToCircle ? std::max(b.widthMm, b.heightMm) + Constants::kCircleBleedMm : b.widthMm) * mmToPx;
+        const double h = (b.clipToCircle ? std::max(b.widthMm, b.heightMm) + Constants::kCircleBleedMm : b.heightMm) * mmToPx;
+        const QSize renderSize(std::max(1, int(std::round(w))), std::max(1, int(std::round(h))));
+        const QString cacheKey = badgeRenderCacheKey(b, renderSize);
+        const auto it = renderCache.constFind(cacheKey);
+        const QPixmap pixmap = (it != renderCache.cend()) ? *it : renderBadgePixmap(b, renderSize);
+        if (it == renderCache.cend()) {
+            renderCache.insert(cacheKey, pixmap);
+        }
+
+        scene->addItem(new LayoutBadgeItem(x, y, w, h, b.clipToCircle, pixmap));
+        auto* bleedGuide = new LayoutBleedGuideItem(x, y, w, h, b.guide, b.clipToCircle);
+        bleedGuide->setData(kItemRole, QString::fromLatin1(kBleedGuideTag));
+        scene->addItem(bleedGuide);
+    }
+}
+
+void renderDocumentPage(const badge::DocumentData& document,
+                        QPainter* painter,
+                        const QRectF& target,
+                        bool includeGuides,
+                        QHash<QString, QPixmap>* sharedCache = nullptr) {
+    if (!painter) {
+        return;
+    }
+    QGraphicsScene scene;
+    QHash<QString, QPixmap> localCache;
+    auto& cache = sharedCache ? *sharedCache : localCache;
+    populateSceneForDocument(&scene, document, cache);
+    if (!includeGuides) {
+        setSceneItemsVisible(sceneItemsByTag(&scene, QString::fromLatin1(kSafeGuideTag)), false);
+        setSceneItemsVisible(sceneItemsByTag(&scene, QString::fromLatin1(kEmptyHintTag)), false);
+        setSceneItemsVisible(sceneItemsByTag(&scene, QString::fromLatin1(kBleedGuideTag)), false);
+    }
+    renderDocumentScene(&scene, document, painter, Constants::kDisplayDpi, target);
+}
+
+} // namespace
+
 LayoutWorkspaceWidget::LayoutWorkspaceWidget(QWidget* parent)
     : QWidget(parent) {
     auto* layout = new QVBoxLayout(this);
@@ -427,6 +538,7 @@ void LayoutWorkspaceWidget::applyThemePalette(const QPalette& palette) {
 
 void LayoutWorkspaceWidget::setDocument(const badge::DocumentData& document) {
     m_impl->document = document;
+    m_impl->lastError.clear();
     rebuildScene();
 }
 
@@ -438,8 +550,49 @@ void LayoutWorkspaceWidget::setExperimentalGpuViewport(bool on) {
     viewportbackend::applySceneViewportProfile(m_view, on);
 }
 
+QString LayoutWorkspaceWidget::lastError() const {
+    return m_impl ? m_impl->lastError : QString();
+}
+
+QPixmap LayoutWorkspaceWidget::renderPageThumbnail(const QList<BadgeItem>& page, int sizePx, bool includeGuides) const {
+    if (sizePx <= 0 || !m_impl) {
+        return {};
+    }
+
+    badge::DocumentData doc = m_impl->document;
+    doc.badges = badge::qt::toCoreBadges(page);
+
+    QGraphicsScene scene;
+    QHash<QString, QPixmap> renderCache;
+    populateSceneForDocument(&scene, doc, renderCache);
+    if (!includeGuides) {
+        setSceneItemsVisible(sceneItemsByTag(&scene, QString::fromLatin1(kSafeGuideTag)), false);
+        setSceneItemsVisible(sceneItemsByTag(&scene, QString::fromLatin1(kEmptyHintTag)), false);
+        setSceneItemsVisible(sceneItemsByTag(&scene, QString::fromLatin1(kBleedGuideTag)), false);
+    }
+
+    QImage image(QSize(sizePx, sizePx), QImage::Format_ARGB32_Premultiplied);
+    image.fill(Qt::transparent);
+    QPainter painter(&image);
+    painter.setRenderHints(QPainter::Antialiasing | QPainter::SmoothPixmapTransform, true);
+
+    const QRectF source = paperRectPx(doc, Constants::kDisplayDpi);
+    const QSizeF sourceSize = source.size();
+    const qreal scale = std::min(qreal(sizePx) / std::max(1.0, sourceSize.width()),
+                                 qreal(sizePx) / std::max(1.0, sourceSize.height()));
+    const QSizeF targetSize = sourceSize * scale;
+    const QRectF target((qreal(sizePx) - targetSize.width()) * 0.5,
+                        (qreal(sizePx) - targetSize.height()) * 0.5,
+                        targetSize.width(),
+                        targetSize.height());
+    scene.render(&painter, target, source, Qt::KeepAspectRatio);
+    painter.end();
+    return QPixmap::fromImage(image);
+}
+
 bool LayoutWorkspaceWidget::exportPng(const QString& filePath, int dpi, bool whiteBackground) const {
     if (!m_scene || m_impl->document.paper.widthMm <= 0.0 || m_impl->document.paper.heightMm <= 0.0) {
+        m_impl->lastError = QStringLiteral("PNG 出力に必要な用紙サイズが未設定です");
         return false;
     }
 
@@ -453,6 +606,7 @@ bool LayoutWorkspaceWidget::exportPng(const QString& filePath, int dpi, bool whi
     const QRectF rect = paperRectPx(m_impl->document, dpi);
     QImage image(rect.size().toSize(), QImage::Format_ARGB32_Premultiplied);
     if (image.isNull()) {
+        m_impl->lastError = QStringLiteral("PNG 出力用の画像バッファを作成できませんでした");
         setSceneItemsVisible(safeGuides, true);
         setSceneItemsVisible(emptyHints, true);
         setSceneItemsVisible(bleedGuides, true);
@@ -468,12 +622,18 @@ bool LayoutWorkspaceWidget::exportPng(const QString& filePath, int dpi, bool whi
     setSceneItemsVisible(safeGuides, true);
     setSceneItemsVisible(emptyHints, true);
     setSceneItemsVisible(bleedGuides, true);
-
-    return image.save(filePath);
+    const bool ok = image.save(filePath);
+    if (ok) {
+        m_impl->lastError.clear();
+    } else {
+        m_impl->lastError = QStringLiteral("PNG の保存に失敗しました: %1").arg(QDir::toNativeSeparators(filePath));
+    }
+    return ok;
 }
 
 bool LayoutWorkspaceWidget::exportPdf(const QString& filePath, int dpi, QPdfWriter::ColorModel colorModel) const {
     if (!m_scene || m_impl->document.paper.widthMm <= 0.0 || m_impl->document.paper.heightMm <= 0.0) {
+        m_impl->lastError = QStringLiteral("PDF 出力に必要な用紙サイズが未設定です");
         return false;
     }
 
@@ -507,11 +667,72 @@ bool LayoutWorkspaceWidget::exportPdf(const QString& filePath, int dpi, QPdfWrit
     for (auto* item : bleedGuides) {
         item->setVisible(true);
     }
-    return true;
+    if (QFileInfo::exists(filePath)) {
+        m_impl->lastError.clear();
+        return true;
+    }
+    m_impl->lastError = QStringLiteral("PDF を書き出せませんでした: %1").arg(QDir::toNativeSeparators(filePath));
+    return false;
+}
+
+bool LayoutWorkspaceWidget::exportPdf(const QList<QList<BadgeItem>>& pages,
+                                      const QString& filePath,
+                                      int dpi,
+                                      QPdfWriter::ColorModel colorModel) const {
+    if (pages.isEmpty()) {
+        m_impl->lastError = QStringLiteral("PDF 出力するページがありません");
+        return false;
+    }
+
+    QPdfWriter writer(filePath);
+    writer.setResolution(dpi);
+    writer.setColorModel(colorModel);
+    if (colorModel == QPdfWriter::ColorModel::RGB) {
+        writer.setOutputIntent(srgbOutputIntent());
+    }
+    const auto& firstPaper = m_impl->document.paper;
+    writer.setPageSize(QPageSize(QSizeF(firstPaper.widthMm, firstPaper.heightMm), QPageSize::Millimeter));
+    writer.setPageMargins(QMarginsF(0, 0, 0, 0));
+
+    QPainter painter(&writer);
+    if (!painter.isActive()) {
+        m_impl->lastError = QStringLiteral("PDF 出力の描画を開始できませんでした");
+        return false;
+    }
+    painter.setRenderHints(QPainter::Antialiasing | QPainter::SmoothPixmapTransform, true);
+
+    QHash<QString, QPixmap> renderCache;
+    for (int i = 0; i < pages.size(); ++i) {
+        badge::DocumentData doc = m_impl->document;
+        doc.badges = badge::qt::toCoreBadges(pages[i]);
+        const QRectF target(QPointF(0, 0), QSizeF(writer.width(), writer.height()));
+        QGraphicsScene scene;
+        populateSceneForDocument(&scene, doc, renderCache);
+        const auto safeGuides = sceneItemsByTag(&scene, QString::fromLatin1(kSafeGuideTag));
+        const auto emptyHints = sceneItemsByTag(&scene, QString::fromLatin1(kEmptyHintTag));
+        const auto bleedGuides = sceneItemsByTag(&scene, QString::fromLatin1(kBleedGuideTag));
+        setSceneItemsVisible(safeGuides, false);
+        setSceneItemsVisible(emptyHints, false);
+        setSceneItemsVisible(bleedGuides, false);
+        renderDocumentScene(&scene, doc, &painter, Constants::kDisplayDpi, target);
+        drawPageNumberLabel(&painter, target, i, pages.size());
+        if (i + 1 < pages.size()) {
+            writer.newPage();
+        }
+    }
+    painter.end();
+
+    if (QFileInfo::exists(filePath)) {
+        m_impl->lastError.clear();
+        return true;
+    }
+    m_impl->lastError = QStringLiteral("PDF を書き出せませんでした: %1").arg(QDir::toNativeSeparators(filePath));
+    return false;
 }
 
 bool LayoutWorkspaceWidget::print(QPrinter* printer, bool includeGuides) const {
     if (!m_scene || !printer || m_impl->document.paper.widthMm <= 0.0 || m_impl->document.paper.heightMm <= 0.0) {
+        m_impl->lastError = QStringLiteral("印刷に必要な用紙サイズが未設定です");
         return false;
     }
 
@@ -532,6 +753,7 @@ bool LayoutWorkspaceWidget::print(QPrinter* printer, bool includeGuides) const {
 
     QPainter painter(printer);
     if (!painter.isActive()) {
+        m_impl->lastError = QStringLiteral("プリンタへの描画を開始できませんでした");
         if (!includeGuides) {
             setSceneItemsVisible(safeGuides, true);
             setSceneItemsVisible(emptyHints, true);
@@ -551,6 +773,50 @@ bool LayoutWorkspaceWidget::print(QPrinter* printer, bool includeGuides) const {
         setSceneItemsVisible(emptyHints, true);
         setSceneItemsVisible(bleedGuides, true);
     }
+    m_impl->lastError.clear();
+    return true;
+}
+
+bool LayoutWorkspaceWidget::print(QPrinter* printer,
+                                 const QList<QList<BadgeItem>>& pages,
+                                 bool includeGuides) const {
+    if (!printer || pages.isEmpty()) {
+        m_impl->lastError = QStringLiteral("印刷するページがありません");
+        return false;
+    }
+
+    QPainter painter(printer);
+    if (!painter.isActive()) {
+        m_impl->lastError = QStringLiteral("プリンタへの描画を開始できませんでした");
+        return false;
+    }
+    painter.setRenderHints(QPainter::Antialiasing | QPainter::SmoothPixmapTransform, true);
+    const QRect fullRect = printer->pageLayout().fullRectPixels(printer->resolution());
+    QHash<QString, QPixmap> renderCache;
+
+    for (int i = 0; i < pages.size(); ++i) {
+        badge::DocumentData doc = m_impl->document;
+        doc.badges = badge::qt::toCoreBadges(pages[i]);
+        painter.fillRect(fullRect, Qt::white);
+        QGraphicsScene scene;
+        populateSceneForDocument(&scene, doc, renderCache);
+        const auto safeGuides = sceneItemsByTag(&scene, QString::fromLatin1(kSafeGuideTag));
+        const auto emptyHints = sceneItemsByTag(&scene, QString::fromLatin1(kEmptyHintTag));
+        const auto bleedGuides = sceneItemsByTag(&scene, QString::fromLatin1(kBleedGuideTag));
+        if (!includeGuides) {
+            setSceneItemsVisible(safeGuides, false);
+            setSceneItemsVisible(emptyHints, false);
+            setSceneItemsVisible(bleedGuides, false);
+        }
+        const QRectF target(QPointF(0, 0), QSizeF(fullRect.size()));
+        renderDocumentScene(&scene, doc, &painter, Constants::kDisplayDpi, target);
+        drawPageNumberLabel(&painter, target, i, pages.size());
+        if (i + 1 < pages.size()) {
+            printer->newPage();
+        }
+    }
+    painter.end();
+    m_impl->lastError.clear();
     return true;
 }
 
@@ -562,50 +828,7 @@ void LayoutWorkspaceWidget::updateSceneRect() {
 }
 
 void LayoutWorkspaceWidget::rebuildScene() {
-    const double mmToPx = Constants::kMmToPx;
     QHash<QString, QPixmap> renderCache;
-    m_scene->clear();
     updateSceneRect();
-
-    m_scene->addRect(0, 0,
-                     m_impl->document.paper.widthMm * mmToPx,
-                     m_impl->document.paper.heightMm * mmToPx,
-                     QPen(Qt::black), QBrush(Qt::white));
-
-    QPen safePen(Qt::red, 1, Qt::DashLine);
-    safePen.setDashPattern({5, 5});
-    const double marginPx = m_impl->document.paper.marginMm * mmToPx;
-    const double safeWidthPx = std::max(0.0, m_impl->document.paper.widthMm - m_impl->document.paper.marginMm * 2.0) * mmToPx;
-    const double safeHeightPx = std::max(0.0, m_impl->document.paper.heightMm - m_impl->document.paper.marginMm * 2.0) * mmToPx;
-    auto* safeGuide = m_scene->addRect(marginPx, marginPx,
-                                       safeWidthPx,
-                                       safeHeightPx,
-                                       safePen, Qt::NoBrush);
-    safeGuide->setData(kItemRole, QString::fromLatin1(kSafeGuideTag));
-
-    if (m_impl->document.badges.empty()) {
-        addEmptyHint(m_scene, QRectF(0.0,
-                                     0.0,
-                                     m_impl->document.paper.widthMm * mmToPx,
-                                     m_impl->document.paper.heightMm * mmToPx));
-    }
-
-    for (const auto& b : m_impl->document.badges) {
-        const double x = b.xMm * mmToPx;
-        const double y = b.yMm * mmToPx;
-        const double w = (b.clipToCircle ? std::max(b.widthMm, b.heightMm) + Constants::kCircleBleedMm : b.widthMm) * mmToPx;
-        const double h = (b.clipToCircle ? std::max(b.widthMm, b.heightMm) + Constants::kCircleBleedMm : b.heightMm) * mmToPx;
-        const QSize renderSize(std::max(1, int(std::round(w))), std::max(1, int(std::round(h))));
-        const QString cacheKey = badgeRenderCacheKey(b, renderSize);
-        const auto it = renderCache.constFind(cacheKey);
-        const QPixmap pixmap = (it != renderCache.cend()) ? *it : renderBadgePixmap(b, renderSize);
-        if (it == renderCache.cend()) {
-            renderCache.insert(cacheKey, pixmap);
-        }
-
-        m_scene->addItem(new LayoutBadgeItem(x, y, w, h, b.clipToCircle, pixmap));
-        auto* bleedGuide = new LayoutBleedGuideItem(x, y, w, h, b.guide, b.clipToCircle);
-        bleedGuide->setData(kItemRole, QString::fromLatin1(kBleedGuideTag));
-        m_scene->addItem(bleedGuide);
-    }
+    populateSceneForDocument(m_scene, m_impl->document, renderCache);
 }

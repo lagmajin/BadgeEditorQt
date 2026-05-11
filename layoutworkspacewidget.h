@@ -4,6 +4,10 @@
 #include <QWidget>
 #include <QPdfWriter>
 #include <QPalette>
+#include <QList>
+#include <QPixmap>
+
+#include "badgeitem.h"
 
 class QGraphicsView;
 class QGraphicsScene;
@@ -24,9 +28,13 @@ public:
     void setDocument(const badge::DocumentData& document);
     void refresh();
     void setExperimentalGpuViewport(bool on);
+    QString lastError() const;
+    QPixmap renderPageThumbnail(const QList<BadgeItem>& pages, int sizePx = 96, bool includeGuides = false) const;
     bool exportPdf(const QString& filePath, int dpi = 300, QPdfWriter::ColorModel colorModel = QPdfWriter::ColorModel::RGB) const;
+    bool exportPdf(const QList<QList<BadgeItem>>& pages, const QString& filePath, int dpi = 300, QPdfWriter::ColorModel colorModel = QPdfWriter::ColorModel::RGB) const;
     bool exportPng(const QString& filePath, int dpi = 300, bool whiteBackground = true) const;
     bool print(QPrinter* printer, bool includeGuides = false) const;
+    bool print(QPrinter* printer, const QList<QList<BadgeItem>>& pages, bool includeGuides = false) const;
 
 private:
     QGraphicsView* m_view = nullptr;
