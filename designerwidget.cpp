@@ -16,7 +16,7 @@
 #include <cmath>
 #include <utility>
 #include <wobjectimpl.h>
-#include "viewportbackend.h"
+import viewportbackend;
 
 static QColor blend(const QColor& a, const QColor& b, qreal ratio) {
     const qreal clamped = std::clamp(ratio, 0.0, 1.0);
@@ -126,6 +126,7 @@ DesignerWidget::DesignerWidget(QWidget* parent) : QGraphicsView(parent) {
     m_scene->addItem(m_lightingOverlay);
     m_lightingOverlay->setZValue(9998);
     connect(m_scene, &QGraphicsScene::selectionChanged, this, [this] {
+        m_hasSelection = !m_scene->selectedItems().isEmpty();
         emit selectionChanged();
     });
 
@@ -186,6 +187,7 @@ void DesignerWidget::setBadgeItems(const QList<BadgeItem>& items, const QList<in
         gi->update();
     }
 
+    m_hasSelection = !selectedSet.isEmpty();
     emit selectionChanged();
 }
 
@@ -195,6 +197,7 @@ void DesignerWidget::clearBadges() {
         delete gi;
     }
     m_graphicItems.clear();
+    m_hasSelection = false;
 }
 
 void DesignerWidget::removeSelectedBadges() {
@@ -262,12 +265,13 @@ void DesignerWidget::keyPressEvent(QKeyEvent* event) {
             gi->badge().isSelected = true;
             gi->updateHandles();
         }
+        m_hasSelection = !m_graphicItems.isEmpty();
         emit selectionChanged();
         event->accept();
         return;
     }
 
-    const bool hasSelection = !selectedGraphics().isEmpty();
+    const bool hasSelection = m_hasSelection;
     if (hasSelection) {
         const bool fast = (event->modifiers() & Qt::ShiftModifier);
         const double step = fast ? 1.0 : 0.1;
@@ -578,6 +582,7 @@ void DesignerWidget::drawBackground(QPainter* painter, const QRectF& rect) {
     const double mmToPx = Constants::kMmToPx;
     const double stepPx = std::max(1.0, m_gridSpacingMm * mmToPx);
     const double majorStepPx = stepPx * 5.0;
+    const bool simplifiedGrid = stepPx < 6.0;
 
     painter->save();
     painter->setRenderHint(QPainter::Antialiasing, false);
@@ -586,17 +591,18 @@ void DesignerWidget::drawBackground(QPainter* painter, const QRectF& rect) {
     const QColor majorGridColor = QColor::fromRgb(majorGridBase.red(), majorGridBase.green(), majorGridBase.blue(), 150);
     const QColor minorGridColor = QColor::fromRgb(minorGridBase.red(), minorGridBase.green(), minorGridBase.blue(), 86);
 
-    const int gridLeft = int(std::floor(rect.left() / stepPx) * stepPx);
-    const int gridTop = int(std::floor(rect.top() / stepPx) * stepPx);
+    const double gridStep = simplifiedGrid ? majorStepPx : stepPx;
+    const int gridLeft = int(std::floor(rect.left() / gridStep) * gridStep);
+    const int gridTop = int(std::floor(rect.top() / gridStep) * gridStep);
 
-    for (double x = gridLeft; x <= rect.right(); x += stepPx) {
-        const bool major = std::fmod(std::abs(x), majorStepPx) < 0.5 || std::fmod(std::abs(x), majorStepPx) > majorStepPx - 0.5;
+    for (double x = gridLeft; x <= rect.right(); x += gridStep) {
+        const bool major = simplifiedGrid || std::fmod(std::abs(x), majorStepPx) < 0.5 || std::fmod(std::abs(x), majorStepPx) > majorStepPx - 0.5;
         painter->setPen(QPen(major ? majorGridColor : minorGridColor, major ? 1.0 : 0.5));
         painter->drawLine(QPointF(x, rect.top()), QPointF(x, rect.bottom()));
     }
 
-    for (double y = gridTop; y <= rect.bottom(); y += stepPx) {
-        const bool major = std::fmod(std::abs(y), majorStepPx) < 0.5 || std::fmod(std::abs(y), majorStepPx) > majorStepPx - 0.5;
+    for (double y = gridTop; y <= rect.bottom(); y += gridStep) {
+        const bool major = simplifiedGrid || std::fmod(std::abs(y), majorStepPx) < 0.5 || std::fmod(std::abs(y), majorStepPx) > majorStepPx - 0.5;
         painter->setPen(QPen(major ? majorGridColor : minorGridColor, major ? 1.0 : 0.5));
         painter->drawLine(QPointF(rect.left(), y), QPointF(rect.right(), y));
     }
@@ -656,7 +662,7 @@ void DesignerWidget::drawForeground(QPainter* painter, const QRectF& rect) {
         painter->restore();
     }
 
-    if (!m_graphicItems.isEmpty() && !selectedGraphics().isEmpty()) {
+    if (!m_graphicItems.isEmpty() && m_hasSelection) {
         const auto modifiers = QApplication::keyboardModifiers();
         const bool altDown = modifiers & Qt::AltModifier;
         const bool shiftDown = modifiers & Qt::ShiftModifier;
@@ -696,14 +702,20 @@ void DesignerWidget::setSafetyGuideEntries(const QList<SafetyGuideEntry>& entrie
 }
 
 void DesignerWidget::setInteractiveViewportMode(bool on) {
-    setViewportUpdateMode(on ? QGraphicsView::FullViewportUpdate : QGraphicsView::SmartViewportUpdate);
+    setViewportUpdateMode(on ? QGraphicsView::BoundingRectViewportUpdate : QGraphicsView::SmartViewportUpdate);
     viewport()->update();
 }
 
 bool DesignerWidget::isNearSelectedItem(const QPoint& viewPos) const {
     constexpr int kTolerancePx = 10;
-    for (auto* gi : selectedGraphics()) {
+    if (!m_hasSelection) {
+        return false;
+    }
+    for (auto* gi : m_graphicItems) {
         if (!gi) {
+            continue;
+        }
+        if (!gi->isSelected()) {
             continue;
         }
         const QRectF sceneRect = gi->sceneBoundingRect();

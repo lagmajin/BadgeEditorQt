@@ -2,6 +2,7 @@
 #define BADGEGRAPHICITEM_H
 
 #include <QGraphicsItem>
+#include <QElapsedTimer>
 #include <QPixmap>
 #include <QPainter>
 #include <wobjectdefs.h>
@@ -51,15 +52,17 @@ private:
     QList<QGraphicsRectItem*> m_handles;
     bool m_gridVisible = true;
     bool m_snapToGrid = true;
-    double m_gridSpacingMm = 5.0;
+    double m_gridSpacingMm = 1.0;
     bool m_dragging = false;
     bool m_interactionActive = false;
+    QElapsedTimer m_moveNotifyTimer;
     QRectF contentRectPx() const;
     QRectF imageRectPx() const;
     QRectF visualRectPx() const;
     bool shouldClipDesignerPreview() const;
     void loadImage();
-    void renderCore(QPainter* painter, const QRectF& rect);
+    void renderCore(QPainter* painter, const QRectF& rect, bool simplifiedPreview);
+    QPointF snappedPosition(const QPointF& scenePos) const;
 };
 
 #endif

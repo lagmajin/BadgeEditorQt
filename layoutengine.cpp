@@ -3,21 +3,32 @@
 #include <algorithm>
 #include <limits>
 
-import badge.layout;
-import badge.model;
-import badge.qtbridge;
+#include <QPainterPath>
 
 namespace {
-constexpr double kCircleBleedMm = 3.0;
+
+double bleedMm(const BadgeItem& badge) {
+    return std::max(0.0, badge.guide.bleedMm);
+}
+
+GuideShape packingShape(const BadgeItem& badge) {
+    return badge.clipToCircle ? GuideShape::Circle : badge.guide.shape;
+}
+
+double contentWidth(const BadgeItem& badge) {
+    return badge.clipToCircle ? std::max(badge.widthMm, badge.heightMm) : badge.widthMm;
+}
+
+double contentHeight(const BadgeItem& badge) {
+    return badge.clipToCircle ? std::max(badge.widthMm, badge.heightMm) : badge.heightMm;
+}
 
 double footprintWidth(const BadgeItem& badge) {
-    return badge.clipToCircle ? std::max(badge.widthMm, badge.heightMm) + kCircleBleedMm
-                              : badge.widthMm;
+    return contentWidth(badge) + bleedMm(badge) * 2.0;
 }
 
 double footprintHeight(const BadgeItem& badge) {
-    return badge.clipToCircle ? std::max(badge.widthMm, badge.heightMm) + kCircleBleedMm
-                              : badge.heightMm;
+    return contentHeight(badge) + bleedMm(badge) * 2.0;
 }
 
 struct FreeRect {
@@ -29,6 +40,61 @@ struct FreeRect {
 
 double footprintArea(const BadgeItem& badge) {
     return footprintWidth(badge) * footprintHeight(badge);
+}
+
+QPointF contentPositionFromFootprint(const BadgeItem& badge, const QPointF& footprintPos) {
+    const double bleed = bleedMm(badge);
+    return footprintPos + QPointF(bleed, bleed);
+}
+
+QRectF footprintRect(const BadgeItem& badge, const QPointF& contentPos) {
+    const double bleed = bleedMm(badge);
+    return QRectF(contentPos.x() - bleed,
+                  contentPos.y() - bleed,
+                  footprintWidth(badge),
+                  footprintHeight(badge));
+}
+
+QPainterPath footprintPath(const BadgeItem& badge, const QPointF& contentPos) {
+    const QRectF rect = footprintRect(badge, contentPos);
+    QPainterPath path;
+    switch (packingShape(badge)) {
+    case GuideShape::Rectangle:
+        path.addRect(rect);
+        break;
+    case GuideShape::RoundedRectangle: {
+        const double radius = std::clamp(badge.guide.cornerRadiusMm + bleedMm(badge),
+                                         0.0,
+                                         std::min(rect.width(), rect.height()) * 0.5);
+        path.addRoundedRect(rect, radius, radius);
+        break;
+    }
+    case GuideShape::Oval:
+        path.addEllipse(rect);
+        break;
+    case GuideShape::Circle:
+    default:
+        path.addEllipse(rect);
+        break;
+    }
+    return path;
+}
+
+bool canPlaceWithoutOverlap(const BadgeItem& badge,
+                            const QPointF& contentPos,
+                            const QList<QPainterPath>& placedPaths,
+                            const QList<QRectF>& placedBounds) {
+    const QPainterPath candidate = footprintPath(badge, contentPos);
+    const QRectF bounds = candidate.boundingRect();
+    for (int i = 0; i < placedPaths.size(); ++i) {
+        if (!bounds.intersects(placedBounds[i])) {
+            continue;
+        }
+        if (candidate.intersects(placedPaths[i])) {
+            return false;
+        }
+    }
+    return true;
 }
 
 bool rectContains(const FreeRect& outer, const FreeRect& inner) {
@@ -56,22 +122,68 @@ void pruneFreeRects(QList<FreeRect>& rects) {
         }
     }
 }
-}
+
+} // namespace
 
 QList<BadgeItem> LayoutEngine::autoLayout(const QList<BadgeItem>& templates, const PaperConfig& config) {
-    std::vector<badge::BadgeData> coreTemplates;
-    coreTemplates.reserve(templates.size());
-    for (const auto& tpl : templates) {
-        coreTemplates.push_back(badge::qt::toCoreBadge(tpl));
-    }
-
-    const auto coreResult = badge::auto_layout(coreTemplates, config);
-
     QList<BadgeItem> result;
-    result.reserve(static_cast<qsizetype>(coreResult.size()));
-    for (const auto& item : coreResult) {
-        result.append(badge::qt::fromCoreBadge(item));
+    result.reserve(templates.size());
+
+    double curX = config.marginMm;
+    double curY = config.marginMm;
+    double rowHeight = 0.0;
+    QList<QPainterPath> placedPaths;
+    QList<QRectF> placedBounds;
+    bool pageFull = false;
+
+    for (const auto& tpl : templates) {
+        const double tw = footprintWidth(tpl);
+        const double th = footprintHeight(tpl);
+        const double stepX = tw + config.spacingMm;
+        const double stepY = th + config.spacingMm;
+        const QPointF contentOffset = contentPositionFromFootprint(tpl, QPointF(0.0, 0.0));
+        bool placed = false;
+
+        for (int attempt = 0; attempt < 2 && !placed; ++attempt) {
+            if (curX + tw > config.widthMm - config.marginMm) {
+                curX = config.marginMm;
+                curY += rowHeight;
+                rowHeight = 0.0;
+            }
+            if (curY + th > config.heightMm - config.marginMm) {
+                pageFull = true;
+                break;
+            }
+
+            const QPointF candidatePos(curX + contentOffset.x(), curY + contentOffset.y());
+            if (!canPlaceWithoutOverlap(tpl, candidatePos, placedPaths, placedBounds)) {
+                curX = config.marginMm;
+                curY += rowHeight;
+                rowHeight = 0.0;
+                continue;
+            }
+
+            BadgeItem item = tpl;
+            item.xMm = candidatePos.x();
+            item.yMm = candidatePos.y();
+            const QPainterPath path = footprintPath(item, QPointF(item.xMm, item.yMm));
+            result.append(item);
+            placedPaths.append(path);
+            placedBounds.append(path.boundingRect());
+            placed = true;
+        }
+
+        if (!placed) {
+            if (pageFull) {
+                break;
+            }
+            continue;
+        }
+
+        curX += stepX;
+        rowHeight = std::max(rowHeight, stepY);
     }
+
     return result;
 }
 
@@ -101,6 +213,8 @@ QList<BadgeItem> LayoutEngine::packMixed(const QList<BadgeItem>& templates, cons
 
     QList<BadgeItem> result;
     result.reserve(sorted.size());
+    QList<QPainterPath> placedPaths;
+    QList<QRectF> placedBounds;
 
     for (const auto& tpl : sorted) {
         const double tw = footprintWidth(tpl);
@@ -137,11 +251,21 @@ QList<BadgeItem> LayoutEngine::packMixed(const QList<BadgeItem>& templates, cons
             continue;
         }
 
-        const auto chosen = freeRects.takeAt(bestIndex);
+        const auto chosen = freeRects[bestIndex];
+        const QPointF candidatePos = contentPositionFromFootprint(tpl, QPointF(chosen.x, chosen.y));
+        if (!canPlaceWithoutOverlap(tpl, candidatePos, placedPaths, placedBounds)) {
+            freeRects.removeAt(bestIndex);
+            continue;
+        }
+
+        freeRects.takeAt(bestIndex);
         BadgeItem item = tpl;
-        item.xMm = chosen.x;
-        item.yMm = chosen.y;
+        item.xMm = candidatePos.x();
+        item.yMm = candidatePos.y();
+        const QPainterPath path = footprintPath(item, QPointF(item.xMm, item.yMm));
         result.append(item);
+        placedPaths.append(path);
+        placedBounds.append(path.boundingRect());
 
         const FreeRect right{chosen.x + occupiedW, chosen.y, chosen.w - occupiedW, chosen.h};
         const FreeRect bottom{chosen.x, chosen.y + occupiedH, chosen.w, chosen.h - occupiedH};
@@ -173,6 +297,10 @@ QList<QList<BadgeItem>> LayoutEngine::packMixedPages(const QList<BadgeItem>& tem
         auto sameTemplate = [](const BadgeItem& a, const BadgeItem& b) {
             if (a.productMode != b.productMode
                 || a.clipToCircle != b.clipToCircle
+                || a.guide.shape != b.guide.shape
+                || a.guide.bleedMm != b.guide.bleedMm
+                || a.guide.safeInsetMm != b.guide.safeInsetMm
+                || a.guide.cornerRadiusMm != b.guide.cornerRadiusMm
                 || a.widthMm != b.widthMm
                 || a.heightMm != b.heightMm
                 || a.imageScale != b.imageScale
@@ -226,13 +354,22 @@ QList<QList<BadgeItem>> LayoutEngine::packMixedPages(const QList<BadgeItem>& tem
 }
 
 QList<BadgeItem> LayoutEngine::fillPage(const BadgeItem& template_, const PaperConfig& config) {
-    const auto coreResult = badge::fill_page(badge::qt::toCoreBadge(template_), config);
-
     QList<BadgeItem> result;
-    result.reserve(static_cast<qsizetype>(coreResult.size()));
-    for (const auto& item : coreResult) {
-        result.append(badge::qt::fromCoreBadge(item));
+    const double tw = footprintWidth(template_);
+    const double th = footprintHeight(template_);
+    const double stepX = tw + config.spacingMm;
+    const double stepY = th + config.spacingMm;
+    const QPointF contentOffset = contentPositionFromFootprint(template_, QPointF(0.0, 0.0));
+
+    for (double y = config.marginMm; y + th <= config.heightMm - config.marginMm; y += stepY) {
+        for (double x = config.marginMm; x + tw <= config.widthMm - config.marginMm; x += stepX) {
+            BadgeItem item = template_;
+            item.xMm = x + contentOffset.x();
+            item.yMm = y + contentOffset.y();
+            result.append(item);
+        }
     }
+
     return result;
 }
 
@@ -249,6 +386,7 @@ QList<BadgeItem> LayoutEngine::autoLayoutGrid(const QList<BadgeItem>& templates,
         const double th = footprintHeight(tpl);
         const double stepX = tw + config.spacingMm;
         const double stepY = th + config.spacingMm;
+        const QPointF contentOffset = contentPositionFromFootprint(tpl, QPointF(0.0, 0.0));
 
         if (curX + tw > config.widthMm - config.marginMm) {
             curX = config.marginMm;
@@ -260,8 +398,8 @@ QList<BadgeItem> LayoutEngine::autoLayoutGrid(const QList<BadgeItem>& templates,
         }
 
         BadgeItem item = tpl;
-        item.xMm = curX;
-        item.yMm = curY;
+        item.xMm = curX + contentOffset.x();
+        item.yMm = curY + contentOffset.y();
         result.append(item);
         curX += stepX;
         rowHeight = std::max(rowHeight, stepY);
@@ -276,12 +414,13 @@ QList<BadgeItem> LayoutEngine::fillPageGrid(const BadgeItem& template_, const Pa
     const double th = footprintHeight(template_);
     const double stepX = tw + config.spacingMm;
     const double stepY = th + config.spacingMm;
+    const QPointF contentOffset = contentPositionFromFootprint(template_, QPointF(0.0, 0.0));
 
     for (double y = config.marginMm; y + th <= config.heightMm - config.marginMm; y += stepY) {
         for (double x = config.marginMm; x + tw <= config.widthMm - config.marginMm; x += stepX) {
             BadgeItem item = template_;
-            item.xMm = x;
-            item.yMm = y;
+            item.xMm = x + contentOffset.x();
+            item.yMm = y + contentOffset.y();
             result.append(item);
         }
     }

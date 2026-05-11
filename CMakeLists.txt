@@ -19,14 +19,12 @@ set(SOURCES
     dockstylemanager.cpp
     designerwidget.cpp
     layoutworkspacewidget.cpp
-    viewportbackend.cpp
     batchlayoutdialog.cpp
     mixedlayoutdialog.cpp
     exportdialog.cpp
     printdialog.cpp
     appsettingsdialog.cpp
     transferdebugdialog.cpp
-    badgeitem.cpp
     badgegraphicitem.cpp
     guideitem.cpp
     lightingeffect.cpp
@@ -66,11 +64,19 @@ target_sources(BadgeEditorQt
         FILE_SET cxx_modules TYPE CXX_MODULES FILES
             badge.paper.ixx
             badge.model.ixx
+            badge.event.ixx
             badge.layout.ixx
             badge.imageio.ixx
             badge.document.ixx
             badge.documentio.ixx
             badge.qtbridge.ixx
+            viewportbackend.ixx
+            badgeitem.ixx
+            layoutengine.ixx
+            imageprocessor.ixx
+            constants.ixx
+            guideitem.ixx
+            lightingeffect.ixx
 )
 
 target_link_libraries(BadgeEditorQt PRIVATE Qt6::Widgets Qt6::Core Qt6::PrintSupport Qt6::OpenGLWidgets ads::qtadvanceddocking-qt6 OpenImageIO::OpenImageIO)

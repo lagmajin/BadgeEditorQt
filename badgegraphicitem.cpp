@@ -349,17 +349,19 @@ QPainterPath BadgeGraphicItem::shape() const {
 
 void BadgeGraphicItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*, QWidget*) {
     const QRectF r = contentRectPx();
-    renderCore(painter, r);
+    const qreal lod = QStyleOptionGraphicsItem::levelOfDetailFromTransform(painter->worldTransform());
+    renderCore(painter, r, lod < 0.8);
 }
 
-void BadgeGraphicItem::renderCore(QPainter* painter, const QRectF& r) {
+void BadgeGraphicItem::renderCore(QPainter* painter, const QRectF& r, bool simplifiedPreview) {
     painter->save();
     if (shouldClipDesignerPreview()) {
         QPainterPath path;
         path.addEllipse(r);
         painter->setClipPath(path);
     }
-    painter->setRenderHint(QPainter::SmoothPixmapTransform, true);
+    painter->setRenderHint(QPainter::SmoothPixmapTransform, !simplifiedPreview);
+    painter->setRenderHint(QPainter::Antialiasing, !simplifiedPreview);
 
     bool drewAnything = false;
 
@@ -386,22 +388,24 @@ void BadgeGraphicItem::renderCore(QPainter* painter, const QRectF& r) {
     }
 
     // Render layers on top of the primary image.
-    const int startLayer = m_badge.layers.isEmpty() ? 0 : 1;
-    for (int layerIndex = startLayer; layerIndex < m_badge.layers.size(); ++layerIndex) {
-        const auto& layer = m_badge.layers[layerIndex];
-        if (!layer.visible) continue;
-        QPixmap img;
-        if (!layer.imagePath.isEmpty() && QFileInfo::exists(layer.imagePath))
-            img.load(layer.imagePath);
-        if (!img.isNull()) {
-            painter->save();
-            painter->setOpacity(layer.opacity);
-            painter->setCompositionMode(compositionModeForLayer(layer.blendMode));
-            const QRectF lr = r.translated(layer.offsetX * Constants::kMmToPx,
-                                           layer.offsetY * Constants::kMmToPx);
-            painter->drawPixmap(lr, img, QRectF(img.rect()));
-            painter->restore();
-            drewAnything = true;
+    if (!simplifiedPreview) {
+        const int startLayer = m_badge.layers.isEmpty() ? 0 : 1;
+        for (int layerIndex = startLayer; layerIndex < m_badge.layers.size(); ++layerIndex) {
+            const auto& layer = m_badge.layers[layerIndex];
+            if (!layer.visible) continue;
+            QPixmap img;
+            if (!layer.imagePath.isEmpty() && QFileInfo::exists(layer.imagePath))
+                img.load(layer.imagePath);
+            if (!img.isNull()) {
+                painter->save();
+                painter->setOpacity(layer.opacity);
+                painter->setCompositionMode(compositionModeForLayer(layer.blendMode));
+                const QRectF lr = r.translated(layer.offsetX * Constants::kMmToPx,
+                                               layer.offsetY * Constants::kMmToPx);
+                painter->drawPixmap(lr, img, QRectF(img.rect()));
+                painter->restore();
+                drewAnything = true;
+            }
         }
     }
 
@@ -416,10 +420,12 @@ void BadgeGraphicItem::renderCore(QPainter* painter, const QRectF& r) {
         painter->drawEllipse(r.adjusted(2,2,-2,-2));
         painter->setPen(Qt::gray);
         painter->setFont(QFont("Arial", 7));
-        painter->drawText(r, Qt::AlignCenter, "Drop image\nor DoubleClick");
+        if (!simplifiedPreview) {
+            painter->drawText(r, Qt::AlignCenter, "Drop image\nor DoubleClick");
+        }
     }
 
-    if (!m_badge.displayText.isEmpty()) {
+    if (!simplifiedPreview && !m_badge.displayText.isEmpty()) {
         painter->setOpacity(1.0);
         QFont font("Arial", 10);
         painter->setFont(font);
@@ -486,9 +492,28 @@ void BadgeGraphicItem::syncFromBadge() {
         emit badgeMoved(this);
 }
 
+QPointF BadgeGraphicItem::snappedPosition(const QPointF& scenePos) const {
+    if (!m_snapToGrid || m_gridSpacingMm <= 0.0) {
+        return scenePos;
+    }
+
+    const double mmToPx = Constants::kMmToPx;
+    const double stepPx = m_gridSpacingMm * mmToPx;
+    if (stepPx <= 0.0) {
+        return scenePos;
+    }
+
+    QPointF snapped = scenePos;
+    snapped.setX(std::round(snapped.x() / stepPx) * stepPx);
+    snapped.setY(std::round(snapped.y() / stepPx) * stepPx);
+    return snapped;
+}
+
 void BadgeGraphicItem::mousePressEvent(QGraphicsSceneMouseEvent* event) {
     QGraphicsObject::mousePressEvent(event);
     if (event->button() == Qt::LeftButton) {
+        m_dragging = true;
+        m_moveNotifyTimer.restart();
         beginInteractiveEdit();
         emit badgeClicked(this);
     }
@@ -502,29 +527,35 @@ void BadgeGraphicItem::mouseDoubleClickEvent(QGraphicsSceneMouseEvent* event) {
 void BadgeGraphicItem::mouseReleaseEvent(QGraphicsSceneMouseEvent* event) {
     QGraphicsObject::mouseReleaseEvent(event);
     if (event->button() == Qt::LeftButton) {
+        const bool precisionMode = event->modifiers() & Qt::ControlModifier;
+        if (!precisionMode) {
+            const bool snapToGrid = m_snapToGrid;
+            m_snapToGrid = false;
+            setPos(snappedPosition(pos()));
+            m_snapToGrid = snapToGrid;
+        }
+        m_dragging = false;
         endInteractiveEdit();
     }
 }
 
 QVariant BadgeGraphicItem::itemChange(GraphicsItemChange change, const QVariant& value) {
-    if (change == ItemPositionChange && m_snapToGrid && m_gridSpacingMm > 0.0) {
+    if (change == ItemPositionChange && m_snapToGrid && m_gridSpacingMm > 0.0 && !m_dragging) {
         if (QApplication::keyboardModifiers() & Qt::ControlModifier) {
             return value;
         }
-        const double mmToPx = Constants::kMmToPx;
-        const double stepPx = m_gridSpacingMm * mmToPx;
-        if (stepPx > 0.0) {
-            QPointF p = value.toPointF();
-            p.setX(std::round(p.x() / stepPx) * stepPx);
-            p.setY(std::round(p.y() / stepPx) * stepPx);
-            return p;
-        }
+        return snappedPosition(value.toPointF());
     }
     if (change == ItemPositionHasChanged) {
         const double mmToPx = Constants::kMmToPx;
         m_badge.xMm = pos().x() / mmToPx;
         m_badge.yMm = pos().y() / mmToPx;
-        emit badgeMoved(this);
+        if (!m_dragging) {
+            emit badgeMoved(this);
+        } else if (!m_moveNotifyTimer.isValid() || m_moveNotifyTimer.elapsed() >= 16) {
+            m_moveNotifyTimer.restart();
+            emit badgeMoved(this);
+        }
     }
     if (change == ItemSelectedHasChanged) {
         prepareGeometryChange();

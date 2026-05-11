@@ -1,9 +1,12 @@
-#include "viewportbackend.h"
+module;
 
 #include <QGraphicsView>
+#include <QtCore/qglobal.h>
 #include <QtOpenGLWidgets/QOpenGLWidget>
 
-namespace viewportbackend {
+export module viewportbackend;
+
+export namespace viewportbackend {
 
 bool experimentalGpuViewportEnabled() {
     return qEnvironmentVariableIntValue("BADGEEDITOR_EXPERIMENTAL_GPU_VIEWPORT") != 0;
@@ -29,4 +32,4 @@ void applySceneViewportProfile(QGraphicsView* view, bool experimentalGpuViewport
     view->setCacheMode(QGraphicsView::CacheNone);
 }
 
-}
+} // namespace viewportbackend

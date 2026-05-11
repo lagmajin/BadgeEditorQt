@@ -26,7 +26,7 @@
 #include <QUrl>
 #include <QDir>
 #include <algorithm>
-#include "viewportbackend.h"
+import viewportbackend;
 
 import badge.imageio;
 import badge.document;

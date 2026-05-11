@@ -189,7 +189,7 @@ AppSettings AppSettingsDialog::settings() const {
     result.darkTheme = m_themeCombo ? (m_themeCombo->currentIndex() == 0) : true;
     result.gridVisible = m_gridVisible ? m_gridVisible->isChecked() : true;
     result.snapToGrid = m_snapToGrid ? m_snapToGrid->isChecked() : true;
-    result.gridSpacingMm = m_gridSpacing ? m_gridSpacing->value() : 5.0;
+    result.gridSpacingMm = m_gridSpacing ? m_gridSpacing->value() : 1.0;
     result.lightingEnabled = m_lightingEnabled ? m_lightingEnabled->isChecked() : false;
     result.lightAngle = m_lightAngle ? m_lightAngle->value() : 315;
     result.lightIntensity = m_lightIntensity ? m_lightIntensity->value() : 45;

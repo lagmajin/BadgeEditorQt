@@ -42,6 +42,7 @@ public:
     void syncToBadgeList(QList<BadgeItem>& badges);
     QList<BadgeGraphicItem*> graphicItems() const { return m_graphicItems; }
     QList<BadgeGraphicItem*> selectedGraphics() const;
+    bool hasSelectedGraphics() const { return m_hasSelection; }
     BadgeGraphicItem* selectedGraphic() const;
     
     // Guides
@@ -108,8 +109,9 @@ private:
     bool m_glitterEnabled = false;
     bool m_gridVisible = true;
     bool m_snapToGrid = true;
-    double m_gridSpacingMm = 5.0;
+    double m_gridSpacingMm = 1.0;
     QList<BadgeGraphicItem*> m_graphicItems;
+    bool m_hasSelection = false;
     double m_zoomLevel = 1.0;
     double m_badgeSizeMm = 65.0;
     bool m_batchMode = false;

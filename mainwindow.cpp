@@ -10,7 +10,7 @@
 #include "projectsync.h"
 #include "transferdebugdialog.h"
 #include "windowsintegration.h"
-#include "viewportbackend.h"
+import viewportbackend;
 #include "constants.h"
 #include <QMenuBar>
 #include <QMenu>
@@ -65,6 +65,7 @@
 #include <functional>
 #include <limits>
 #include <cmath>
+#include <string>
 #ifdef Q_OS_WIN
 #ifndef NOMINMAX
 #define NOMINMAX
@@ -941,7 +942,8 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
             return;
         }
         m_layoutPageIndex = 0;
-        syncLayoutWorkspace();
+        requestLayoutRefresh("page selected");
+        flushInternalEvents();
     });
     auto* layoutEndShortcut = new QShortcut(QKeySequence(Qt::Key_End), this);
     connect(layoutEndShortcut, &QShortcut::activated, this, [this]{
@@ -949,7 +951,8 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
             return;
         }
         m_layoutPageIndex = m_layoutPages.size() - 1;
-        syncLayoutWorkspace();
+        requestLayoutRefresh("page selected");
+        flushInternalEvents();
     });
     setMaterialIcon(actUndo, QStringLiteral("undo"));
     setMaterialIcon(actRedo, QStringLiteral("redo"));
@@ -1160,6 +1163,13 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     connect(m_designer, &DesignerWidget::nudgeRequested, this, [this](double dxMm, double dyMm){ onNudgeRequested(dxMm, dyMm); });
     m_designer->updateGuides(32);
     updateSafetyGuideHud();
+
+    m_internalEventFlushTimer = new QTimer(this);
+    m_internalEventFlushTimer->setSingleShot(true);
+    m_internalEventFlushTimer->setInterval(16);
+    connect(m_internalEventFlushTimer, &QTimer::timeout, this, [this] {
+        flushInternalEvents();
+    });
 
     // Layout
     m_layoutWorkspace = new LayoutWorkspaceWidget;
@@ -1582,11 +1592,11 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     layoutForm->addRow(m_chkCutFriendlyLayout);
     inspLayout->addWidget(layoutGroup);
 
-    connect(m_comboPaperSize, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this]{ if (!m_isDesigner) syncLayoutWorkspace(); });
-    connect(m_chkLandscape, &QCheckBox::toggled, this, [this]{ if (!m_isDesigner) syncLayoutWorkspace(); });
-    connect(m_spinPaperMargin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this]{ if (!m_isDesigner) syncLayoutWorkspace(); });
-    connect(m_spinPaperSpacing, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this]{ if (!m_isDesigner) syncLayoutWorkspace(); });
-    connect(m_chkCutFriendlyLayout, &QCheckBox::toggled, this, [this]{ if (!m_isDesigner) syncLayoutWorkspace(); });
+    connect(m_comboPaperSize, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this]{ if (!m_isDesigner) requestLayoutRefresh("paper size changed"); });
+    connect(m_chkLandscape, &QCheckBox::toggled, this, [this]{ if (!m_isDesigner) requestLayoutRefresh("orientation changed"); });
+    connect(m_spinPaperMargin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this]{ if (!m_isDesigner) requestLayoutRefresh("margin changed"); });
+    connect(m_spinPaperSpacing, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this]{ if (!m_isDesigner) requestLayoutRefresh("spacing changed"); });
+    connect(m_chkCutFriendlyLayout, &QCheckBox::toggled, this, [this]{ if (!m_isDesigner) requestLayoutRefresh("cut friendly changed"); });
 
     inspLayout->addStretch();
     scroll->setWidget(m_inspector);
@@ -1665,10 +1675,11 @@ void MainWindow::applyDesignerBadges(const QList<BadgeItem>& badges, const QList
     m_designer->setBadgeItems(badges, selectedIndices);
     refreshDocumentFromDesigner();
     if (!m_isDesigner) {
-        syncLayoutWorkspace();
+        requestLayoutRefresh("designer badges applied");
+    } else {
+        requestBadgeEdited("designer badges applied");
     }
     updateSafetyGuideHud();
-    refreshDiagnostics();
 }
 
 void MainWindow::pushBadgeChange(const QString& label,
@@ -1711,6 +1722,8 @@ void MainWindow::onBadgeEditFinished(BadgeGraphicItem* item) {
         return;
     }
 
+    m_pendingBadgeMoveItem = nullptr;
+
     const auto beforeBadges = m_pendingEditBeforeBadges;
     const auto beforeSelection = m_pendingEditBeforeSelection;
     const auto afterBadges = currentDesignerBadges();
@@ -1727,6 +1740,7 @@ void MainWindow::onBadgeEditFinished(BadgeGraphicItem* item) {
 
     pushBadgeChange(QStringLiteral("編集"), beforeBadges, beforeSelection, afterBadges, afterSelection);
     appendLog(QStringLiteral("編集内容を履歴に追加しました"));
+    requestBadgeEdited("badge edit finished");
 }
 
 void MainWindow::appendLog(const QString& message) {
@@ -1801,6 +1815,43 @@ void MainWindow::refreshDiagnostics() {
     }
 }
 
+void MainWindow::requestDiagnosticsRefresh(const char* reason) {
+    if (m_internalEventQueue.containsKind(badge::AppEventKind::DiagnosticsDirty)) {
+        scheduleInternalEventFlush();
+        return;
+    }
+    m_internalEventQueue.postDirty(badge::AppEventKind::DiagnosticsDirty,
+                                   reason ? std::string(reason) : std::string{});
+    scheduleInternalEventFlush();
+}
+
+void MainWindow::requestBadgeEdited(const char* reason) {
+    if (m_internalEventQueue.containsKind(badge::AppEventKind::BadgeEdited)) {
+        scheduleInternalEventFlush();
+        return;
+    }
+    m_internalEventQueue.postBadgeEdited(reason ? std::string(reason) : std::string{});
+    scheduleInternalEventFlush();
+}
+
+void MainWindow::requestLayoutRefresh(const char* reason) {
+    if (m_internalEventQueue.containsKind(badge::AppEventKind::LayoutDirty)) {
+        scheduleInternalEventFlush();
+        return;
+    }
+    m_internalEventQueue.postDirty(badge::AppEventKind::LayoutDirty,
+                                   reason ? std::string(reason) : std::string{});
+    scheduleInternalEventFlush();
+}
+
+void MainWindow::scheduleInternalEventFlush() {
+    if (m_internalEventFlushTimer) {
+        m_internalEventFlushTimer->start();
+    } else {
+        flushInternalEvents();
+    }
+}
+
 W_OBJECT_IMPL(MainWindow)
 
 // --- File slots ---
@@ -1818,10 +1869,10 @@ void MainWindow::onNew() {
     m_designer->addBadge(blank);
     m_designer->updateGuides(32);
     if (!m_isDesigner) {
-        syncLayoutWorkspace();
+        requestLayoutRefresh("new document");
+        flushInternalEvents();
     }
     refreshDocumentFromDesigner();
-    refreshDiagnostics();
     appendLog("新規プロジェクトを作成しました");
     updateTitle();
 }
@@ -1860,7 +1911,10 @@ void MainWindow::openProjectPath(const QString& path) {
     m_layoutBadges = m_badges;
     m_layoutPreviewMode = LayoutPreviewMode::CurrentDesign;
     m_currentFile = path;
-    refreshDiagnostics();
+    if (!m_isDesigner) {
+        requestLayoutRefresh("project opened");
+        flushInternalEvents();
+    }
     appendLog(QStringLiteral("開きました: %1").arg(path));
     updateTitle();
     if (m_windowsIntegration) {
@@ -1877,7 +1931,7 @@ void MainWindow::onSave() {
     if (f.open(QIODevice::WriteOnly)) {
         f.write(badge::saveDocumentToJson(projectsync::currentDocument(m_badges, *m_comboPaperSize, *m_chkLandscape, *m_spinPaperMargin, *m_spinPaperSpacing, m_currentFile)));
         appendLog(QStringLiteral("保存しました: %1").arg(m_currentFile));
-        refreshDiagnostics();
+        requestDiagnosticsRefresh("project saved");
         if (m_windowsIntegration) {
             m_windowsIntegration->rememberFile(m_currentFile);
             m_windowsIntegration->showToast(QStringLiteral("保存しました"),
@@ -1899,7 +1953,8 @@ void MainWindow::onSaveAs() {
 }
 
 void MainWindow::onExportPdf() {
-    syncLayoutWorkspace();
+    requestLayoutRefresh("export pdf");
+    flushInternalEvents();
     const auto pages = currentLayoutPages();
     const QString defaultName = m_currentFile.isEmpty()
         ? QStringLiteral("layout.pdf")
@@ -1943,7 +1998,8 @@ void MainWindow::onExportPdf() {
 }
 
 void MainWindow::onExportPng() {
-    syncLayoutWorkspace();
+    requestLayoutRefresh("export png");
+    flushInternalEvents();
     const QString defaultName = m_currentFile.isEmpty()
         ? QStringLiteral("layout.png")
         : QFileInfo(m_currentFile).completeBaseName() + QStringLiteral("_layout.png");
@@ -1975,7 +2031,8 @@ void MainWindow::onExportPng() {
 }
 
 void MainWindow::onPrintPreview() {
-    syncLayoutWorkspace();
+    requestLayoutRefresh("print preview");
+    flushInternalEvents();
     const auto pages = currentLayoutPages();
     const badge::DocumentData document = projectsync::currentDocument(m_layoutBadges, *m_comboPaperSize, *m_chkLandscape, *m_spinPaperMargin, *m_spinPaperSpacing, m_currentFile);
     QPrinter printer(QPrinter::HighResolution);
@@ -1994,7 +2051,8 @@ void MainWindow::onPrintPreview() {
 }
 
 void MainWindow::onPrint() {
-    syncLayoutWorkspace();
+    requestLayoutRefresh("print");
+    flushInternalEvents();
     const auto pages = currentLayoutPages();
     const badge::DocumentData document = projectsync::currentDocument(m_layoutBadges, *m_comboPaperSize, *m_chkLandscape, *m_spinPaperMargin, *m_spinPaperSpacing, m_currentFile);
     PrintDialog dlg(document.paper.widthMm, document.paper.heightMm, m_appSettings.printResolution, this);
@@ -2096,7 +2154,8 @@ void MainWindow::onModeChanged(bool designer) {
     if (designer) {
         openDesignerPerspective();
     } else {
-        syncLayoutWorkspace();
+        requestLayoutRefresh("mode changed to layout");
+        flushInternalEvents();
         openLayoutPerspective();
     }
 }
@@ -2160,6 +2219,11 @@ void MainWindow::onSelectionChanged() {
 
 void MainWindow::onBadgeDeselected() {
     m_selected.clear();
+    m_pendingBadgeMoveItem = nullptr;
+    m_internalEventQueue.clear();
+    if (m_internalEventFlushTimer && m_internalEventFlushTimer->isActive()) {
+        m_internalEventFlushTimer->stop();
+    }
     setInspectorControlsEnabled(false);
     m_updatingUI = true;
     m_propX->setValue(0); m_propY->setValue(0);
@@ -2209,15 +2273,61 @@ void MainWindow::onBadgeDeselected() {
 
 void MainWindow::onBadgeMoved(BadgeGraphicItem* item) {
     if (m_selected.isEmpty() || !m_selected.contains(item)) return;
-    m_updatingUI = true;
-    BadgeItem& b = item->badge();
-    m_propX->setValue(b.xMm);
-    m_propY->setValue(b.yMm);
-    m_updatingUI = false;
+    m_pendingBadgeMoveItem = item;
+    const int badgeIndex = m_designer ? m_designer->graphicItems().indexOf(item) : -1;
+    const BadgeItem& badge = item->badge();
+    m_internalEventQueue.postBadgeMoved(badgeIndex, badge.xMm, badge.yMm);
+    scheduleInternalEventFlush();
     if (!m_isDesigner) {
-        syncLayoutWorkspace();
+        requestLayoutRefresh("badge moved in layout view");
     }
-    refreshDiagnostics();
+}
+
+void MainWindow::flushInternalEvents() {
+    const auto events = m_internalEventQueue.drain();
+    bool sawBadgeMove = false;
+    bool sawLayoutDirty = false;
+    bool needsDiagnostics = false;
+    for (const auto& event : events) {
+        switch (event.kind) {
+        case badge::AppEventKind::BadgeMoved:
+            sawBadgeMove = true;
+            break;
+        case badge::AppEventKind::BadgeEdited:
+            needsDiagnostics = true;
+            break;
+        case badge::AppEventKind::LayoutDirty:
+            sawLayoutDirty = true;
+            needsDiagnostics = true;
+            break;
+        case badge::AppEventKind::DiagnosticsDirty:
+            needsDiagnostics = true;
+            break;
+        }
+    }
+
+    if (sawLayoutDirty) {
+        if (sawBadgeMove && m_pendingBadgeMoveItem && !m_selected.isEmpty() && m_selected.contains(m_pendingBadgeMoveItem)) {
+            const BadgeItem& b = m_pendingBadgeMoveItem->badge();
+            m_updatingUI = true;
+            if (m_propX) m_propX->setValue(b.xMm);
+            if (m_propY) m_propY->setValue(b.yMm);
+            m_updatingUI = false;
+        }
+        syncLayoutWorkspace(false);
+    }
+
+    if (sawBadgeMove && m_pendingBadgeMoveItem && !m_selected.isEmpty() && m_selected.contains(m_pendingBadgeMoveItem)) {
+        const BadgeItem& b = m_pendingBadgeMoveItem->badge();
+        m_updatingUI = true;
+        if (m_propX) m_propX->setValue(b.xMm);
+        if (m_propY) m_propY->setValue(b.yMm);
+        m_updatingUI = false;
+    }
+
+    if (needsDiagnostics) {
+        refreshDiagnostics();
+    }
 }
 
 void MainWindow::onInspectorChanged() {
@@ -2450,7 +2560,7 @@ void MainWindow::reorderLayoutPagesFromThumbList() {
         }
     }
     m_layoutPageIndex = std::clamp(m_layoutPageThumbList->currentRow(), 0, static_cast<int>(m_layoutPages.size()) - 1);
-    syncLayoutWorkspace();
+    requestLayoutRefresh("pages reordered");
 }
 
 void MainWindow::duplicateLayoutPageAt(int index) {
@@ -2465,7 +2575,7 @@ void MainWindow::duplicateLayoutPageAt(int index) {
                                             ? QStringLiteral("複製ページ")
                                             : QStringLiteral("%1（複製）").arg(sourceName));
     m_layoutPageIndex = index + 1;
-    syncLayoutWorkspace();
+    requestLayoutRefresh("page duplicated");
     appendLog(QStringLiteral("ページ %1 を複製しました（少しずらしました）").arg(index + 1));
 }
 
@@ -2481,7 +2591,7 @@ void MainWindow::deleteLayoutPageAt(int index) {
         m_layoutPageNames.removeAt(index);
     }
     m_layoutPageIndex = std::clamp(index, 0, static_cast<int>(m_layoutPages.size()) - 1);
-    syncLayoutWorkspace();
+    requestLayoutRefresh("page deleted");
     appendLog(QStringLiteral("ページ %1 を削除しました").arg(index + 1));
 }
 
@@ -2496,7 +2606,7 @@ void MainWindow::moveLayoutPageToFront(int index) {
         m_layoutPageNames.prepend(name);
     }
     m_layoutPageIndex = 0;
-    syncLayoutWorkspace();
+    requestLayoutRefresh("page moved front");
     appendLog(QStringLiteral("ページ %1 を先頭へ移動しました").arg(index + 1));
 }
 
@@ -2511,7 +2621,7 @@ void MainWindow::moveLayoutPageToBack(int index) {
         m_layoutPageNames.append(name);
     }
     m_layoutPageIndex = m_layoutPages.size() - 1;
-    syncLayoutWorkspace();
+    requestLayoutRefresh("page moved back");
     appendLog(QStringLiteral("ページ %1 を末尾へ移動しました").arg(index + 1));
 }
 
@@ -2534,7 +2644,7 @@ void MainWindow::renameLayoutPageAt(int index) {
         m_layoutPageNames.resize(index + 1);
     }
     m_layoutPageNames[index] = entered.trimmed();
-    syncLayoutWorkspace();
+    requestLayoutRefresh("page renamed");
     appendLog(QStringLiteral("ページ %1 の名前を変更しました").arg(index + 1));
 }
 
@@ -2546,7 +2656,7 @@ void MainWindow::onLayoutPagePrevious() {
         return;
     }
     --m_layoutPageIndex;
-    syncLayoutWorkspace();
+    requestLayoutRefresh("page previous");
 }
 
 void MainWindow::onLayoutPageNext() {
@@ -2557,7 +2667,7 @@ void MainWindow::onLayoutPageNext() {
         return;
     }
     ++m_layoutPageIndex;
-    syncLayoutWorkspace();
+    requestLayoutRefresh("page next");
 }
 
 void MainWindow::onLayoutPageSelected(int index) {
@@ -2568,7 +2678,7 @@ void MainWindow::onLayoutPageSelected(int index) {
         return;
     }
     m_layoutPageIndex = index;
-    syncLayoutWorkspace();
+    requestLayoutRefresh("page selected");
 }
 
 void MainWindow::onSetImage() {
@@ -2756,7 +2866,7 @@ void MainWindow::onGuideToggle() {
     m_designer->setBleedVisible(m_chkBleed->isChecked());
     m_designer->setVisibleVisible(m_chkVisible->isChecked());
     if (!m_isDesigner) {
-        syncLayoutWorkspace();
+        requestLayoutRefresh("guide toggle");
     }
 }
 
@@ -2894,7 +3004,8 @@ void MainWindow::onBatchAdd() {
         m_layoutPageIndex = 0;
         m_layoutPreviewMode = LayoutPreviewMode::CurrentDesign;
         m_layoutBadges = batchBadges;
-        syncLayoutWorkspace();
+        requestLayoutRefresh("batch add");
+        flushInternalEvents();
         openLayoutPerspective();
     }
 }
@@ -2948,7 +3059,8 @@ void MainWindow::onMixedLayout() {
         m_layoutPreviewMode = LayoutPreviewMode::AutoLayoutAll;
     }
     m_layoutBadges = mixed;
-    syncLayoutWorkspace();
+    requestLayoutRefresh("mixed layout");
+    flushInternalEvents();
     m_skipNextLayoutSync = true;
     openLayoutPerspective();
     appendLog(QStringLiteral("混在面付けを準備しました: %1 種類 / %2 枚")
@@ -2983,7 +3095,7 @@ void MainWindow::onImageDropped(const QString& filePath) {
     appendLog(QStringLiteral("画像を追加しました: %1").arg(filePath));
 }
 
-void MainWindow::syncLayoutWorkspace() {
+void MainWindow::syncLayoutWorkspace(bool refreshDiagnostics) {
     refreshDocumentFromDesigner();
     const badge::DocumentData document = projectsync::currentDocument(m_layoutBadges, *m_comboPaperSize, *m_chkLandscape, *m_spinPaperMargin, *m_spinPaperSpacing, m_currentFile);
     badge::DocumentData layoutDocument = document;
@@ -3058,7 +3170,9 @@ void MainWindow::syncLayoutWorkspace() {
     m_layoutWorkspace->setDocument(layoutDocument);
     updateLayoutPageUi();
     updateSafetyGuideHud();
-    refreshDiagnostics();
+    if (refreshDiagnostics) {
+        requestDiagnosticsRefresh("layout synced");
+    }
 }
 
 void MainWindow::refreshDocumentFromDesigner() {
@@ -3178,7 +3292,7 @@ void MainWindow::onSendToLayout() {
         m_layoutPlacedCount = 0;
         m_layoutOverflowCount = 0;
         m_layoutOverflowSummary.clear();
-        refreshDiagnostics();
+        requestDiagnosticsRefresh("transfer target empty");
         appendLog(QStringLiteral("中央ガイドの安全域内に送れるバッジがありません"));
         return;
     }
@@ -3191,7 +3305,8 @@ void MainWindow::onSendToLayout() {
         m_layoutBadges = LayoutEngine::autoLayout(guideBadges, document.paper);
         m_layoutPageIndex = 0;
     }
-    syncLayoutWorkspace();
+    requestLayoutRefresh("send to layout");
+    flushInternalEvents();
     m_skipNextLayoutSync = true;
     openLayoutPerspective();
 }
@@ -3223,7 +3338,8 @@ void MainWindow::onClearLayout() {
     m_layoutPageNames.clear();
     m_layoutPageIndex = 0;
     m_layoutPreviewMode = LayoutPreviewMode::CurrentDesign;
-    syncLayoutWorkspace();
+    requestLayoutRefresh("layout cleared");
+    flushInternalEvents();
     m_skipNextLayoutSync = true;
     openLayoutPerspective();
 }
@@ -3318,7 +3434,7 @@ void MainWindow::refreshBadges() {
         m_designer->refreshAll();
     }
     updateSafetyGuideHud();
-    refreshDiagnostics();
+    requestDiagnosticsRefresh("badges refreshed");
 }
 
 void MainWindow::updateTitle() {
@@ -3516,7 +3632,8 @@ void MainWindow::resetDockState() {
     m_actDesigner->setChecked(true);
     m_actLayout->setChecked(false);
     updateInspectorMode();
-    syncLayoutWorkspace();
+    requestLayoutRefresh("dock state reset");
+    flushInternalEvents();
 }
 
 void MainWindow::openDesignerPerspective() {
@@ -3640,7 +3757,8 @@ void MainWindow::syncPerspectiveUi(const QString& name) {
         if (m_skipNextLayoutSync) {
             m_skipNextLayoutSync = false;
         } else {
-            syncLayoutWorkspace();
+            requestLayoutRefresh("layout perspective shown");
+            flushInternalEvents();
         }
     }
 }

@@ -8,7 +8,7 @@ struct AppSettings {
     bool darkTheme = true;
     bool gridVisible = true;
     bool snapToGrid = true;
-    double gridSpacingMm = 5.0;
+    double gridSpacingMm = 1.0;
     bool lightingEnabled = false;
     int lightAngle = 315;
     int lightIntensity = 45;

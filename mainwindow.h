@@ -15,6 +15,7 @@
 #include <QUndoStack>
 #include <QByteArray>
 #include <QShowEvent>
+#include <QTimer>
 #include <functional>
 #include <wobjectdefs.h>
 #include "appsettingsdialog.h"
@@ -23,6 +24,7 @@
 #include "designerwidget.h"
 #include "layoutworkspacewidget.h"
 #include "transferdebugdialog.h"
+import badge.event;
 
 namespace ads {
 class CDockManager;
@@ -116,7 +118,7 @@ private:
     void updateLayerOpacityUi();
     void updateLayerPreviewUi();
     void updateInspectorMode();
-    void syncLayoutWorkspace();
+    void syncLayoutWorkspace(bool refreshDiagnostics = true);
     void refreshDocumentFromDesigner();
     void applyDesignerBadges(const QList<BadgeItem>& badges, const QList<int>& selectedIndices = {});
     QList<int> selectedBadgeIndices() const;
@@ -124,6 +126,11 @@ private:
     void pushBadgeChange(const QString& label, const QList<BadgeItem>& beforeBadges, const QList<int>& beforeSelection, const QList<BadgeItem>& afterBadges, const QList<int>& afterSelection);
     void appendLog(const QString& message);
     void refreshDiagnostics();
+    void requestDiagnosticsRefresh(const char* reason = nullptr);
+    void requestBadgeEdited(const char* reason = nullptr);
+    void requestLayoutRefresh(const char* reason = nullptr);
+    void scheduleInternalEventFlush();
+    void flushInternalEvents();
     void updateSafetyGuideHud();
     void updateTitle();
     void loadDockState();
@@ -232,6 +239,9 @@ private:
     QListWidget* m_logList = nullptr;
     QListWidget* m_issueList = nullptr;
     QListWidget* m_linkList = nullptr;
+    QTimer* m_internalEventFlushTimer = nullptr;
+    BadgeGraphicItem* m_pendingBadgeMoveItem = nullptr;
+    badge::AppEventQueue m_internalEventQueue;
 
     // Inspector - color correction
     QSlider* m_propBrightness;
