@@ -6,6 +6,7 @@
 #include <QPalette>
 #include <QList>
 #include <QPixmap>
+#include <QHash>
 
 #include "badgeitem.h"
 
@@ -41,6 +42,7 @@ private:
     QGraphicsScene* m_scene = nullptr;
     struct Impl;
     Impl* m_impl = nullptr;
+    mutable QHash<QString, QPixmap> m_thumbnailCache;
 
     void rebuildScene();
     void updateSceneRect();

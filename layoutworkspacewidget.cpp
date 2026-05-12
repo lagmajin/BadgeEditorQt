@@ -339,6 +339,34 @@ QString badgeRenderCacheKey(const badge::BadgeData& badgeData, const QSize& targ
     return key;
 }
 
+QString pageThumbnailCacheKey(const badge::DocumentData& document,
+                              const QList<BadgeItem>& page,
+                              int sizePx,
+                              bool includeGuides) {
+    QString key;
+    key.reserve(512);
+    key += QStringLiteral("%1x%2|%3|%4|%5|%6")
+               .arg(sizePx)
+               .arg(includeGuides ? 1 : 0)
+               .arg(document.paper.widthMm, 0, 'f', 2)
+               .arg(document.paper.heightMm, 0, 'f', 2)
+               .arg(document.paper.marginMm, 0, 'f', 2)
+               .arg(document.paper.spacingMm, 0, 'f', 2);
+    key += QStringLiteral("|N:%1").arg(page.size());
+    for (const auto& item : page) {
+        const badge::BadgeData data = badge::qt::toCoreBadge(item);
+        const double renderWidthMm = item.clipToCircle ? std::max(item.widthMm, item.heightMm) + Constants::kCircleBleedMm
+                                                       : item.widthMm;
+        const double renderHeightMm = item.clipToCircle ? std::max(item.widthMm, item.heightMm) + Constants::kCircleBleedMm
+                                                        : item.heightMm;
+        const QSize renderSize(std::max(1, int(std::round(renderWidthMm * Constants::kMmToPx))),
+                               std::max(1, int(std::round(renderHeightMm * Constants::kMmToPx))));
+        key += QStringLiteral("|B:");
+        key += badgeRenderCacheKey(data, renderSize);
+    }
+    return key;
+}
+
 QList<QGraphicsItem*> sceneItemsByTag(QGraphicsScene* scene, const QString& tag) {
     QList<QGraphicsItem*> matches;
     if (!scene) {
@@ -539,10 +567,12 @@ void LayoutWorkspaceWidget::applyThemePalette(const QPalette& palette) {
 void LayoutWorkspaceWidget::setDocument(const badge::DocumentData& document) {
     m_impl->document = document;
     m_impl->lastError.clear();
+    m_thumbnailCache.clear();
     rebuildScene();
 }
 
 void LayoutWorkspaceWidget::refresh() {
+    m_thumbnailCache.clear();
     rebuildScene();
 }
 
@@ -561,6 +591,11 @@ QPixmap LayoutWorkspaceWidget::renderPageThumbnail(const QList<BadgeItem>& page,
 
     badge::DocumentData doc = m_impl->document;
     doc.badges = badge::qt::toCoreBadges(page);
+
+    const QString cacheKey = pageThumbnailCacheKey(doc, page, sizePx, includeGuides);
+    if (const auto it = m_thumbnailCache.constFind(cacheKey); it != m_thumbnailCache.cend()) {
+        return *it;
+    }
 
     QGraphicsScene scene;
     QHash<QString, QPixmap> renderCache;
@@ -587,7 +622,9 @@ QPixmap LayoutWorkspaceWidget::renderPageThumbnail(const QList<BadgeItem>& page,
                         targetSize.height());
     scene.render(&painter, target, source, Qt::KeepAspectRatio);
     painter.end();
-    return QPixmap::fromImage(image);
+    const QPixmap thumb = QPixmap::fromImage(image);
+    m_thumbnailCache.insert(cacheKey, thumb);
+    return thumb;
 }
 
 bool LayoutWorkspaceWidget::exportPng(const QString& filePath, int dpi, bool whiteBackground) const {
