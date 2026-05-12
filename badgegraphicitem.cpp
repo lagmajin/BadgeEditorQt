@@ -353,77 +353,137 @@ void BadgeGraphicItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*,
     renderCore(painter, r, lod < 0.8);
 }
 
-void BadgeGraphicItem::renderCore(QPainter* painter, const QRectF& r, bool simplifiedPreview) {
-    painter->save();
-    if (shouldClipDesignerPreview()) {
-        QPainterPath path;
-        path.addEllipse(r);
-        painter->setClipPath(path);
+QString BadgeGraphicItem::previewCacheSignature() const {
+    QString key;
+    key.reserve(256);
+    key += QString::number(int(std::round(m_badge.widthMm * 10.0)));
+    key += QChar('|');
+    key += QString::number(int(std::round(m_badge.heightMm * 10.0)));
+    key += QChar('|');
+    key += QString::number(int(std::round(m_badge.imageScale * 1000.0)));
+    key += QChar('|');
+    key += QString::number(m_badge.clipToCircle ? 1 : 0);
+    key += QChar('|');
+    key += m_badge.imagePath;
+    key += QChar('|');
+    key += QString::number(m_badge.brightness);
+    key += QChar('|');
+    key += QString::number(m_badge.contrast);
+    key += QChar('|');
+    key += QString::number(m_badge.saturation);
+    key += QChar('|');
+    key += QString::number(m_badge.materialPreset);
+    key += QChar('|');
+    key += QString::number(int(std::round(m_badge.specularStrength * 1000.0)));
+    key += QChar('|');
+    key += QString::number(int(std::round(m_badge.envReflectionStrength * 1000.0)));
+    key += QChar('|');
+    key += QString::number(int(std::round(m_badge.glitterStrength * 1000.0)));
+    key += QChar('|');
+    key += QString::number(m_badge.layers.size());
+    for (const auto& layer : m_badge.layers) {
+        key += QChar('|');
+        key += layer.imagePath;
+        key += QChar('|');
+        key += QString::number(layer.visible ? 1 : 0);
+        key += QChar('|');
+        key += QString::number(int(std::round(layer.opacity * 1000.0)));
+        key += QChar('|');
+        key += QString::number(layer.offsetX);
+        key += QChar('|');
+        key += QString::number(layer.offsetY);
+        key += QChar('|');
+        key += QString::number(int(layer.blendMode));
     }
-    painter->setRenderHint(QPainter::SmoothPixmapTransform, !simplifiedPreview);
-    painter->setRenderHint(QPainter::Antialiasing, !simplifiedPreview);
+    return key;
+}
+
+void BadgeGraphicItem::rebuildPreviewCache() {
+    const QRectF r = contentRectPx();
+    const QSize cacheSize = r.size().toSize().expandedTo(QSize(1, 1));
+    QPixmap cache(cacheSize);
+    cache.fill(Qt::transparent);
+
+    QPainter painter(&cache);
+    painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    painter.translate(-r.topLeft());
 
     bool drewAnything = false;
+    const QRectF localRect(QPointF(0.0, 0.0), r.size());
+    if (shouldClipDesignerPreview()) {
+        QPainterPath path;
+        path.addEllipse(localRect);
+        painter.setClipPath(path);
+    }
 
-    // Draw the primary image layer first, then overlay any additional layers on top.
     const QPixmap& baseImage = m_processed.isNull() ? m_thumbnail : m_processed;
     const LayerItem* primaryLayer = m_badge.layers.isEmpty() ? nullptr : &m_badge.layers.first();
     if (!baseImage.isNull() && (!primaryLayer || primaryLayer->visible)) {
-        painter->save();
-        painter->setOpacity(primaryLayer ? primaryLayer->opacity : 1.0);
-        painter->setCompositionMode(primaryLayer ? compositionModeForLayer(primaryLayer->blendMode) : QPainter::CompositionMode_SourceOver);
+        painter.save();
+        painter.setOpacity(primaryLayer ? primaryLayer->opacity : 1.0);
+        painter.setCompositionMode(primaryLayer ? compositionModeForLayer(primaryLayer->blendMode) : QPainter::CompositionMode_SourceOver);
         const double scale = std::max(0.1, m_badge.imageScale);
-        const QSizeF scaledSize(r.width() * scale, r.height() * scale);
-        QRectF imageRect(r.center().x() - scaledSize.width() * 0.5,
-                         r.center().y() - scaledSize.height() * 0.5,
+        const QSizeF scaledSize(localRect.width() * scale, localRect.height() * scale);
+        QRectF imageRect(localRect.center().x() - scaledSize.width() * 0.5,
+                         localRect.center().y() - scaledSize.height() * 0.5,
                          scaledSize.width(),
                          scaledSize.height());
         if (primaryLayer) {
             imageRect.translate(primaryLayer->offsetX * Constants::kMmToPx,
                                 primaryLayer->offsetY * Constants::kMmToPx);
         }
-        painter->drawPixmap(imageRect, baseImage, QRectF(baseImage.rect()));
-        painter->restore();
+        painter.drawPixmap(imageRect, baseImage, QRectF(baseImage.rect()));
+        painter.restore();
         drewAnything = true;
     }
 
-    // Render layers on top of the primary image.
-    if (!simplifiedPreview) {
-        const int startLayer = m_badge.layers.isEmpty() ? 0 : 1;
-        for (int layerIndex = startLayer; layerIndex < m_badge.layers.size(); ++layerIndex) {
-            const auto& layer = m_badge.layers[layerIndex];
-            if (!layer.visible) continue;
-            QPixmap img;
-            if (!layer.imagePath.isEmpty() && QFileInfo::exists(layer.imagePath))
-                img.load(layer.imagePath);
-            if (!img.isNull()) {
-                painter->save();
-                painter->setOpacity(layer.opacity);
-                painter->setCompositionMode(compositionModeForLayer(layer.blendMode));
-                const QRectF lr = r.translated(layer.offsetX * Constants::kMmToPx,
-                                               layer.offsetY * Constants::kMmToPx);
-                painter->drawPixmap(lr, img, QRectF(img.rect()));
-                painter->restore();
-                drewAnything = true;
-            }
+    const int startLayer = m_badge.layers.isEmpty() ? 0 : 1;
+    for (int layerIndex = startLayer; layerIndex < m_badge.layers.size(); ++layerIndex) {
+        const auto& layer = m_badge.layers[layerIndex];
+        if (!layer.visible) continue;
+        QPixmap img;
+        if (!layer.imagePath.isEmpty() && QFileInfo::exists(layer.imagePath)) {
+            img.load(layer.imagePath);
+        }
+        if (!img.isNull()) {
+            painter.save();
+            painter.setOpacity(layer.opacity);
+            painter.setCompositionMode(compositionModeForLayer(layer.blendMode));
+            const QRectF lr = localRect.translated(layer.offsetX * Constants::kMmToPx,
+                                                  layer.offsetY * Constants::kMmToPx);
+            painter.drawPixmap(lr, img, QRectF(img.rect()));
+            painter.restore();
+            drewAnything = true;
         }
     }
 
-    painter->setOpacity(1.0);
-
-    // Placeholder if nothing drawn
     if (!drewAnything) {
-        painter->fillRect(r, QColor(240, 240, 240));
+        painter.fillRect(localRect, QColor(240, 240, 240));
         QPen dashPen(Qt::lightGray);
         dashPen.setDashPattern({2, 2});
-        painter->setPen(dashPen);
-        painter->drawEllipse(r.adjusted(2,2,-2,-2));
-        painter->setPen(Qt::gray);
-        painter->setFont(QFont("Arial", 7));
-        if (!simplifiedPreview) {
-            painter->drawText(r, Qt::AlignCenter, "Drop image\nor DoubleClick");
-        }
+        painter.setPen(dashPen);
+        painter.drawEllipse(localRect.adjusted(2, 2, -2, -2));
+        painter.setPen(Qt::gray);
+        painter.setFont(QFont("Arial", 7));
+        painter.drawText(localRect, Qt::AlignCenter, "Drop image\nor DoubleClick");
     }
+
+    painter.end();
+    m_previewCache = cache;
+    m_previewCacheSignature = previewCacheSignature();
+}
+
+void BadgeGraphicItem::renderCore(QPainter* painter, const QRectF& r, bool simplifiedPreview) {
+    const QString signature = previewCacheSignature();
+    if (m_previewCache.isNull() || m_previewCacheSignature != signature || m_previewCache.size() != r.size().toSize().expandedTo(QSize(1, 1))) {
+        rebuildPreviewCache();
+    }
+
+    painter->save();
+    painter->setRenderHint(QPainter::SmoothPixmapTransform, !simplifiedPreview);
+    painter->setRenderHint(QPainter::Antialiasing, !simplifiedPreview);
+    painter->drawPixmap(r.topLeft(), m_previewCache);
 
     if (!simplifiedPreview && !m_badge.displayText.isEmpty()) {
         painter->setOpacity(1.0);
@@ -442,6 +502,8 @@ void BadgeGraphicItem::loadImage() {
     m_thumbnail = QPixmap();
     m_processed = QPixmap();
     m_colorSpaceLabel = QStringLiteral("読み込みなし");
+    m_previewCache = QPixmap();
+    m_previewCacheSignature.clear();
 
     if (m_loadedImagePath.isEmpty() || !QFileInfo::exists(m_loadedImagePath)) {
         update();
@@ -455,6 +517,8 @@ void BadgeGraphicItem::loadImage() {
 }
 
 void BadgeGraphicItem::applyColorCorrection() {
+    m_previewCache = QPixmap();
+    m_previewCacheSignature.clear();
     if (m_badge.brightness == 0 && m_badge.contrast == 0 && m_badge.saturation == 0) {
         m_processed = QPixmap();
         update();
@@ -468,6 +532,8 @@ void BadgeGraphicItem::applyColorCorrection() {
 void BadgeGraphicItem::syncFromBadge() {
     prepareGeometryChange();
     setTransformOriginPoint(contentRectPx().center());
+    m_previewCache = QPixmap();
+    m_previewCacheSignature.clear();
     const QString currentPrimaryPath = !m_badge.layers.isEmpty() ? m_badge.layers.first().imagePath : m_badge.imagePath;
     if (currentPrimaryPath != m_loadedImagePath) {
         loadImage();

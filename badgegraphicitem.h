@@ -62,7 +62,12 @@ private:
     bool shouldClipDesignerPreview() const;
     void loadImage();
     void renderCore(QPainter* painter, const QRectF& rect, bool simplifiedPreview);
+    void rebuildPreviewCache();
+    QString previewCacheSignature() const;
     QPointF snappedPosition(const QPointF& scenePos) const;
+
+    QPixmap m_previewCache;
+    QString m_previewCacheSignature;
 };
 
 #endif
