@@ -16,6 +16,7 @@
 #include <QByteArray>
 #include <QShowEvent>
 #include <QTimer>
+#include <QColor>
 #include <functional>
 #include <wobjectdefs.h>
 #include "appsettingsdialog.h"
@@ -35,6 +36,7 @@ class CDockAreaWidget;
 class BadgeGraphicItem;
 class QListWidget;
 class QGroupBox;
+class QPushButton;
 class WindowsIntegration;
 namespace badge {
 struct DocumentData;
@@ -75,6 +77,7 @@ private:
     void onBadgeMoved(BadgeGraphicItem* item);
     void onBadgeEditStarted(BadgeGraphicItem* item);
     void onBadgeEditFinished(BadgeGraphicItem* item);
+    void onEyedropperColorPicked(const QColor& color);
     void onInspectorChanged();
     void onSetImage();
     void onNudgeRequested(double dxMm, double dyMm);
@@ -117,6 +120,7 @@ private:
     void updateLayerBlendModeUi();
     void updateLayerOpacityUi();
     void updateLayerPreviewUi();
+    void updateLayerFillUi();
     void updateInspectorMode();
     void syncLayoutWorkspace(bool refreshDiagnostics = true);
     void refreshDocumentFromDesigner();
@@ -217,6 +221,9 @@ private:
     QLineEdit* m_propText;
     QCheckBox* m_propClipCircle = nullptr;
     QLineEdit* m_propColorSpace;
+    QLineEdit* m_propPickedColor = nullptr;
+    QPushButton* m_btnEyedropper = nullptr;
+    QLabel* m_pickedColorSwatch = nullptr;
     QListWidget* m_layerList = nullptr;
     QGroupBox* m_propGroup = nullptr;
     QGroupBox* m_checklistGroup = nullptr;

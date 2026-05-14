@@ -1,6 +1,7 @@
 module;
 
-#include "layoutengine.h"
+#include "badge.paper.h"
+#include "badge.model.h"
 
 #include <algorithm>
 #include <utility>
@@ -8,8 +9,6 @@ module;
 
 export module badge.layout;
 
-export import badge.paper;
-export import badge.model;
 
 namespace badge_layout_detail {
 constexpr double kCirclePackFactor = 0.8660254037844386; // sqrt(3) / 2

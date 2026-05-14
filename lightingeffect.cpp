@@ -2,6 +2,7 @@
 #include <QPainter>
 #include <QRadialGradient>
 #include <cmath>
+#include <numbers>
 
 LightingEffect::LightingEffect(QObject* parent) : QGraphicsEffect(parent) {}
 
@@ -19,8 +20,8 @@ void LightingEffect::draw(QPainter* painter) {
     
     // Sphere shading
     QRadialGradient shade(r.center(), r.width() / 2);
-    double rad = m_angle * M_PI / 180.0;
-    QPointF lightCenter = r.center() + QPointF(cos(rad) * r.width() * 0.22, -sin(rad) * r.height() * 0.22);
+    const double rad = m_angle * std::numbers::pi_v<double> / 180.0;
+    QPointF lightCenter = r.center() + QPointF(std::cos(rad) * r.width() * 0.22, -std::sin(rad) * r.height() * 0.22);
     shade.setCenter(lightCenter);
     shade.setFocalPoint(lightCenter);
     shade.setColorAt(0.0, QColor(255, 255, 255, 0));

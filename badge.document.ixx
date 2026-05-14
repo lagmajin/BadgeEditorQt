@@ -1,14 +1,13 @@
 module;
 
-#include "layoutengine.h"
+#include "badge.paper.h"
+#include "badge.model.h"
 
 #include <string>
 #include <vector>
 
 export module badge.document;
 
-export import badge.paper;
-export import badge.model;
 export import badge.layout;
 
 export namespace badge {

@@ -16,6 +16,19 @@
 #include <wobjectimpl.h>
 
 namespace {
+QRectF fitRectInside(const QRectF& target, const QSizeF& sourceSize) {
+    if (target.isEmpty() || sourceSize.width() <= 0.0 || sourceSize.height() <= 0.0) {
+        return target;
+    }
+
+    const qreal scale = std::min(target.width() / sourceSize.width(),
+                                 target.height() / sourceSize.height());
+    const QSizeF fittedSize(sourceSize.width() * scale, sourceSize.height() * scale);
+    return QRectF(QPointF(target.center().x() - fittedSize.width() * 0.5,
+                          target.center().y() - fittedSize.height() * 0.5),
+                  fittedSize);
+}
+
 QPainter::CompositionMode compositionModeForLayer(LayerBlendMode mode) {
     switch (mode) {
     case LayerBlendMode::Multiply: return QPainter::CompositionMode_Multiply;
@@ -27,6 +40,23 @@ QPainter::CompositionMode compositionModeForLayer(LayerBlendMode mode) {
     default:
         return QPainter::CompositionMode_SourceOver;
     }
+}
+
+QPixmap applyLayerFillColor(QPixmap pixmap, const QColor& fillColor) {
+    if (pixmap.isNull() || !fillColor.isValid()) {
+        return pixmap;
+    }
+
+    QImage image = pixmap.toImage().convertToFormat(QImage::Format_ARGB32_Premultiplied);
+    if (image.isNull()) {
+        return pixmap;
+    }
+
+    QPainter painter(&image);
+    painter.setCompositionMode(QPainter::CompositionMode_SourceIn);
+    painter.fillRect(image.rect(), fillColor);
+    painter.end();
+    return QPixmap::fromImage(image);
 }
 
 void paintRealisticSurface(QPainter* painter,
@@ -394,6 +424,8 @@ QString BadgeGraphicItem::previewCacheSignature() const {
         key += QString::number(layer.offsetY);
         key += QChar('|');
         key += QString::number(int(layer.blendMode));
+        key += QChar('|');
+        key += layer.fillColor.isValid() ? layer.fillColor.name(QColor::HexArgb) : QStringLiteral("none");
     }
     return key;
 }
@@ -417,18 +449,19 @@ void BadgeGraphicItem::rebuildPreviewCache() {
         painter.setClipPath(path);
     }
 
-    const QPixmap& baseImage = m_processed.isNull() ? m_thumbnail : m_processed;
     const LayerItem* primaryLayer = m_badge.layers.isEmpty() ? nullptr : &m_badge.layers.first();
+    const QPixmap baseSource = m_processed.isNull() ? m_thumbnail : m_processed;
+    const QPixmap baseImage = applyLayerFillColor(baseSource, primaryLayer ? primaryLayer->fillColor : QColor());
     if (!baseImage.isNull() && (!primaryLayer || primaryLayer->visible)) {
         painter.save();
         painter.setOpacity(primaryLayer ? primaryLayer->opacity : 1.0);
         painter.setCompositionMode(primaryLayer ? compositionModeForLayer(primaryLayer->blendMode) : QPainter::CompositionMode_SourceOver);
         const double scale = std::max(0.1, m_badge.imageScale);
-        const QSizeF scaledSize(localRect.width() * scale, localRect.height() * scale);
-        QRectF imageRect(localRect.center().x() - scaledSize.width() * 0.5,
-                         localRect.center().y() - scaledSize.height() * 0.5,
-                         scaledSize.width(),
-                         scaledSize.height());
+        const QRectF targetRect(localRect.center().x() - localRect.width() * scale * 0.5,
+                                localRect.center().y() - localRect.height() * scale * 0.5,
+                                localRect.width() * scale,
+                                localRect.height() * scale);
+        QRectF imageRect = fitRectInside(targetRect, baseImage.size());
         if (primaryLayer) {
             imageRect.translate(primaryLayer->offsetX * Constants::kMmToPx,
                                 primaryLayer->offsetY * Constants::kMmToPx);
@@ -446,12 +479,14 @@ void BadgeGraphicItem::rebuildPreviewCache() {
         if (!layer.imagePath.isEmpty() && QFileInfo::exists(layer.imagePath)) {
             img.load(layer.imagePath);
         }
+        img = applyLayerFillColor(img, layer.fillColor);
         if (!img.isNull()) {
             painter.save();
             painter.setOpacity(layer.opacity);
             painter.setCompositionMode(compositionModeForLayer(layer.blendMode));
-            const QRectF lr = localRect.translated(layer.offsetX * Constants::kMmToPx,
-                                                  layer.offsetY * Constants::kMmToPx);
+            const QRectF lr = fitRectInside(localRect.translated(layer.offsetX * Constants::kMmToPx,
+                                                                 layer.offsetY * Constants::kMmToPx),
+                                            img.size());
             painter.drawPixmap(lr, img, QRectF(img.rect()));
             painter.restore();
             drewAnything = true;

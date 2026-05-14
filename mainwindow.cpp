@@ -25,6 +25,7 @@ import viewportbackend;
 #include <QSizePolicy>
 #include <QListWidget>
 #include <QApplication>
+#include <QClipboard>
 #include <QBrush>
 #include <QColor>
 #include <QDir>
@@ -84,7 +85,6 @@ import viewportbackend;
 
 import badge.documentio;
 import badge.document;
-import badge.model;
 import badge.qtbridge;
 
 namespace {
@@ -106,6 +106,19 @@ namespace {
 #define DWMWCP_ROUND static_cast<DWM_WINDOW_CORNER_PREFERENCE>(2)
 #endif
 #endif
+
+QRectF fitRectInside(const QRectF& target, const QSizeF& sourceSize) {
+    if (target.isEmpty() || sourceSize.width() <= 0.0 || sourceSize.height() <= 0.0) {
+        return target;
+    }
+
+    const qreal scale = std::min(target.width() / sourceSize.width(),
+                                 target.height() / sourceSize.height());
+    const QSizeF fittedSize(sourceSize.width() * scale, sourceSize.height() * scale);
+    return QRectF(QPointF(target.center().x() - fittedSize.width() * 0.5,
+                          target.center().y() - fittedSize.height() * 0.5),
+                  fittedSize);
+}
 
 void showOperationWarning(QWidget* parent,
                           const QString& title,
@@ -296,7 +309,8 @@ bool badgeLayerEquals(const LayerItem& a, const LayerItem& b) {
         && a.visible == b.visible
         && a.offsetX == b.offsetX
         && a.offsetY == b.offsetY
-        && a.blendMode == b.blendMode;
+        && a.blendMode == b.blendMode
+        && a.fillColor == b.fillColor;
 }
 
 bool badgeGuideEquals(const GuideItemData& a, const GuideItemData& b) {
@@ -369,14 +383,14 @@ QRectF badgeContentRectPx(const BadgeItem& badge) {
     return QRectF(margin, margin, badge.widthMm * pxPerMm, badge.heightMm * pxPerMm);
 }
 
-QRectF badgePrimaryImageRectPx(const BadgeItem& badge) {
+QRectF badgePrimaryImageRectPx(const BadgeItem& badge, const QSizeF& sourceSize) {
     const QRectF content = badgeContentRectPx(badge);
     const double scale = std::max(0.1, badge.imageScale);
-    const QSizeF scaledSize(content.width() * scale, content.height() * scale);
-    QRectF imageRect(content.center().x() - scaledSize.width() * 0.5,
-                     content.center().y() - scaledSize.height() * 0.5,
-                     scaledSize.width(),
-                     scaledSize.height());
+    const QRectF targetRect(content.center().x() - content.width() * scale * 0.5,
+                            content.center().y() - content.height() * scale * 0.5,
+                            content.width() * scale,
+                            content.height() * scale);
+    QRectF imageRect = fitRectInside(targetRect, sourceSize);
     if (!badge.layers.isEmpty()) {
         imageRect.translate(badge.layers.first().offsetX * Constants::kMmToPx,
                             badge.layers.first().offsetY * Constants::kMmToPx);
@@ -398,6 +412,27 @@ QPixmap correctedPixmapForBadge(const BadgeItem& badge, const QString& path) {
         pixmap = ImageProcessor::applyCorrection(pixmap, badge.brightness, badge.contrast, badge.saturation);
     }
     return pixmap;
+}
+
+QPixmap applyLayerFillColor(QPixmap pixmap, const QColor& fillColor) {
+    if (pixmap.isNull() || !fillColor.isValid()) {
+        return pixmap;
+    }
+
+    QImage image = pixmap.toImage().convertToFormat(QImage::Format_ARGB32_Premultiplied);
+    if (image.isNull()) {
+        return pixmap;
+    }
+
+    QPainter painter(&image);
+    painter.setCompositionMode(QPainter::CompositionMode_SourceIn);
+    painter.fillRect(image.rect(), fillColor);
+    painter.end();
+    return QPixmap::fromImage(image);
+}
+
+QPixmap renderedLayerPixmap(const BadgeItem& badge, const LayerItem& layer) {
+    return applyLayerFillColor(correctedPixmapForBadge(badge, layer.imagePath), layer.fillColor);
 }
 
 QPainter::CompositionMode compositionModeForLayer(LayerBlendMode mode) {
@@ -427,10 +462,14 @@ QString layerBlendModeText(LayerBlendMode mode) {
 }
 
 QString layerItemSummary(const LayerItem& layer) {
-    return QStringLiteral("%1  [%2, %3%]")
+    QString summary = QStringLiteral("%1  [%2, %3%]")
         .arg(layer.name.isEmpty() ? QFileInfo(layer.imagePath).baseName() : layer.name,
              layerBlendModeText(layer.blendMode),
              QString::number(int(std::round(std::clamp(layer.opacity, 0.0, 1.0) * 100.0))));
+    if (layer.fillColor.isValid()) {
+        summary += QStringLiteral(" %1").arg(layer.fillColor.name(QColor::HexArgb).toUpper());
+    }
+    return summary;
 }
 
 QString badgeSizeText(const BadgeItem& badge) {
@@ -555,14 +594,15 @@ QPixmap renderLayerPreviewPixmap(const BadgeItem& badge, int layerIndex, const Q
         painter.setClipPath(path);
     }
 
-    const QString primaryPath = !previewBadge.layers.isEmpty() ? previewBadge.layers.first().imagePath : previewBadge.imagePath;
-    const QPixmap basePixmap = correctedPixmapForBadge(previewBadge, primaryPath);
     const LayerItem* primaryLayer = previewBadge.layers.isEmpty() ? nullptr : &previewBadge.layers.first();
+    const QPixmap basePixmap = primaryLayer
+        ? renderedLayerPixmap(previewBadge, *primaryLayer)
+        : correctedPixmapForBadge(previewBadge, previewBadge.imagePath);
     if (!basePixmap.isNull() && (!primaryLayer || primaryLayer->visible)) {
         painter.save();
         painter.setOpacity(primaryLayer ? primaryLayer->opacity : 1.0);
         painter.setCompositionMode(primaryLayer ? compositionModeForLayer(primaryLayer->blendMode) : QPainter::CompositionMode_SourceOver);
-        const QRectF imageRect = badgePrimaryImageRectPx(previewBadge);
+        const QRectF imageRect = badgePrimaryImageRectPx(previewBadge, basePixmap.size());
         painter.drawPixmap(imageRect, basePixmap, QRectF(basePixmap.rect()));
         painter.restore();
     }
@@ -573,15 +613,16 @@ QPixmap renderLayerPreviewPixmap(const BadgeItem& badge, int layerIndex, const Q
         if (!layer.visible) {
             continue;
         }
-        const QPixmap layerPixmap = correctedPixmapForBadge(previewBadge, layer.imagePath);
+        const QPixmap layerPixmap = renderedLayerPixmap(previewBadge, layer);
         if (layerPixmap.isNull()) {
             continue;
         }
         painter.save();
         painter.setOpacity(layer.opacity);
         painter.setCompositionMode(compositionModeForLayer(layer.blendMode));
-        const QRectF layerRect = contentRect.translated(layer.offsetX * Constants::kMmToPx,
-                                                        layer.offsetY * Constants::kMmToPx);
+        const QRectF layerRect = fitRectInside(contentRect.translated(layer.offsetX * Constants::kMmToPx,
+                                                                      layer.offsetY * Constants::kMmToPx),
+                                               layerPixmap.size());
         painter.drawPixmap(layerRect, layerPixmap, QRectF(layerPixmap.rect()));
         painter.restore();
     }
@@ -616,14 +657,15 @@ QPixmap renderLayerPreviewPixmap(const BadgeItem& badge, int layerIndex, const Q
 
 void paintTransferBadgeContent(QPainter& painter, const BadgeItem& badge) {
     const QRectF contentRect = badgeContentRectPx(badge);
-    const QString primaryPath = !badge.layers.isEmpty() ? badge.layers.first().imagePath : badge.imagePath;
-    const QPixmap basePixmap = correctedPixmapForBadge(badge, primaryPath);
     const LayerItem* primaryLayer = badge.layers.isEmpty() ? nullptr : &badge.layers.first();
+    const QPixmap basePixmap = primaryLayer
+        ? renderedLayerPixmap(badge, *primaryLayer)
+        : correctedPixmapForBadge(badge, badge.imagePath);
     if (!basePixmap.isNull() && (!primaryLayer || primaryLayer->visible)) {
         painter.save();
         painter.setOpacity(primaryLayer ? primaryLayer->opacity : 1.0);
         painter.setCompositionMode(primaryLayer ? compositionModeForLayer(primaryLayer->blendMode) : QPainter::CompositionMode_SourceOver);
-        painter.drawPixmap(badgePrimaryImageRectPx(badge), basePixmap, QRectF(basePixmap.rect()));
+        painter.drawPixmap(badgePrimaryImageRectPx(badge, basePixmap.size()), basePixmap, QRectF(basePixmap.rect()));
         painter.restore();
     }
 
@@ -633,15 +675,16 @@ void paintTransferBadgeContent(QPainter& painter, const BadgeItem& badge) {
         if (!layer.visible) {
             continue;
         }
-        const QPixmap layerPixmap = correctedPixmapForBadge(badge, layer.imagePath);
+        const QPixmap layerPixmap = renderedLayerPixmap(badge, layer);
         if (layerPixmap.isNull()) {
             continue;
         }
         painter.save();
         painter.setOpacity(layer.opacity);
         painter.setCompositionMode(compositionModeForLayer(layer.blendMode));
-        const QRectF layerRect = contentRect.translated(layer.offsetX * Constants::kMmToPx,
-                                                        layer.offsetY * Constants::kMmToPx);
+        const QRectF layerRect = fitRectInside(contentRect.translated(layer.offsetX * Constants::kMmToPx,
+                                                                      layer.offsetY * Constants::kMmToPx),
+                                               layerPixmap.size());
         painter.drawPixmap(layerRect, layerPixmap, QRectF(layerPixmap.rect()));
         painter.restore();
     }
@@ -715,7 +758,8 @@ QImage renderLayoutDebugImage(const BadgeItem& badge, int targetPx) {
     QImage canvas(QSize(targetPx, targetPx), QImage::Format_ARGB32_Premultiplied);
     canvas.fill(badge.flattenedForLayoutTransfer ? Qt::transparent : Qt::white);
 
-    const QString primaryPath = !badge.layers.isEmpty() ? badge.layers.first().imagePath : badge.imagePath;
+    const LayerItem* primaryLayer = badge.layers.isEmpty() ? nullptr : &badge.layers.first();
+    const QString primaryPath = primaryLayer ? primaryLayer->imagePath : badge.imagePath;
     if (primaryPath.isEmpty()) {
         return canvas;
     }
@@ -729,7 +773,16 @@ QImage renderLayoutDebugImage(const BadgeItem& badge, int targetPx) {
     QPainter painter(&canvas);
     painter.setRenderHint(QPainter::Antialiasing, true);
     painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
-    painter.drawImage(QRectF(0.0, 0.0, targetPx, targetPx), source, QRectF(source.rect()));
+    QPixmap sourcePixmap = primaryLayer
+        ? renderedLayerPixmap(badge, *primaryLayer)
+        : QPixmap::fromImage(source);
+    if (sourcePixmap.isNull()) {
+        return canvas;
+    }
+
+    painter.drawImage(fitRectInside(QRectF(0.0, 0.0, targetPx, targetPx), sourcePixmap.size()),
+                      sourcePixmap.toImage(),
+                      QRectF(sourcePixmap.rect()));
     painter.end();
     return canvas;
 }
@@ -1161,6 +1214,22 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     connect(m_designer, &DesignerWidget::badgeEditStarted, this, [this](BadgeGraphicItem* item){ onBadgeEditStarted(item); });
     connect(m_designer, &DesignerWidget::badgeEditFinished, this, [this](BadgeGraphicItem* item){ onBadgeEditFinished(item); });
     connect(m_designer, &DesignerWidget::nudgeRequested, this, [this](double dxMm, double dyMm){ onNudgeRequested(dxMm, dyMm); });
+    connect(m_designer, &DesignerWidget::eyedropperColorPicked, this, [this](const QColor& color) { onEyedropperColorPicked(color); });
+    connect(m_designer, &DesignerWidget::eyedropperModeChanged, this, [this](bool active) {
+        if (!m_btnEyedropper) {
+            return;
+        }
+        const QSignalBlocker blocker(m_btnEyedropper);
+        m_btnEyedropper->setChecked(active);
+    });
+    connect(m_btnEyedropper, &QPushButton::toggled, this, [this](bool on) {
+        if (m_designer) {
+            m_designer->setEyedropperActive(on);
+        }
+        if (on) {
+            appendLog(QStringLiteral("スポイトを有効化しました。デザイナー上をクリックして色を拾います"));
+        }
+    });
     m_designer->updateGuides(32);
     updateSafetyGuideHud();
 
@@ -1288,6 +1357,24 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     auto* resetBtn = new QPushButton("リセット");
     connect(resetBtn, &QPushButton::clicked, this, [this]{ m_propBrightness->setValue(0); m_propContrast->setValue(0); m_propSaturation->setValue(0); onInspectorChanged(); });
     colorForm->addRow(resetBtn);
+    auto* pickRow = new QWidget(colorGroup);
+    auto* pickLayout = new QHBoxLayout(pickRow);
+    pickLayout->setContentsMargins(0, 0, 0, 0);
+    pickLayout->setSpacing(8);
+    m_btnEyedropper = new QPushButton(QStringLiteral("スポイト"));
+    m_btnEyedropper->setCheckable(true);
+    m_btnEyedropper->setToolTip(QStringLiteral("デザイナー上をクリックしてレイヤー塗り色を取得します"));
+    m_pickedColorSwatch = new QLabel;
+    m_pickedColorSwatch->setFixedSize(36, 20);
+    m_pickedColorSwatch->setAutoFillBackground(true);
+    m_propPickedColor = new QLineEdit;
+    m_propPickedColor->setReadOnly(true);
+    m_propPickedColor->setPlaceholderText(QStringLiteral("未選択"));
+    pickLayout->addWidget(m_btnEyedropper);
+    pickLayout->addWidget(m_pickedColorSwatch);
+    pickLayout->addWidget(m_propPickedColor, 1);
+    colorForm->addRow(QStringLiteral("レイヤー塗り色:"), pickRow);
+    updateLayerFillUi();
     inspLayout->addWidget(colorGroup);
 
     connect(m_propBrightness, &QSlider::valueChanged, this, [this]{ onInspectorChanged(); });
@@ -1340,6 +1427,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
         updateLayerBlendModeUi();
         updateLayerOpacityUi();
         updateLayerPreviewUi();
+        updateLayerFillUi();
     });
     connect(m_comboLayerBlendMode, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int){ onInspectorChanged(); });
     connect(m_sliderLayerOpacity, &QSlider::valueChanged, this, [this](int){ onInspectorChanged(); });
@@ -1741,6 +1829,60 @@ void MainWindow::onBadgeEditFinished(BadgeGraphicItem* item) {
     pushBadgeChange(QStringLiteral("編集"), beforeBadges, beforeSelection, afterBadges, afterSelection);
     appendLog(QStringLiteral("編集内容を履歴に追加しました"));
     requestBadgeEdited("badge edit finished");
+}
+
+void MainWindow::onEyedropperColorPicked(const QColor& color) {
+    if (!color.isValid()) {
+        return;
+    }
+
+    const int row = m_layerList ? m_layerList->currentRow() : -1;
+    const auto selected = selectedBadgeIndices();
+    if (selected.isEmpty() || row < 0) {
+        if (m_btnEyedropper) {
+            const QSignalBlocker blocker(m_btnEyedropper);
+            m_btnEyedropper->setChecked(false);
+        }
+        return;
+    }
+
+    const auto before = currentDesignerBadges();
+    auto after = before;
+    bool changed = false;
+    for (int index : selected) {
+        if (index < 0 || index >= after.size()) {
+            continue;
+        }
+        auto& badge = after[index];
+        if (row >= 0 && row < badge.layers.size()) {
+            badge.layers[row].fillColor = color;
+            changed = true;
+        }
+    }
+    if (!changed) {
+        if (m_btnEyedropper) {
+            const QSignalBlocker blocker(m_btnEyedropper);
+            m_btnEyedropper->setChecked(false);
+        }
+        return;
+    }
+
+    pushBadgeChange(QStringLiteral("レイヤー塗り色"), before, selected, after, selected);
+    updateLayerFillUi();
+    updateLayerPreviewUi();
+
+    const QString hex = color.alpha() == 255
+        ? color.name().toUpper()
+        : color.name(QColor::HexArgb).toUpper();
+    if (QClipboard* clipboard = QApplication::clipboard()) {
+        clipboard->setText(hex);
+    }
+    appendLog(QStringLiteral("スポイト: %1 (%2, %3, %4%5)")
+                  .arg(hex)
+                  .arg(color.red())
+                  .arg(color.green())
+                  .arg(color.blue())
+                  .arg(color.alpha() == 255 ? QString() : QStringLiteral(", %1").arg(color.alpha())));
 }
 
 void MainWindow::appendLog(const QString& message) {
@@ -2301,6 +2443,7 @@ void MainWindow::onBadgeDeselected() {
     }
     updateLayerBlendModeUi();
     updateLayerPreviewUi();
+    updateLayerFillUi();
 }
 
 void MainWindow::onBadgeMoved(BadgeGraphicItem* item) {
@@ -2944,6 +3087,7 @@ void MainWindow::refreshLayerList() {
     }
     updateLayerBlendModeUi();
     updateLayerOpacityUi();
+    updateLayerFillUi();
 }
 
 void MainWindow::updateLayerBlendModeUi() {
@@ -2958,11 +3102,13 @@ void MainWindow::updateLayerBlendModeUi() {
     if (!valid) {
         m_comboLayerBlendMode->setCurrentIndex(0);
         updateLayerPreviewUi();
+        updateLayerFillUi();
         return;
     }
     const auto& layer = m_selected.first()->badge().layers[row];
     m_comboLayerBlendMode->setCurrentIndex(layerBlendModeToInt(layer.blendMode));
     updateLayerPreviewUi();
+    updateLayerFillUi();
 }
 
 void MainWindow::updateLayerOpacityUi() {
@@ -2977,11 +3123,13 @@ void MainWindow::updateLayerOpacityUi() {
     if (!valid) {
         m_sliderLayerOpacity->setValue(100);
         updateLayerPreviewUi();
+        updateLayerFillUi();
         return;
     }
     const auto& layer = m_selected.first()->badge().layers[row];
     m_sliderLayerOpacity->setValue(int(std::round(std::clamp(layer.opacity, 0.0, 1.0) * 100.0)));
     updateLayerPreviewUi();
+    updateLayerFillUi();
 }
 
 void MainWindow::updateLayerPreviewUi() {
@@ -3223,6 +3371,45 @@ void MainWindow::updateInspectorMode() {
     if (m_guideGroup) m_guideGroup->setVisible(designer);
     if (m_effectGroup) m_effectGroup->setVisible(designer);
     if (m_layoutGroup) m_layoutGroup->setVisible(!designer);
+    if (!designer && m_designer) {
+        m_designer->setEyedropperActive(false);
+    }
+}
+
+void MainWindow::updateLayerFillUi() {
+    QColor color;
+    const int row = m_layerList ? m_layerList->currentRow() : -1;
+    const bool hasTarget = !m_selected.isEmpty() && row >= 0;
+    if (hasTarget) {
+        const auto& layers = m_selected.first()->badge().layers;
+        if (row >= 0 && row < layers.size()) {
+            color = layers[row].fillColor;
+        }
+    }
+
+    if (m_propPickedColor) {
+        if (color.isValid()) {
+            const QString hex = color.alpha() == 255
+                ? color.name().toUpper()
+                : color.name(QColor::HexArgb).toUpper();
+            m_propPickedColor->setText(hex);
+        } else {
+            m_propPickedColor->clear();
+            m_propPickedColor->setPlaceholderText(QStringLiteral("未設定"));
+        }
+    }
+    if (m_pickedColorSwatch) {
+        QPalette pal = m_pickedColorSwatch->palette();
+        pal.setColor(QPalette::Window, color.isValid() ? color : QColor(96, 96, 96));
+        pal.setColor(QPalette::WindowText, Qt::black);
+        m_pickedColorSwatch->setPalette(pal);
+    }
+    if (m_btnEyedropper) {
+        m_btnEyedropper->setEnabled(hasTarget);
+        if (!hasTarget && m_btnEyedropper->isChecked()) {
+            m_btnEyedropper->setChecked(false);
+        }
+    }
 }
 
 void MainWindow::updateToolbarsForMode() {

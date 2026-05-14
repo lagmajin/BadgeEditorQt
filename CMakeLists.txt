@@ -62,8 +62,6 @@ add_executable(BadgeEditorQt ${SOURCES} ${HEADERS})
 target_sources(BadgeEditorQt
     PRIVATE
         FILE_SET cxx_modules TYPE CXX_MODULES FILES
-            badge.paper.ixx
-            badge.model.ixx
             badge.event.ixx
             badge.layout.ixx
             badge.imageio.ixx
@@ -71,12 +69,7 @@ target_sources(BadgeEditorQt
             badge.documentio.ixx
             badge.qtbridge.ixx
             viewportbackend.ixx
-            badgeitem.ixx
-            layoutengine.ixx
-            imageprocessor.ixx
             constants.ixx
-            guideitem.ixx
-            lightingeffect.ixx
 )
 
 target_link_libraries(BadgeEditorQt PRIVATE Qt6::Widgets Qt6::Core Qt6::PrintSupport Qt6::OpenGLWidgets ads::qtadvanceddocking-qt6 OpenImageIO::OpenImageIO)

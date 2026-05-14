@@ -65,6 +65,8 @@ public:
     void setGlitterEnabled(bool on);
     void setGlitterPattern(int pattern); // 0=full, 1=star, 2=snow
     void regenerateGlitter();
+    void setEyedropperActive(bool on);
+    bool eyedropperActive() const { return m_eyedropperActive; }
 
     void applyThemePalette(const QPalette& palette);
     void updateBackground(const QBrush& brush);
@@ -81,6 +83,8 @@ Q_SIGNALS:
     void badgeEditFinished(BadgeGraphicItem* item) W_SIGNAL(badgeEditFinished, item);
     void selectionChanged() W_SIGNAL(selectionChanged);
     void nudgeRequested(double dxMm, double dyMm) W_SIGNAL(nudgeRequested, dxMm, dyMm);
+    void eyedropperModeChanged(bool active) W_SIGNAL(eyedropperModeChanged, active);
+    void eyedropperColorPicked(const QColor& color) W_SIGNAL(eyedropperColorPicked, color);
 
 protected:
     void wheelEvent(QWheelEvent* event) override;
@@ -120,6 +124,7 @@ private:
     bool m_guideUpdatePending = false;
     int m_interactiveEditDepth = 0;
     QList<SafetyGuideEntry> m_safetyGuideEntries;
+    bool m_eyedropperActive = false;
     
     void createGlitter(int pattern);
     QPainterPath createStar(double size);
@@ -128,6 +133,7 @@ private:
     void positionGuideOverlays();
     void setInteractiveViewportMode(bool on);
     bool isNearSelectedItem(const QPoint& viewPos) const;
+    QColor sampleViewportColor(const QPoint& viewPos) const;
 };
 
 #endif

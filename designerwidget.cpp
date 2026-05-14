@@ -11,6 +11,7 @@
 #include <QFontMetricsF>
 #include <QScrollBar>
 #include <QTimer>
+#include <QPixmap>
 #include <QPalette>
 #include <algorithm>
 #include <cmath>
@@ -259,6 +260,11 @@ BadgeGraphicItem* DesignerWidget::selectedGraphic() const {
 }
 
 void DesignerWidget::keyPressEvent(QKeyEvent* event) {
+    if (m_eyedropperActive && event->key() == Qt::Key_Escape) {
+        setEyedropperActive(false);
+        event->accept();
+        return;
+    }
     if (event->matches(QKeySequence::SelectAll)) {
         for (auto* gi : m_graphicItems) {
             gi->setSelected(true);
@@ -292,6 +298,19 @@ void DesignerWidget::keyPressEvent(QKeyEvent* event) {
     }
 
     QGraphicsView::keyPressEvent(event);
+}
+
+void DesignerWidget::setEyedropperActive(bool on) {
+    if (m_eyedropperActive == on) {
+        return;
+    }
+    m_eyedropperActive = on;
+    if (m_eyedropperActive) {
+        viewport()->setCursor(Qt::CrossCursor);
+    } else {
+        viewport()->unsetCursor();
+    }
+    emit eyedropperModeChanged(m_eyedropperActive);
 }
 
 void DesignerWidget::updateGuides(double badgeSizeMm) {
@@ -522,6 +541,22 @@ void DesignerWidget::wheelEvent(QWheelEvent* event) {
 }
 
 void DesignerWidget::mousePressEvent(QMouseEvent* event) {
+    if (m_eyedropperActive) {
+        if (event->button() == Qt::LeftButton) {
+            const QColor color = sampleViewportColor(event->pos());
+            if (color.isValid()) {
+                emit eyedropperColorPicked(color);
+            }
+            setEyedropperActive(false);
+            event->accept();
+            return;
+        }
+        if (event->button() == Qt::RightButton) {
+            setEyedropperActive(false);
+            event->accept();
+            return;
+        }
+    }
     if (event->button() == Qt::MiddleButton) {
         m_panning = true;
         m_panLastPos = event->pos();
@@ -556,6 +591,21 @@ void DesignerWidget::mouseReleaseEvent(QMouseEvent* event) {
         return;
     }
     QGraphicsView::mouseReleaseEvent(event);
+}
+
+QColor DesignerWidget::sampleViewportColor(const QPoint& viewPos) const {
+    if (!viewport()) {
+        return {};
+    }
+    const QPixmap pixel = viewport()->grab(QRect(viewPos, QSize(1, 1)));
+    if (pixel.isNull()) {
+        return {};
+    }
+    const QImage image = pixel.toImage();
+    if (image.isNull() || image.width() <= 0 || image.height() <= 0) {
+        return {};
+    }
+    return image.pixelColor(0, 0);
 }
 
 void DesignerWidget::drawBackground(QPainter* painter, const QRectF& rect) {

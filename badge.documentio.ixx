@@ -1,7 +1,5 @@
 module;
 
-#include "layoutengine.h"
-
 #include <QByteArray>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -9,11 +7,12 @@ module;
 #include <QJsonObject>
 #include <QFileInfo>
 #include <QString>
-
-export module badge.documentio;
+#include "badge.model.h"
 #include <optional>
 #include <string>
 #include <vector>
+
+export module badge.documentio;
 
 import badge.document;
 
@@ -134,6 +133,7 @@ inline LayerData layerFromJson(const QJsonObject& obj) {
     layer.offsetX = obj["offsetX"].toDouble(0.0);
     layer.offsetY = obj["offsetY"].toDouble(0.0);
     layer.blendMode = obj["blendMode"].toInt(0);
+    layer.fillColor = obj["fillColor"].toString().toStdString();
     return layer;
 }
 
@@ -146,6 +146,7 @@ inline QJsonObject layerToJson(const LayerData& layer) {
         {"offsetX", layer.offsetX},
         {"offsetY", layer.offsetY},
         {"blendMode", layer.blendMode},
+        {"fillColor", QString::fromStdString(layer.fillColor)},
     };
 }
 

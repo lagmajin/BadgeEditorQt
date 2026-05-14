@@ -1,14 +1,14 @@
 module;
 
+#include <QColor>
 #include <QString>
 #include <QList>
 #include <vector>
-
-#include "layoutengine.h"
+#include "badgeitem.h"
+#include "badge.model.h"
 
 export module badge.qtbridge;
 
-export import badge.model;
 export import badge.layout;
 
 namespace badge::qt::detail {
@@ -82,6 +82,7 @@ export inline badge::LayerData toCoreLayer(const LayerItem& layer) {
     core.offsetX = layer.offsetX;
     core.offsetY = layer.offsetY;
     core.blendMode = layerBlendModeToInt(layer.blendMode);
+    core.fillColor = layer.fillColor.isValid() ? layer.fillColor.name(QColor::HexArgb).toStdString() : std::string();
     return core;
 }
 
@@ -94,6 +95,8 @@ export inline LayerItem fromCoreLayer(const badge::LayerData& layer) {
     qt.offsetX = layer.offsetX;
     qt.offsetY = layer.offsetY;
     qt.blendMode = layerBlendModeFromInt(layer.blendMode);
+    const QColor parsed(QString::fromStdString(layer.fillColor));
+    qt.fillColor = parsed.isValid() ? parsed : QColor();
     return qt;
 }
 

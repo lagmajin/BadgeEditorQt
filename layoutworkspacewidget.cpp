@@ -1,5 +1,6 @@
 #include "layoutworkspacewidget.h"
 #include "badgeitem.h"
+#include "badge.model.h"
 #include "imageprocessor.h"
 #include "constants.h"
 #include <QGraphicsView>
@@ -54,6 +55,23 @@ QPainter::CompositionMode compositionModeForLayer(LayerBlendMode mode) {
     default:
         return QPainter::CompositionMode_SourceOver;
     }
+}
+
+QPixmap applyLayerFillColor(QPixmap pixmap, const QColor& fillColor) {
+    if (pixmap.isNull() || !fillColor.isValid()) {
+        return pixmap;
+    }
+
+    QImage image = pixmap.toImage().convertToFormat(QImage::Format_ARGB32_Premultiplied);
+    if (image.isNull()) {
+        return pixmap;
+    }
+
+    QPainter painter(&image);
+    painter.setCompositionMode(QPainter::CompositionMode_SourceIn);
+    painter.fillRect(image.rect(), fillColor);
+    painter.end();
+    return QPixmap::fromImage(image);
 }
 
 QRectF paperRectPx(const badge::DocumentData& document, double dpi) {
@@ -240,8 +258,8 @@ QPixmap renderBadgePixmap(const badge::BadgeData& badgeData, const QSize& target
     const QString primaryPath = !qtBadge.layers.isEmpty() ? qtBadge.layers.first().imagePath : qtBadge.imagePath;
     const QImage baseLoaded = ImageProcessor::loadImage(primaryPath, &colorSpaceLabel);
     if (!baseLoaded.isNull()) {
-        QPixmap basePixmap = QPixmap::fromImage(baseLoaded);
-    const LayerItem* primaryLayer = qtBadge.layers.isEmpty() ? nullptr : &qtBadge.layers.first();
+        const LayerItem* primaryLayer = qtBadge.layers.isEmpty() ? nullptr : &qtBadge.layers.first();
+        QPixmap basePixmap = applyLayerFillColor(QPixmap::fromImage(baseLoaded), primaryLayer ? primaryLayer->fillColor : QColor());
     if (!primaryLayer || primaryLayer->visible) {
             painter.save();
             painter.setOpacity(primaryLayer ? primaryLayer->opacity : 1.0);
@@ -277,6 +295,7 @@ QPixmap renderBadgePixmap(const badge::BadgeData& badgeData, const QSize& target
         if (layerPixmap.isNull()) {
             continue;
         }
+        layerPixmap = applyLayerFillColor(layerPixmap, layer.fillColor);
         painter.save();
         painter.setOpacity(layer.opacity);
         painter.setCompositionMode(compositionModeForLayer(layer.blendMode));
@@ -327,14 +346,15 @@ QString badgeRenderCacheKey(const badge::BadgeData& badgeData, const QSize& targ
                .arg(badgeData.saturation, 0, 'f', 3);
 
     for (const auto& layer : badgeData.layers) {
-        key += QStringLiteral("|L:%1:%2:%3:%4:%5:%6:%7")
+        key += QStringLiteral("|L:%1:%2:%3:%4:%5:%6:%7:%8")
                    .arg(QString::fromStdString(layer.imagePath))
                    .arg(QString::fromStdString(layer.name))
                    .arg(layer.opacity, 0, 'f', 3)
                    .arg(layer.visible ? 1 : 0)
                    .arg(layer.offsetX, 0, 'f', 3)
                    .arg(layer.offsetY, 0, 'f', 3)
-                   .arg(layer.blendMode);
+                   .arg(layer.blendMode)
+                   .arg(QString::fromStdString(layer.fillColor));
     }
     return key;
 }
