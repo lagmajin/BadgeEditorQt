@@ -8,10 +8,20 @@ set(CMAKE_AUTOMOC OFF)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC OFF)
 
+set(BADGEEDITOR_VCPKG_INSTALLED_DIR "C:/vcpkg/installed/x64-windows")
+
+if (WIN32)
+    set(Qt6_DIR "${BADGEEDITOR_VCPKG_INSTALLED_DIR}/share/Qt6" CACHE PATH "Qt6 package config directory" FORCE)
+    set(qtadvanceddocking-qt6_DIR "${BADGEEDITOR_VCPKG_INSTALLED_DIR}/share/qtadvanceddocking-qt6" CACHE PATH "qtadvanceddocking-qt6 package config directory" FORCE)
+    set(OpenImageIO_DIR "${BADGEEDITOR_VCPKG_INSTALLED_DIR}/share/openimageio" CACHE PATH "OpenImageIO package config directory" FORCE)
+    list(PREPEND CMAKE_PREFIX_PATH "${BADGEEDITOR_VCPKG_INSTALLED_DIR}")
+endif()
+
 find_package(Qt6 REQUIRED COMPONENTS Widgets Core PrintSupport OpenGLWidgets)
-find_package(Qt6 COMPONENTS Svg QUIET)
 find_package(qtadvanceddocking-qt6 REQUIRED)
 find_package(OpenImageIO CONFIG REQUIRED)
+
+find_package(Qt6 COMPONENTS Svg QUIET)
 
 set(SOURCES
     main.cpp
@@ -85,7 +95,7 @@ endif()
 
 target_include_directories(BadgeEditorQt PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
-    ${CMAKE_CURRENT_SOURCE_DIR}/../ArtifactStudio/third_party
+    ${CMAKE_CURRENT_SOURCE_DIR}/third_party
 )
 
 if (MSVC)
@@ -98,11 +108,32 @@ target_compile_definitions(BadgeEditorQt PRIVATE BADGEEDITOR_SOURCE_DIR="${BADGE
 
 if (WIN32 AND DEFINED Qt6_DIR)
     get_filename_component(BADGEEDITOR_QT_INSTALL_PREFIX "${Qt6_DIR}/../.." ABSOLUTE)
+    set(BADGEEDITOR_VCPKG_RELEASE_BIN_DIR "${BADGEEDITOR_VCPKG_INSTALLED_DIR}/bin")
+    set(BADGEEDITOR_VCPKG_DEBUG_BIN_DIR "${BADGEEDITOR_VCPKG_INSTALLED_DIR}/debug/bin")
     set(BADGEEDITOR_QT_RELEASE_PLUGINS_DIR "${BADGEEDITOR_QT_INSTALL_PREFIX}/Qt6/plugins")
     set(BADGEEDITOR_QT_DEBUG_PLUGINS_DIR "${BADGEEDITOR_QT_INSTALL_PREFIX}/debug/Qt6/plugins")
 
     if (NOT EXISTS "${BADGEEDITOR_QT_DEBUG_PLUGINS_DIR}")
         set(BADGEEDITOR_QT_DEBUG_PLUGINS_DIR "${BADGEEDITOR_QT_RELEASE_PLUGINS_DIR}")
+    endif()
+
+    add_custom_command(TARGET BadgeEditorQt POST_BUILD
+        COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+            $<TARGET_RUNTIME_DLLS:BadgeEditorQt>
+            "$<TARGET_FILE_DIR:BadgeEditorQt>"
+        COMMAND_EXPAND_LISTS
+        COMMENT "Copying runtime DLLs"
+        VERBATIM
+    )
+
+    if (EXISTS "${BADGEEDITOR_VCPKG_RELEASE_BIN_DIR}")
+        add_custom_command(TARGET BadgeEditorQt POST_BUILD
+            COMMAND "${CMAKE_COMMAND}" -E copy_directory
+                "$<IF:$<CONFIG:Debug>,${BADGEEDITOR_VCPKG_DEBUG_BIN_DIR},${BADGEEDITOR_VCPKG_RELEASE_BIN_DIR}>"
+                "$<TARGET_FILE_DIR:BadgeEditorQt>"
+            COMMENT "Copying vcpkg runtime DLLs"
+            VERBATIM
+        )
     endif()
 
     if (EXISTS "${BADGEEDITOR_QT_RELEASE_PLUGINS_DIR}")

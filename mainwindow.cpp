@@ -81,6 +81,9 @@ import viewportbackend;
 #include <QFileInfo>
 #include <QPalette>
 #include <QStringList>
+#ifdef BADGEEDITOR_HAS_QTSVG
+#include <QSvgRenderer>
+#endif
 #include <wobjectimpl.h>
 
 import badge.documentio;
@@ -244,7 +247,24 @@ QIcon loadMaterialIcon(const QString& name) {
         return *it;
     }
 
-    QIcon icon(materialIconAssetPath(name));
+    QIcon icon;
+    const QString path = materialIconAssetPath(name);
+    if (QFileInfo::exists(path)) {
+#ifdef BADGEEDITOR_HAS_QTSVG
+        QSvgRenderer renderer(path);
+        if (renderer.isValid()) {
+            constexpr int kIconSizePx = 128;
+            QPixmap pixmap(kIconSizePx, kIconSizePx);
+            pixmap.fill(Qt::transparent);
+            QPainter painter(&pixmap);
+            renderer.render(&painter);
+            painter.end();
+            icon = QIcon(pixmap);
+        }
+#else
+        icon = QIcon(path);
+#endif
+    }
     if (icon.isNull()) {
         icon = standardToolbarIcon(QStyle::SP_FileIcon);
     }
@@ -703,7 +723,7 @@ void paintTransferBadgeContent(QPainter& painter, const BadgeItem& badge) {
 QImage renderTransferCropImage(DesignerWidget& designer, BadgeGraphicItem& item, const QPointF& guideCenterScene, double guideSizeMm) {
     Q_UNUSED(designer);
     const double pxPerMm = Constants::kMmToPx;
-    const double transferDiameterMm = std::max(0.1, guideSizeMm + 3.0);
+    const double transferDiameterMm = std::max(0.1, guideSizeMm);
     const int transferDiameterPx = std::max(1, int(std::round(transferDiameterMm * pxPerMm)));
     const QRectF transferRectScene(guideCenterScene.x() - transferDiameterPx * 0.5,
                                    guideCenterScene.y() - transferDiameterPx * 0.5,
@@ -1232,13 +1252,6 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     });
     m_designer->updateGuides(32);
     updateSafetyGuideHud();
-
-    m_internalEventFlushTimer = new QTimer(this);
-    m_internalEventFlushTimer->setSingleShot(true);
-    m_internalEventFlushTimer->setInterval(16);
-    connect(m_internalEventFlushTimer, &QTimer::timeout, this, [this] {
-        flushInternalEvents();
-    });
 
     // Layout
     m_layoutWorkspace = new LayoutWorkspaceWidget;
@@ -2019,11 +2032,15 @@ void MainWindow::requestLayoutRefresh(const char* reason) {
 }
 
 void MainWindow::scheduleInternalEventFlush() {
-    if (m_internalEventFlushTimer) {
-        m_internalEventFlushTimer->start();
-    } else {
-        flushInternalEvents();
+    if (m_internalEventFlushScheduled) {
+        return;
     }
+
+    m_internalEventFlushScheduled = true;
+    QTimer::singleShot(16, this, [this] {
+        m_internalEventFlushScheduled = false;
+        flushInternalEvents();
+    });
 }
 
 W_OBJECT_IMPL(MainWindow)
@@ -2395,9 +2412,7 @@ void MainWindow::onBadgeDeselected() {
     m_selected.clear();
     m_pendingBadgeMoveItem = nullptr;
     m_internalEventQueue.clear();
-    if (m_internalEventFlushTimer && m_internalEventFlushTimer->isActive()) {
-        m_internalEventFlushTimer->stop();
-    }
+    m_internalEventFlushScheduled = false;
     setInspectorControlsEnabled(false);
     m_updatingUI = true;
     m_propX->setValue(0); m_propY->setValue(0);

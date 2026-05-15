@@ -246,7 +246,6 @@ private:
     QListWidget* m_logList = nullptr;
     QListWidget* m_issueList = nullptr;
     QListWidget* m_linkList = nullptr;
-    QTimer* m_internalEventFlushTimer = nullptr;
     BadgeGraphicItem* m_pendingBadgeMoveItem = nullptr;
     badge::AppEventQueue m_internalEventQueue;
 
@@ -323,6 +322,7 @@ private:
     bool m_isDesigner = true;
     bool m_backdropApplied = false;
     bool m_skipNextLayoutSync = false;
+    bool m_internalEventFlushScheduled = false;
     WindowsIntegration* m_windowsIntegration = nullptr;
 };
 

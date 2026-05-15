@@ -1,0 +1,21 @@
+{
+  "version": 7,
+  "configurePresets": [
+    {
+      "name": "x64-Debug",
+      "displayName": "x64 Debug",
+      "description": "Configure with vcpkg and the x64-windows triplet.",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/out/build/x64-Debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "x64-Debug",
+      "configurePreset": "x64-Debug"
+    }
+  ]
+}

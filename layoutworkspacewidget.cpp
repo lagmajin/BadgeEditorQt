@@ -508,8 +508,8 @@ void populateSceneForDocument(QGraphicsScene* scene,
     for (const auto& b : document.badges) {
         const double x = b.xMm * mmToPx;
         const double y = b.yMm * mmToPx;
-        const double w = (b.clipToCircle ? std::max(b.widthMm, b.heightMm) + Constants::kCircleBleedMm : b.widthMm) * mmToPx;
-        const double h = (b.clipToCircle ? std::max(b.widthMm, b.heightMm) + Constants::kCircleBleedMm : b.heightMm) * mmToPx;
+        const double w = (b.clipToCircle ? std::max(b.widthMm, b.heightMm) : b.widthMm) * mmToPx;
+        const double h = (b.clipToCircle ? std::max(b.widthMm, b.heightMm) : b.heightMm) * mmToPx;
         const QSize renderSize(std::max(1, int(std::round(w))), std::max(1, int(std::round(h))));
         const QString cacheKey = badgeRenderCacheKey(b, renderSize);
         const auto it = renderCache.constFind(cacheKey);
