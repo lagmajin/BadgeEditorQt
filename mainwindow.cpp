@@ -1073,7 +1073,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     setMaterialIcon(m_actAppSettings, QStringLiteral("settings"));
     setMaterialIcon(m_actGridVisible, QStringLiteral("grid_on"));
     setMaterialIcon(m_actSnapToGrid, QStringLiteral("center_focus_strong"));
-    setMaterialIcon(m_actTransferDebug, QStringLiteral("bug_report"));
+    setMaterialIcon(m_actTransferDebug, QStringLiteral("transfer_debug"));
     setMaterialIcon(actSaveDesignerPerspective, QStringLiteral("save"));
     setMaterialIcon(actSaveLayoutPerspective, QStringLiteral("save"));
     setMaterialIcon(actSavePerspectiveAs, QStringLiteral("save"));
@@ -1377,6 +1377,8 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     m_btnEyedropper = new QPushButton(QStringLiteral("スポイト"));
     m_btnEyedropper->setCheckable(true);
     m_btnEyedropper->setToolTip(QStringLiteral("デザイナー上をクリックしてレイヤー塗り色を取得します"));
+    m_btnEyedropper->setIcon(loadMaterialIcon(QStringLiteral("eyedropper")));
+    m_btnEyedropper->setIconSize(QSize(18, 18));
     m_pickedColorSwatch = new QLabel;
     m_pickedColorSwatch->setFixedSize(36, 20);
     m_pickedColorSwatch->setAutoFillBackground(true);
