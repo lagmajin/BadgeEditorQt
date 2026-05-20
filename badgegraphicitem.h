@@ -3,6 +3,8 @@
 
 #include <QGraphicsItem>
 #include <QElapsedTimer>
+#include <QHash>
+#include <QImage>
 #include <QPixmap>
 #include <QPainter>
 #include <wobjectdefs.h>
@@ -61,13 +63,16 @@ private:
     QRectF visualRectPx() const;
     bool shouldClipDesignerPreview() const;
     void loadImage();
+    QPixmap loadedPreviewPixmapForLayer(const LayerItem& layer) const;
     void renderCore(QPainter* painter, const QRectF& rect, bool simplifiedPreview);
-    void rebuildPreviewCache();
+    void rebuildPreviewCache(const QSize& pixelSize);
     QString previewCacheSignature() const;
     QPointF snappedPosition(const QPointF& scenePos) const;
 
-    QPixmap m_previewCache;
+    QImage m_previewCache;
     QString m_previewCacheSignature;
+    QSize m_previewCachePixelSize;
+    mutable QHash<QString, QPixmap> m_layerPreviewCache;
 };
 
 #endif

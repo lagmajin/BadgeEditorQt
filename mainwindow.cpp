@@ -2175,7 +2175,7 @@ void MainWindow::onExportPdf() {
     default:
         break;
     }
-    if (!m_layoutWorkspace->exportPdf(pages, outPath, dlg.dpi(), colorModel)) {
+    if (!m_layoutWorkspace->exportPdf(pages, outPath, dlg.dpi(), colorModel, dlg.includeGuides())) {
         showOperationWarning(this,
                              QStringLiteral("PDF出力"),
                              QStringLiteral("PDFの書き出し"),
@@ -2208,7 +2208,7 @@ void MainWindow::onExportPng() {
     if (!outPath.endsWith(".png", Qt::CaseInsensitive)) {
         outPath += ".png";
     }
-    if (!m_layoutWorkspace->exportPng(outPath, dlg.dpi(), dlg.whiteBackground())) {
+    if (!m_layoutWorkspace->exportPng(outPath, dlg.dpi(), dlg.whiteBackground(), dlg.includeGuides())) {
         showOperationWarning(this,
                              QStringLiteral("画像出力"),
                              QStringLiteral("PNGの書き出し"),

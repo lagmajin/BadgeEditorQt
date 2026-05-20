@@ -22,6 +22,7 @@ public:
     QString filePath() const;
     int dpi() const;
     bool whiteBackground() const;
+    bool includeGuides() const;
     int pdfColorModelIndex() const;
 
 private:
@@ -29,6 +30,7 @@ private:
     QLineEdit* m_pathEdit = nullptr;
     QSpinBox* m_dpiSpin = nullptr;
     QCheckBox* m_whiteBackground = nullptr;
+    QCheckBox* m_includeGuides = nullptr;
     QComboBox* m_pdfPreset = nullptr;
     QComboBox* m_pdfColorModel = nullptr;
     QLabel* m_pdfPresetHelp = nullptr;

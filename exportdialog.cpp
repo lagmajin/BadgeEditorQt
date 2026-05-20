@@ -86,6 +86,9 @@ ExportDialog::ExportDialog(Format format, const QString& defaultPath, QWidget* p
     m_dpiSpin->setValue(300);
     m_dpiSpin->setSuffix(" DPI");
     optForm->addRow("解像度:", m_dpiSpin);
+    m_includeGuides = new QCheckBox("切り抜きガイドを含める");
+    m_includeGuides->setChecked(false);
+    optForm->addRow(m_includeGuides);
     if (m_format == Format::Png) {
         m_whiteBackground = new QCheckBox("白背景で出力");
         m_whiteBackground->setChecked(true);
@@ -165,6 +168,10 @@ int ExportDialog::dpi() const {
 
 bool ExportDialog::whiteBackground() const {
     return m_whiteBackground ? m_whiteBackground->isChecked() : true;
+}
+
+bool ExportDialog::includeGuides() const {
+    return m_includeGuides ? m_includeGuides->isChecked() : false;
 }
 
 int ExportDialog::pdfColorModelIndex() const {

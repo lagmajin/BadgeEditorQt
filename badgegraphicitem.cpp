@@ -138,11 +138,71 @@ void paintRealisticSurface(QPainter* painter,
 }
 } // namespace
 
-// --- ResizeHandle: small corner square for resizing ---
+// --- ResizeHandle: corner/edge square for resizing ---
+namespace {
+enum class HandleKind {
+    TopLeft = 0,
+    Top,
+    TopRight,
+    Right,
+    BottomRight,
+    Bottom,
+    BottomLeft,
+    Left,
+};
+
+bool isCornerHandle(HandleKind kind) {
+    return kind == HandleKind::TopLeft
+        || kind == HandleKind::TopRight
+        || kind == HandleKind::BottomLeft
+        || kind == HandleKind::BottomRight;
+}
+
+QCursor cursorForHandle(HandleKind kind) {
+    switch (kind) {
+    case HandleKind::TopLeft:
+    case HandleKind::BottomRight:
+        return Qt::SizeFDiagCursor;
+    case HandleKind::TopRight:
+    case HandleKind::BottomLeft:
+        return Qt::SizeBDiagCursor;
+    case HandleKind::Top:
+    case HandleKind::Bottom:
+        return Qt::SizeVerCursor;
+    case HandleKind::Left:
+    case HandleKind::Right:
+        return Qt::SizeHorCursor;
+    }
+    return Qt::ArrowCursor;
+}
+
+QPointF handlePosForRect(const QRectF& rect, HandleKind kind, qreal margin) {
+    const qreal left = rect.left() - margin;
+    const qreal right = rect.right() + margin;
+    const qreal top = rect.top() - margin;
+    const qreal bottom = rect.bottom() + margin;
+    const qreal centerX = rect.center().x();
+    const qreal centerY = rect.center().y();
+
+    switch (kind) {
+    case HandleKind::TopLeft: return QPointF(left, top);
+    case HandleKind::Top: return QPointF(centerX, top);
+    case HandleKind::TopRight: return QPointF(right, top);
+    case HandleKind::Right: return QPointF(right, centerY);
+    case HandleKind::BottomRight: return QPointF(right, bottom);
+    case HandleKind::Bottom: return QPointF(centerX, bottom);
+    case HandleKind::BottomLeft: return QPointF(left, bottom);
+    case HandleKind::Left: return QPointF(left, centerY);
+    }
+    return rect.center();
+}
+
+} // namespace
+
 class ResizeHandle : public QGraphicsRectItem {
 public:
-    enum Corner { TL, TR, BL, BR };
-    ResizeHandle(Corner c, BadgeGraphicItem* parent) : QGraphicsRectItem(parent), m_corner(c), m_badge(parent) {
+    ResizeHandle(HandleKind kind, BadgeGraphicItem* parent)
+        : QGraphicsRectItem(parent), m_kind(kind), m_badge(parent) {
         setRect(-8, -8, 16, 16);
         setBrush(Qt::white);
         setPen(QPen(Qt::blue, 1.5));
@@ -151,24 +211,18 @@ public:
         setFlag(ItemIsSelectable, false);
         setAcceptHoverEvents(true);
         setZValue(1000);
-        switch (c) {
-            case TL: case BR: setCursor(Qt::SizeFDiagCursor); break;
-            case TR: case BL: setCursor(Qt::SizeBDiagCursor); break;
-        }
+        setCursor(cursorForHandle(m_kind));
     }
-    Corner corner() const { return m_corner; }
+    HandleKind kind() const { return m_kind; }
     void setAsymmetricMode(bool on) {
         if (on) {
             setBrush(QColor(255, 172, 73));
             setPen(QPen(QColor(255, 242, 228), 1.5));
-            setCursor(Qt::SizeAllCursor);
+            setCursor(isCornerHandle(m_kind) ? Qt::SizeAllCursor : cursorForHandle(m_kind));
         } else {
             setBrush(Qt::white);
             setPen(QPen(Qt::blue, 1.5));
-            switch (m_corner) {
-                case TL: case BR: setCursor(Qt::SizeFDiagCursor); break;
-                case TR: case BL: setCursor(Qt::SizeBDiagCursor); break;
-            }
+            setCursor(cursorForHandle(m_kind));
         }
         update();
     }
@@ -190,7 +244,8 @@ protected:
         const double mmToPx = Constants::kMmToPx;
         BadgeItem& b = m_badge->badge();
         const bool hasImageContent = !b.imagePath.isEmpty() || !b.layers.isEmpty();
-        const bool asymmetricResize = hasImageContent && (e->modifiers() & Qt::AltModifier);
+        const bool edgeHandle = !isCornerHandle(m_kind);
+        const bool asymmetricResize = edgeHandle || (hasImageContent && (e->modifiers() & Qt::AltModifier));
         const bool keepAspect = !asymmetricResize && (e->modifiers() & Qt::ShiftModifier);
         const bool precisionMode = e->modifiers() & Qt::ControlModifier;
         const double sensitivity = precisionMode ? 0.25 : 1.0;
@@ -199,9 +254,9 @@ protected:
         const double startW = std::max(0.1, b.widthMm);
         const double startH = std::max(0.1, b.heightMm);
         m_badge->beginGeometryUpdate();
-        if (hasImageContent && !asymmetricResize) {
-            const double signX = (m_corner == TL || m_corner == BL) ? -1.0 : 1.0;
-            const double signY = (m_corner == TL || m_corner == TR) ? -1.0 : 1.0;
+        if (hasImageContent && !asymmetricResize && isCornerHandle(m_kind)) {
+            const double signX = (m_kind == HandleKind::TopLeft || m_kind == HandleKind::BottomLeft) ? -1.0 : 1.0;
+            const double signY = (m_kind == HandleKind::TopLeft || m_kind == HandleKind::TopRight) ? -1.0 : 1.0;
             const double basePx = std::max(1.0, std::max(b.widthMm, b.heightMm) * mmToPx);
             const double growthPx = std::max(signX * deltaLocal.x(), signY * deltaLocal.y()) * sensitivity;
             const double factor = 1.0 + (growthPx / basePx);
@@ -209,24 +264,73 @@ protected:
         } else {
             const double dx = (deltaLocal.x() * sensitivity) / mmToPx;
             const double dy = (deltaLocal.y() * sensitivity) / mmToPx;
-            double nextW = startW;
-            double nextH = startH;
-            if (m_corner == TL || m_corner == BL) { nextW -= dx; b.xMm = startX + dx; }
-            else { nextW += dx; b.xMm = startX; }
-            if (m_corner == TL || m_corner == TR) { nextH -= dy; b.yMm = startY + dy; }
-            else { nextH += dy; b.yMm = startY; }
-            nextW = std::max(5.0, nextW);
-            nextH = std::max(5.0, nextH);
+            constexpr double kMinSizeMm = 5.0;
+            double left = startX;
+            double right = startX + startW;
+            double top = startY;
+            double bottom = startY + startH;
+            switch (m_kind) {
+            case HandleKind::TopLeft:
+                left = startX + dx;
+                top = startY + dy;
+                break;
+            case HandleKind::Top:
+                top = startY + dy;
+                break;
+            case HandleKind::TopRight:
+                right = startX + startW + dx;
+                top = startY + dy;
+                break;
+            case HandleKind::Right:
+                right = startX + startW + dx;
+                break;
+            case HandleKind::BottomRight:
+                right = startX + startW + dx;
+                bottom = startY + startH + dy;
+                break;
+            case HandleKind::Bottom:
+                bottom = startY + startH + dy;
+                break;
+            case HandleKind::BottomLeft:
+                left = startX + dx;
+                bottom = startY + startH + dy;
+                break;
+            case HandleKind::Left:
+                left = startX + dx;
+                break;
+            }
+
+            if (right - left < kMinSizeMm) {
+                if (m_kind == HandleKind::Left || m_kind == HandleKind::TopLeft || m_kind == HandleKind::BottomLeft) {
+                    left = right - kMinSizeMm;
+                } else {
+                    right = left + kMinSizeMm;
+                }
+            }
+            if (bottom - top < kMinSizeMm) {
+                if (m_kind == HandleKind::Top || m_kind == HandleKind::TopLeft || m_kind == HandleKind::TopRight) {
+                    top = bottom - kMinSizeMm;
+                } else {
+                    bottom = top + kMinSizeMm;
+                }
+            }
+
+            double nextW = std::max(kMinSizeMm, right - left);
+            double nextH = std::max(kMinSizeMm, bottom - top);
             if (keepAspect) {
                 const double scale = std::max(nextW / startW, nextH / startH);
-                nextW = std::max(5.0, startW * scale);
-                nextH = std::max(5.0, startH * scale);
+                nextW = std::max(kMinSizeMm, startW * scale);
+                nextH = std::max(kMinSizeMm, startH * scale);
             }
-            if (m_corner == TL || m_corner == BL) {
+            if (m_kind == HandleKind::TopLeft || m_kind == HandleKind::BottomLeft || m_kind == HandleKind::Left) {
                 b.xMm = startX + (startW - nextW);
+            } else {
+                b.xMm = startX;
             }
-            if (m_corner == TL || m_corner == TR) {
+            if (m_kind == HandleKind::TopLeft || m_kind == HandleKind::TopRight || m_kind == HandleKind::Top) {
                 b.yMm = startY + (startH - nextH);
+            } else {
+                b.yMm = startY;
             }
             b.widthMm = nextW;
             b.heightMm = nextH;
@@ -242,7 +346,7 @@ protected:
         }
     }
 private:
-    Corner m_corner;
+    HandleKind m_kind;
     BadgeGraphicItem* m_badge;
     bool m_dragging = false;
 };
@@ -270,23 +374,27 @@ void BadgeGraphicItem::updateHandles() {
     }
     const QRectF rect = visualRectPx();
     const double margin = 3.0;
-    QPointF corners[4] = {
-        QPointF(rect.left() - margin, rect.top() - margin),
-        QPointF(rect.right() + margin, rect.top() - margin),
-        QPointF(rect.left() - margin, rect.bottom() + margin),
-        QPointF(rect.right() + margin, rect.bottom() + margin)
+    const HandleKind kinds[8] = {
+        HandleKind::TopLeft,
+        HandleKind::Top,
+        HandleKind::TopRight,
+        HandleKind::Right,
+        HandleKind::BottomRight,
+        HandleKind::Bottom,
+        HandleKind::BottomLeft,
+        HandleKind::Left,
     };
-    int types[4] = {0,1,2,3};
-    for (int i = 0; i < 4; ++i) {
+    for (int i = 0; i < 8; ++i) {
+        const QPointF pos = handlePosForRect(rect, kinds[i], margin);
         if (i < m_handles.size()) {
-            m_handles[i]->setPos(corners[i]);
+            m_handles[i]->setPos(pos);
             m_handles[i]->setVisible(true);
             if (auto* handle = dynamic_cast<ResizeHandle*>(m_handles[i])) {
                 handle->setAsymmetricMode(asymmetricMode);
             }
         } else {
-            auto* h = new ResizeHandle(static_cast<ResizeHandle::Corner>(types[i]), this);
-            h->setPos(corners[i]);
+            auto* h = new ResizeHandle(kinds[i], this);
+            h->setPos(pos);
             h->setVisible(true);
             h->setAsymmetricMode(asymmetricMode);
             m_handles.append(h);
@@ -430,15 +538,50 @@ QString BadgeGraphicItem::previewCacheSignature() const {
     return key;
 }
 
-void BadgeGraphicItem::rebuildPreviewCache() {
+QPixmap BadgeGraphicItem::loadedPreviewPixmapForLayer(const LayerItem& layer) const {
+    if (layer.imagePath.isEmpty() || !QFileInfo::exists(layer.imagePath)) {
+        return {};
+    }
+
+    QString cacheKey = layer.imagePath;
+    cacheKey += QChar('|');
+    cacheKey += QString::number(m_badge.brightness);
+    cacheKey += QChar('|');
+    cacheKey += QString::number(m_badge.contrast);
+    cacheKey += QChar('|');
+    cacheKey += QString::number(m_badge.saturation);
+
+    if (const auto it = m_layerPreviewCache.constFind(cacheKey); it != m_layerPreviewCache.cend()) {
+        return it.value();
+    }
+
+    QString colorSpaceLabel;
+    const QImage loaded = ImageProcessor::loadImage(layer.imagePath, &colorSpaceLabel);
+    if (loaded.isNull()) {
+        return {};
+    }
+
+    QPixmap pixmap = QPixmap::fromImage(loaded);
+    if (m_badge.brightness != 0.0 || m_badge.contrast != 0.0 || m_badge.saturation != 0.0) {
+        pixmap = ImageProcessor::applyCorrection(pixmap, m_badge.brightness, m_badge.contrast, m_badge.saturation);
+    }
+
+    m_layerPreviewCache.insert(cacheKey, pixmap);
+    return pixmap;
+}
+
+void BadgeGraphicItem::rebuildPreviewCache(const QSize& pixelSize) {
     const QRectF r = contentRectPx();
-    const QSize cacheSize = r.size().toSize().expandedTo(QSize(1, 1));
-    QPixmap cache(cacheSize);
+    const QSize cacheSize = pixelSize.expandedTo(QSize(1, 1));
+    QImage cache(cacheSize, QImage::Format_ARGB32_Premultiplied);
     cache.fill(Qt::transparent);
 
     QPainter painter(&cache);
     painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
     painter.setRenderHint(QPainter::Antialiasing, true);
+    const qreal sx = r.width() > 0.0 ? qreal(cacheSize.width()) / r.width() : 1.0;
+    const qreal sy = r.height() > 0.0 ? qreal(cacheSize.height()) / r.height() : 1.0;
+    painter.scale(sx, sy);
     painter.translate(-r.topLeft());
 
     bool drewAnything = false;
@@ -475,10 +618,7 @@ void BadgeGraphicItem::rebuildPreviewCache() {
     for (int layerIndex = startLayer; layerIndex < m_badge.layers.size(); ++layerIndex) {
         const auto& layer = m_badge.layers[layerIndex];
         if (!layer.visible) continue;
-        QPixmap img;
-        if (!layer.imagePath.isEmpty() && QFileInfo::exists(layer.imagePath)) {
-            img.load(layer.imagePath);
-        }
+        QPixmap img = loadedPreviewPixmapForLayer(layer);
         img = applyLayerFillColor(img, layer.fillColor);
         if (!img.isNull()) {
             painter.save();
@@ -507,18 +647,28 @@ void BadgeGraphicItem::rebuildPreviewCache() {
     painter.end();
     m_previewCache = cache;
     m_previewCacheSignature = previewCacheSignature();
+    m_previewCachePixelSize = cacheSize;
 }
 
 void BadgeGraphicItem::renderCore(QPainter* painter, const QRectF& r, bool simplifiedPreview) {
     const QString signature = previewCacheSignature();
-    if (m_previewCache.isNull() || m_previewCacheSignature != signature || m_previewCache.size() != r.size().toSize().expandedTo(QSize(1, 1))) {
-        rebuildPreviewCache();
+    const qreal lod = QStyleOptionGraphicsItem::levelOfDetailFromTransform(painter->worldTransform());
+    const qreal deviceScale = painter->device() ? painter->device()->devicePixelRatioF() : 1.0;
+    const qreal qualityScale = simplifiedPreview ? 1.0 : std::clamp(lod * deviceScale, 1.0, 6.0);
+    const QSize requestedPixelSize(
+        std::clamp(int(std::ceil(r.width() * qualityScale)), 1, 4096),
+        std::clamp(int(std::ceil(r.height() * qualityScale)), 1, 4096));
+
+    if (m_previewCache.isNull()
+        || m_previewCacheSignature != signature
+        || m_previewCachePixelSize != requestedPixelSize) {
+        rebuildPreviewCache(requestedPixelSize);
     }
 
     painter->save();
     painter->setRenderHint(QPainter::SmoothPixmapTransform, !simplifiedPreview);
     painter->setRenderHint(QPainter::Antialiasing, !simplifiedPreview);
-    painter->drawPixmap(r.topLeft(), m_previewCache);
+    painter->drawImage(r, m_previewCache);
 
     if (!simplifiedPreview && !m_badge.displayText.isEmpty()) {
         painter->setOpacity(1.0);
@@ -537,8 +687,10 @@ void BadgeGraphicItem::loadImage() {
     m_thumbnail = QPixmap();
     m_processed = QPixmap();
     m_colorSpaceLabel = QStringLiteral("読み込みなし");
-    m_previewCache = QPixmap();
+    m_previewCache = QImage();
     m_previewCacheSignature.clear();
+    m_previewCachePixelSize = QSize();
+    m_layerPreviewCache.clear();
 
     if (m_loadedImagePath.isEmpty() || !QFileInfo::exists(m_loadedImagePath)) {
         update();
@@ -552,8 +704,10 @@ void BadgeGraphicItem::loadImage() {
 }
 
 void BadgeGraphicItem::applyColorCorrection() {
-    m_previewCache = QPixmap();
+    m_previewCache = QImage();
     m_previewCacheSignature.clear();
+    m_previewCachePixelSize = QSize();
+    m_layerPreviewCache.clear();
     if (m_badge.brightness == 0 && m_badge.contrast == 0 && m_badge.saturation == 0) {
         m_processed = QPixmap();
         update();
@@ -567,8 +721,10 @@ void BadgeGraphicItem::applyColorCorrection() {
 void BadgeGraphicItem::syncFromBadge() {
     prepareGeometryChange();
     setTransformOriginPoint(contentRectPx().center());
-    m_previewCache = QPixmap();
+    m_previewCache = QImage();
     m_previewCacheSignature.clear();
+    m_previewCachePixelSize = QSize();
+    m_layerPreviewCache.clear();
     const QString currentPrimaryPath = !m_badge.layers.isEmpty() ? m_badge.layers.first().imagePath : m_badge.imagePath;
     if (currentPrimaryPath != m_loadedImagePath) {
         loadImage();
