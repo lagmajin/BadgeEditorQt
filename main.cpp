@@ -1,5 +1,6 @@
 #include <QApplication>
 #include <QCoreApplication>
+#include <QIcon>
 #include <QFont>
 #include <QTimer>
 #include <QStringList>
@@ -17,6 +18,8 @@ int main(int argc, char* argv[]) {
     app.setOrganizationName("BadgeEditorQt");
     app.setApplicationName("BadgeEditorQt");
     app.setApplicationVersion("1.0.0");
+    const QIcon appIcon(QStringLiteral(":/app/appicon.png"));
+    app.setWindowIcon(appIcon);
 
 #ifdef Q_OS_WIN
     QApplication::setDesktopFileName(QStringLiteral("BadgeEditorQt"));
@@ -26,6 +29,7 @@ int main(int argc, char* argv[]) {
     font.setPointSize(font.pointSize() + 1);
     app.setFont(font);
     MainWindow w;
+    w.setWindowIcon(appIcon);
     w.show();
 
     const QStringList args = QCoreApplication::arguments();
