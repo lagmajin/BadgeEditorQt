@@ -29,6 +29,7 @@ import viewportbackend;
 #include <QBrush>
 #include <QColor>
 #include <QDir>
+#include <QFile>
 #include <QHash>
 #include <QIcon>
 #include <QMimeData>
@@ -240,6 +241,10 @@ QString materialIconAssetPath(const QString& name) {
     return QDir(sourceDir).filePath(QStringLiteral("assets/material-icons/%1.svg").arg(name));
 }
 
+QString materialIconResourcePath(const QString& name) {
+    return QStringLiteral(":/material-icons/%1.svg").arg(name);
+}
+
 QIcon loadMaterialIcon(const QString& name) {
     static QHash<QString, QIcon> cache;
     const auto it = cache.constFind(name);
@@ -248,8 +253,12 @@ QIcon loadMaterialIcon(const QString& name) {
     }
 
     QIcon icon;
-    const QString path = materialIconAssetPath(name);
-    if (QFileInfo::exists(path)) {
+    const QString resourcePath = materialIconResourcePath(name);
+    const QString sourcePath = materialIconAssetPath(name);
+    const auto tryLoadSvg = [&icon](const QString& path) {
+        if (!QFile::exists(path)) {
+            return false;
+        }
 #ifdef BADGEEDITOR_HAS_QTSVG
         QSvgRenderer renderer(path);
         if (renderer.isValid()) {
@@ -260,11 +269,19 @@ QIcon loadMaterialIcon(const QString& name) {
             renderer.render(&painter);
             painter.end();
             icon = QIcon(pixmap);
+            return true;
         }
 #else
         icon = QIcon(path);
+        return !icon.isNull();
 #endif
+        return false;
+    };
+
+    if (!tryLoadSvg(resourcePath)) {
+        tryLoadSvg(sourcePath);
     }
+
     if (icon.isNull()) {
         icon = standardToolbarIcon(QStyle::SP_FileIcon);
     }
@@ -281,18 +298,46 @@ void setMaterialIcon(QAction* action, const QString& name) {
 
 class DocumentSnapshotCommand final : public QUndoCommand {
 public:
+    static constexpr int kCommandId = 0x42454745;
+
     DocumentSnapshotCommand(QString label,
                             QList<BadgeItem> beforeBadges,
                             QList<int> beforeSelection,
                             QList<BadgeItem> afterBadges,
                             QList<int> afterSelection,
+                            bool mergeable,
                             std::function<void(const QList<BadgeItem>&, const QList<int>&)> apply)
         : m_beforeBadges(std::move(beforeBadges)),
           m_beforeSelection(std::move(beforeSelection)),
           m_afterBadges(std::move(afterBadges)),
           m_afterSelection(std::move(afterSelection)),
+          m_mergeable(mergeable),
           m_apply(std::move(apply)) {
         setText(std::move(label));
+    }
+
+    int id() const override {
+        return m_mergeable ? kCommandId : -1;
+    }
+
+    bool mergeWith(const QUndoCommand* other) override {
+        if (!m_mergeable) {
+            return false;
+        }
+        const auto* command = dynamic_cast<const DocumentSnapshotCommand*>(other);
+        if (!command || !command->m_mergeable) {
+            return false;
+        }
+        if (text() != command->text()) {
+            return false;
+        }
+        if (m_afterSelection != command->m_beforeSelection || !badgeListEqualsLocal(m_afterBadges, command->m_beforeBadges)) {
+            return false;
+        }
+
+        m_afterBadges = command->m_afterBadges;
+        m_afterSelection = command->m_afterSelection;
+        return true;
     }
 
     void undo() override {
@@ -304,10 +349,67 @@ public:
     }
 
 private:
+    static bool layerEqualsLocal(const LayerItem& a, const LayerItem& b) {
+        return a.imagePath == b.imagePath
+            && a.name == b.name
+            && a.opacity == b.opacity
+            && a.visible == b.visible
+            && a.offsetX == b.offsetX
+            && a.offsetY == b.offsetY
+            && a.blendMode == b.blendMode
+            && a.fillColor == b.fillColor;
+    }
+
+    static bool guideEqualsLocal(const GuideItemData& a, const GuideItemData& b) {
+        return a.shape == b.shape
+            && a.bleedMm == b.bleedMm
+            && a.safeInsetMm == b.safeInsetMm
+            && a.cornerRadiusMm == b.cornerRadiusMm;
+    }
+
+    static bool badgeEqualsLocal(const BadgeItem& a, const BadgeItem& b) {
+        return a.productMode == b.productMode
+            && guideEqualsLocal(a.guide, b.guide)
+            && a.widthMm == b.widthMm
+            && a.heightMm == b.heightMm
+            && a.imageScale == b.imageScale
+            && a.materialPreset == b.materialPreset
+            && a.specularStrength == b.specularStrength
+            && a.envReflectionStrength == b.envReflectionStrength
+            && a.glitterStrength == b.glitterStrength
+            && a.xMm == b.xMm
+            && a.yMm == b.yMm
+            && a.rotation == b.rotation
+            && a.label == b.label
+            && a.imagePath == b.imagePath
+            && a.displayText == b.displayText
+            && a.clipToCircle == b.clipToCircle
+            && a.brightness == b.brightness
+            && a.contrast == b.contrast
+            && a.saturation == b.saturation
+            && a.flattenedForLayoutTransfer == b.flattenedForLayoutTransfer
+            && a.isSelected == b.isSelected
+            && a.layers.size() == b.layers.size()
+            && std::equal(a.layers.begin(), a.layers.end(), b.layers.begin(), layerEqualsLocal);
+    }
+
+    static bool badgeListEqualsLocal(const QList<BadgeItem>& a, const QList<BadgeItem>& b) {
+        if (a.size() != b.size()) {
+            return false;
+        }
+        for (int i = 0; i < a.size(); ++i) {
+            if (!badgeEqualsLocal(a[i], b[i])) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     QList<BadgeItem> m_beforeBadges;
     QList<int> m_beforeSelection;
     QList<BadgeItem> m_afterBadges;
     QList<int> m_afterSelection;
+    bool m_mergeable = false;
     std::function<void(const QList<BadgeItem>&, const QList<int>&)> m_apply;
 };
 
@@ -1789,7 +1891,8 @@ void MainWindow::pushBadgeChange(const QString& label,
                                  const QList<BadgeItem>& beforeBadges,
                                  const QList<int>& beforeSelection,
                                  const QList<BadgeItem>& afterBadges,
-                                 const QList<int>& afterSelection) {
+                                 const QList<int>& afterSelection,
+                                 bool mergeable) {
     if (!m_undoStack) {
         applyDesignerBadges(afterBadges, afterSelection);
         return;
@@ -1801,6 +1904,7 @@ void MainWindow::pushBadgeChange(const QString& label,
         beforeSelection,
         afterBadges,
         afterSelection,
+        mergeable,
         [this](const QList<BadgeItem>& badges, const QList<int>& selection) {
             applyDesignerBadges(badges, selection);
         }));
@@ -1841,9 +1945,15 @@ void MainWindow::onBadgeEditFinished(BadgeGraphicItem* item) {
         return;
     }
 
-    pushBadgeChange(QStringLiteral("編集"), beforeBadges, beforeSelection, afterBadges, afterSelection);
-    appendLog(QStringLiteral("編集内容を履歴に追加しました"));
-    requestBadgeEdited("badge edit finished");
+    QTimer::singleShot(0, this, [this,
+                                 beforeBadges,
+                                 beforeSelection,
+                                 afterBadges,
+                                 afterSelection]() {
+        pushBadgeChange(QStringLiteral("編集"), beforeBadges, beforeSelection, afterBadges, afterSelection);
+        appendLog(QStringLiteral("編集内容を履歴に追加しました"));
+        requestBadgeEdited("badge edit finished");
+    });
 }
 
 void MainWindow::onEyedropperColorPicked(const QColor& color) {
@@ -2604,7 +2714,7 @@ void MainWindow::onInspectorChanged() {
         m_designer->updateGuides(badgeGuideSizeMm(after[selected.first()]));
     }
 
-    pushBadgeChange("プロパティ変更", before, selected, after, selected);
+    pushBadgeChange("プロパティ変更", before, selected, after, selected, true);
     appendLog(QStringLiteral("オブジェクト情報を更新しました"));
 }
 
@@ -2911,7 +3021,7 @@ void MainWindow::onNudgeRequested(double dxMm, double dyMm) {
         after[index].xMm += dxMm;
         after[index].yMm += dyMm;
     }
-    pushBadgeChange("移動", before, selected, after, selected);
+    pushBadgeChange("移動", before, selected, after, selected, true);
     appendLog(QStringLiteral("移動: %1 mm, %2 mm").arg(dxMm).arg(dyMm));
 }
 

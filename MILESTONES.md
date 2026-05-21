@@ -32,24 +32,22 @@
 ## Phase 6: Product Modes
 - Introduce a product mode concept without breaking existing badge documents.
 - Keep Badge as the default mode.
-- Add Sticker as an experimental mode with separate guide rules.
+- Keep legacy Sticker data load/save compatibility, but freeze further Sticker feature work.
 
-## Phase 7: Sticker Guide Model
-- Replace circle-only badge guides with reusable guide geometry.
-- Support sticker finish line, bleed line, and safe area.
-- Start with circle, rectangle, rounded rectangle, and oval presets.
+## Frozen: Sticker Guide Model
+- Frozen by decision.
+- Keep existing guide-shape and product-mode data readable.
+- Do not remove the compatibility layer unless the migration plan is explicit.
 
-## Phase 8: Sticker Editing Workflow
-- Add shape preset controls to the Designer inspector.
-- Keep image layers, color correction, transforms, and layout transfer shared.
-- Make non-square sticker resizing update artwork without changing guide intent.
+## Frozen: Sticker Editing Workflow
+- No new Sticker-specific editor work is planned.
+- Shared editing code may remain if it is needed for badge compatibility.
 
-## Phase 9: Sticker Layout and Export
-- Reuse the existing Layout workspace for sticker sheet placement.
-- Add sticker-specific cut and bleed previews in Layout.
-- Export sticker sheets to PDF and PNG with preview output matching Layout.
+## Frozen: Sticker Layout and Export
+- No new Sticker-specific layout/export work is planned.
+- Existing generic layout/export code may continue to support legacy documents as a side effect.
 
 ## Phase 10: Print-Shop Features
 - Add automatic border/outline generation from transparent artwork.
-- Add optional white-ink underlay support for transparent stickers.
-- Prepare PDF cut lines for print-shop workflows, including named spot-color paths.
+- White-ink underlay is frozen with the Sticker track.
+- Named cut-line spot colors are frozen with the Sticker/print-shop track unless re-approved later.

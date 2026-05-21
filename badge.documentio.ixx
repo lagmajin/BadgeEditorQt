@@ -26,6 +26,8 @@ struct JsonDocumentResult {
 
 namespace detail {
 
+// Sticker-related JSON values are kept for backward compatibility while the
+// Sticker feature track is frozen. Do not remove these mappings casually.
 inline ProductMode productModeFromJsonValue(const QJsonValue& value) {
     if (value.isDouble()) {
         return value.toInt(0) == 1 ? ProductMode::Sticker : ProductMode::Badge;

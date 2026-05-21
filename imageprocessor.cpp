@@ -1,9 +1,9 @@
 #include "imageprocessor.h"
 #include "constants.h"
-#include <QFileInfo>
+#include <QColorSpace>
 #include <QBuffer>
 #include <QFile>
-#include <QColorSpace>
+#include <QFileInfo>
 #include <QImageReader>
 #include <QImage>
 #include <QPainter>
@@ -248,7 +248,8 @@ QImage loadViaWic(const QString& path) {
 }
 
 QImage ImageProcessor::loadImage(const QString& path, QString* colorSpaceLabel) {
-    const QString suffix = QFileInfo(path).suffix().toLower();
+    const int dot = path.lastIndexOf(QLatin1Char('.'));
+    const QString suffix = dot >= 0 ? path.mid(dot + 1).toLower() : QString();
 #ifdef BADGEEDITOR_HAS_QTSVG
     if (suffix == "svg" || suffix == "svgz") {
         QSvgRenderer renderer(path);
@@ -294,13 +295,6 @@ QImage ImageProcessor::loadImage(const QString& path, QString* colorSpaceLabel) 
     }
 #endif
 
-    if (QImage viaOiio = loadViaOiio(path); !viaOiio.isNull()) {
-        if (colorSpaceLabel) {
-            *colorSpaceLabel = QStringLiteral("OIIO / sRGB前提");
-        }
-        return viaOiio;
-    }
-
 #ifdef Q_OS_WIN
     if (QImage viaWic = loadViaWic(path); !viaWic.isNull()) {
         if (colorSpaceLabel) {
@@ -323,6 +317,17 @@ QImage ImageProcessor::loadImage(const QString& path, QString* colorSpaceLabel) 
         }
         return viaQtBytes;
     }
+
+#ifdef BADGEEDITOR_ENABLE_OIIO
+    // Keep OIIO as a last resort. It is useful for some uncommon formats, but
+    // Qt/WIC are much more stable for the typical image files this app handles.
+    if (QImage viaOiio = loadViaOiio(path); !viaOiio.isNull()) {
+        if (colorSpaceLabel) {
+            *colorSpaceLabel = QStringLiteral("OIIO / sRGB前提");
+        }
+        return viaOiio;
+    }
+#endif
 
     QImage fallback;
     if (fallback.load(path)) {

@@ -42,6 +42,7 @@ set(SOURCES
     imageprocessor.cpp
     projectsync.cpp
     windowsintegration.cpp
+    resources.qrc
 )
 
 set(HEADERS
@@ -69,6 +70,10 @@ set(HEADERS
 
 add_executable(BadgeEditorQt ${SOURCES} ${HEADERS})
 
+if (WIN32)
+    target_sources(BadgeEditorQt PRIVATE appicon.rc)
+endif()
+
 target_sources(BadgeEditorQt
     PRIVATE
         FILE_SET cxx_modules TYPE CXX_MODULES FILES
@@ -92,6 +97,10 @@ if (TARGET Qt6::Svg)
     target_link_libraries(BadgeEditorQt PRIVATE Qt6::Svg)
     target_compile_definitions(BadgeEditorQt PRIVATE BADGEEDITOR_HAS_QTSVG=1)
 endif()
+
+target_compile_definitions(BadgeEditorQt PRIVATE
+    $<$<NOT:$<CONFIG:Debug>>:BADGEEDITOR_ENABLE_OIIO=1>
+)
 
 target_include_directories(BadgeEditorQt PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}

@@ -1,0 +1,44 @@
+<RCC>
+  <qresource prefix="/app">
+    <file alias="appicon.png">assets/appicon.png</file>
+  </qresource>
+  <qresource prefix="/material-icons">
+    <file>assets/material-icons/add_circle.svg</file>
+    <file>assets/material-icons/arrow_back.svg</file>
+    <file>assets/material-icons/aspect_ratio.svg</file>
+    <file>assets/material-icons/bug_report.svg</file>
+    <file>assets/material-icons/center_focus_strong.svg</file>
+    <file>assets/material-icons/chevron_left.svg</file>
+    <file>assets/material-icons/chevron_right.svg</file>
+    <file>assets/material-icons/dark_mode.svg</file>
+    <file>assets/material-icons/delete_forever.svg</file>
+    <file>assets/material-icons/delete.svg</file>
+    <file>assets/material-icons/edit.svg</file>
+    <file>assets/material-icons/eyedropper.svg</file>
+    <file>assets/material-icons/folder_open.svg</file>
+    <file>assets/material-icons/format_align_center.svg</file>
+    <file>assets/material-icons/format_align_left.svg</file>
+    <file>assets/material-icons/format_align_right.svg</file>
+    <file>assets/material-icons/grid_on.svg</file>
+    <file>assets/material-icons/grid_view.svg</file>
+    <file>assets/material-icons/image.svg</file>
+    <file>assets/material-icons/layer_fill.svg</file>
+    <file>assets/material-icons/library_add.svg</file>
+    <file>assets/material-icons/light_mode.svg</file>
+    <file>assets/material-icons/picture_as_pdf.svg</file>
+    <file>assets/material-icons/print.svg</file>
+    <file>assets/material-icons/redo.svg</file>
+    <file>assets/material-icons/refresh.svg</file>
+    <file>assets/material-icons/save.svg</file>
+    <file>assets/material-icons/send.svg</file>
+    <file>assets/material-icons/settings.svg</file>
+    <file>assets/material-icons/transfer_debug.svg</file>
+    <file>assets/material-icons/undo.svg</file>
+    <file>assets/material-icons/vertical_align_bottom.svg</file>
+    <file>assets/material-icons/vertical_align_center.svg</file>
+    <file>assets/material-icons/vertical_align_top.svg</file>
+    <file>assets/material-icons/view_quilt.svg</file>
+    <file>assets/material-icons/zoom_in.svg</file>
+    <file>assets/material-icons/zoom_out.svg</file>
+  </qresource>
+</RCC>

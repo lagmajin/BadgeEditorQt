@@ -43,7 +43,7 @@ namespace {
 QString badgeModeText(ProductMode mode) {
     switch (mode) {
     case ProductMode::Sticker:
-        return QStringLiteral("Sticker");
+        return QStringLiteral("Sticker (Frozen)");
     case ProductMode::Badge:
     default:
         return QStringLiteral("Badge");
@@ -94,7 +94,7 @@ MixedLayoutDialog::MixedLayoutDialog(const QList<BadgeItem>& templates, QWidget*
 
     auto* root = new QVBoxLayout(this);
 
-    auto* info = new QLabel(QStringLiteral("選択中のバッジやステッカーをまとめて面付けします。各テンプレートの枚数を指定してください。"));
+    auto* info = new QLabel(QStringLiteral("選択中のテンプレートをまとめて面付けします。各テンプレートの枚数を指定してください。"));
     info->setWordWrap(true);
     root->addWidget(info);
 

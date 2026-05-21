@@ -127,7 +127,7 @@ private:
     void applyDesignerBadges(const QList<BadgeItem>& badges, const QList<int>& selectedIndices = {});
     QList<int> selectedBadgeIndices() const;
     QList<BadgeItem> currentDesignerBadges() const;
-    void pushBadgeChange(const QString& label, const QList<BadgeItem>& beforeBadges, const QList<int>& beforeSelection, const QList<BadgeItem>& afterBadges, const QList<int>& afterSelection);
+    void pushBadgeChange(const QString& label, const QList<BadgeItem>& beforeBadges, const QList<int>& beforeSelection, const QList<BadgeItem>& afterBadges, const QList<int>& afterSelection, bool mergeable = false);
     void appendLog(const QString& message);
     void refreshDiagnostics();
     void requestDiagnosticsRefresh(const char* reason = nullptr);
