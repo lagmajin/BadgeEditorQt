@@ -1,5 +1,11 @@
 # Milestones
 
+## Current Milestone: Stability Pass on `develop`
+- Keep working from the `develop` branch, not `master` or `main`.
+- Verify drag / move / resize no longer corrupts the heap.
+- Keep Debug builds on the Qt/WIC fallback path and avoid the unstable OIIO path there.
+- Next feature targets after stability: PNG/PDF export, then undo/redo cleanup, then document boundary cleanup.
+
 ## Phase 1: Surface Separation
 - Split Designer and Layout into separate widgets.
 - Keep MainWindow as the wiring layer only.

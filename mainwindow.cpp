@@ -322,6 +322,31 @@ QList<int> indicesForSelection(const QList<BadgeGraphicItem*>& selected, const Q
     return indices;
 }
 
+QList<QPointer<BadgeGraphicItem>> safeSelectionFromGraphics(const QList<BadgeGraphicItem*>& selected) {
+    QList<QPointer<BadgeGraphicItem>> items;
+    items.reserve(selected.size());
+    for (auto* item : selected) {
+        items.append(item);
+    }
+    return items;
+}
+
+BadgeGraphicItem* firstSelectedItem(const QList<QPointer<BadgeGraphicItem>>& selected) {
+    if (selected.isEmpty()) {
+        return nullptr;
+    }
+    return selected.first().data();
+}
+
+bool selectionContains(const QList<QPointer<BadgeGraphicItem>>& selected, BadgeGraphicItem* item) {
+    for (const auto& selectedItem : selected) {
+        if (selectedItem.data() == item) {
+            return true;
+        }
+    }
+    return false;
+}
+
 bool badgeLayerEquals(const LayerItem& a, const LayerItem& b) {
     return a.imagePath == b.imagePath
         && a.name == b.name
@@ -1775,6 +1800,8 @@ void MainWindow::applyDesignerBadges(const QList<BadgeItem>& badges, const QList
     if (!m_designer) {
         return;
     }
+    m_pendingBadgeMoveItem = nullptr;
+    m_pendingEditItem = nullptr;
     m_designer->setBadgeItems(badges, selectedIndices);
     refreshDocumentFromDesigner();
     if (!m_isDesigner) {
@@ -1821,7 +1848,7 @@ void MainWindow::onBadgeEditFinished(BadgeGraphicItem* item) {
     if (!m_pendingEditActive || !m_designer) {
         return;
     }
-    if (m_pendingEditItem && item && m_pendingEditItem != item) {
+    if (m_pendingEditItem && item && m_pendingEditItem.data() != item) {
         return;
     }
 
@@ -2368,15 +2395,16 @@ void MainWindow::onSelectionChanged() {
     if (m_updatingUI || !m_designer) {
         return;
     }
-    m_selected = m_designer->selectedGraphics();
-    if (m_selected.isEmpty()) {
+    m_selected = safeSelectionFromGraphics(m_designer->selectedGraphics());
+    BadgeGraphicItem* selectedItem = firstSelectedItem(m_selected);
+    if (!selectedItem) {
         onBadgeDeselected();
         return;
     }
 
     setInspectorControlsEnabled(true);
     m_updatingUI = true;
-    BadgeItem& b = m_selected.first()->badge();
+    BadgeItem& b = selectedItem->badge();
     m_propX->setValue(b.xMm); m_propY->setValue(b.yMm);
     m_propW->setValue(b.widthMm); m_propH->setValue(b.heightMm);
     if (m_propImageScale) {
@@ -2394,7 +2422,7 @@ void MainWindow::onSelectionChanged() {
         m_propText->setPlaceholderText(QString());
         m_propText->setText(b.displayText);
     }
-    m_propColorSpace->setText(m_selected.first()->colorSpaceLabel());
+    m_propColorSpace->setText(selectedItem->colorSpaceLabel());
     m_propBrightness->setValue(int(b.brightness));
     m_propContrast->setValue(int(b.contrast));
     m_propSaturation->setValue(int(b.saturation));
@@ -2419,6 +2447,10 @@ void MainWindow::onSelectionChanged() {
 void MainWindow::onBadgeDeselected() {
     m_selected.clear();
     m_pendingBadgeMoveItem = nullptr;
+    m_pendingEditActive = false;
+    m_pendingEditItem = nullptr;
+    m_pendingEditBeforeBadges.clear();
+    m_pendingEditBeforeSelection.clear();
     m_internalEventQueue.clear();
     m_internalEventFlushScheduled = false;
     setInspectorControlsEnabled(false);
@@ -2470,7 +2502,7 @@ void MainWindow::onBadgeDeselected() {
 }
 
 void MainWindow::onBadgeMoved(BadgeGraphicItem* item) {
-    if (m_selected.isEmpty() || !m_selected.contains(item)) return;
+    if (!selectionContains(m_selected, item)) return;
     m_pendingBadgeMoveItem = item;
     const int badgeIndex = m_designer ? m_designer->graphicItems().indexOf(item) : -1;
     const BadgeItem& badge = item->badge();
@@ -2505,7 +2537,7 @@ void MainWindow::flushInternalEvents() {
     }
 
     if (sawLayoutDirty) {
-        if (sawBadgeMove && m_pendingBadgeMoveItem && !m_selected.isEmpty() && m_selected.contains(m_pendingBadgeMoveItem)) {
+        if (sawBadgeMove && m_pendingBadgeMoveItem && selectionContains(m_selected, m_pendingBadgeMoveItem.data())) {
             const BadgeItem& b = m_pendingBadgeMoveItem->badge();
             m_updatingUI = true;
             if (m_propX) m_propX->setValue(b.xMm);
@@ -2515,7 +2547,7 @@ void MainWindow::flushInternalEvents() {
         syncLayoutWorkspace(false);
     }
 
-    if (sawBadgeMove && m_pendingBadgeMoveItem && !m_selected.isEmpty() && m_selected.contains(m_pendingBadgeMoveItem)) {
+    if (sawBadgeMove && m_pendingBadgeMoveItem && selectionContains(m_selected, m_pendingBadgeMoveItem.data())) {
         const BadgeItem& b = m_pendingBadgeMoveItem->badge();
         m_updatingUI = true;
         if (m_propX) m_propX->setValue(b.xMm);
@@ -2624,8 +2656,8 @@ void MainWindow::setInspectorControlsEnabled(bool on) {
 }
 
 double MainWindow::activeGuideSizeMm() const {
-    if (!m_selected.isEmpty()) {
-        return badgeGuideSizeMm(m_selected.first()->badge());
+    if (BadgeGraphicItem* selectedItem = firstSelectedItem(m_selected)) {
+        return badgeGuideSizeMm(selectedItem->badge());
     }
     return m_lastGuideSizeMm;
 }
@@ -3090,11 +3122,12 @@ void MainWindow::refreshLayerList() {
     }
     const int previousRow = m_layerList->currentRow();
     m_layerList->clear();
-    if (m_selected.isEmpty()) {
+    BadgeGraphicItem* selectedItem = firstSelectedItem(m_selected);
+    if (!selectedItem) {
         m_lastLayerRow = -1;
         return;
     }
-    const auto& layers = m_selected.first()->badge().layers;
+    const auto& layers = selectedItem->badge().layers;
     for (const auto& layer : layers) {
         auto* item = new QListWidgetItem(layerItemSummary(layer));
         m_layerList->addItem(item);
@@ -3117,9 +3150,10 @@ void MainWindow::updateLayerBlendModeUi() {
     if (!m_comboLayerBlendMode) {
         return;
     }
-    const bool hasSelection = !m_selected.isEmpty();
+    BadgeGraphicItem* selectedItem = firstSelectedItem(m_selected);
+    const bool hasSelection = selectedItem != nullptr;
     const int row = m_layerList ? m_layerList->currentRow() : -1;
-    const bool valid = hasSelection && row >= 0 && row < m_selected.first()->badge().layers.size();
+    const bool valid = hasSelection && row >= 0 && row < selectedItem->badge().layers.size();
     const QSignalBlocker blocker(m_comboLayerBlendMode);
     m_comboLayerBlendMode->setEnabled(valid);
     if (!valid) {
@@ -3128,7 +3162,7 @@ void MainWindow::updateLayerBlendModeUi() {
         updateLayerFillUi();
         return;
     }
-    const auto& layer = m_selected.first()->badge().layers[row];
+    const auto& layer = selectedItem->badge().layers[row];
     m_comboLayerBlendMode->setCurrentIndex(layerBlendModeToInt(layer.blendMode));
     updateLayerPreviewUi();
     updateLayerFillUi();
@@ -3138,9 +3172,10 @@ void MainWindow::updateLayerOpacityUi() {
     if (!m_sliderLayerOpacity) {
         return;
     }
-    const bool hasSelection = !m_selected.isEmpty();
+    BadgeGraphicItem* selectedItem = firstSelectedItem(m_selected);
+    const bool hasSelection = selectedItem != nullptr;
     const int row = m_layerList ? m_layerList->currentRow() : -1;
-    const bool valid = hasSelection && row >= 0 && row < m_selected.first()->badge().layers.size();
+    const bool valid = hasSelection && row >= 0 && row < selectedItem->badge().layers.size();
     const QSignalBlocker blocker(m_sliderLayerOpacity);
     m_sliderLayerOpacity->setEnabled(valid);
     if (!valid) {
@@ -3149,7 +3184,7 @@ void MainWindow::updateLayerOpacityUi() {
         updateLayerFillUi();
         return;
     }
-    const auto& layer = m_selected.first()->badge().layers[row];
+    const auto& layer = selectedItem->badge().layers[row];
     m_sliderLayerOpacity->setValue(int(std::round(std::clamp(layer.opacity, 0.0, 1.0) * 100.0)));
     updateLayerPreviewUi();
     updateLayerFillUi();
@@ -3159,16 +3194,17 @@ void MainWindow::updateLayerPreviewUi() {
     if (!m_layerPreviewLabel) {
         return;
     }
-    const bool hasSelection = !m_selected.isEmpty();
+    BadgeGraphicItem* selectedItem = firstSelectedItem(m_selected);
+    const bool hasSelection = selectedItem != nullptr;
     const int row = m_layerList ? m_layerList->currentRow() : -1;
-    const bool valid = hasSelection && row >= 0 && row < m_selected.first()->badge().layers.size();
+    const bool valid = hasSelection && row >= 0 && row < selectedItem->badge().layers.size();
     if (!valid) {
         m_layerPreviewLabel->setPixmap({});
         m_layerPreviewLabel->setText(QStringLiteral("Composite Preview"));
         return;
     }
 
-    const auto& badge = m_selected.first()->badge();
+    const auto& badge = selectedItem->badge();
     const QPixmap preview = renderLayerPreviewPixmap(badge, row, m_layerPreviewLabel->palette(), 128);
     m_layerPreviewLabel->setText(QString());
     m_layerPreviewLabel->setPixmap(preview);
@@ -3216,7 +3252,7 @@ void MainWindow::onBatchAdd() {
 void MainWindow::onMixedLayout() {
     QList<BadgeItem> sourceBadges;
     const auto current = currentDesignerBadges();
-    if (!m_selected.isEmpty()) {
+    if (BadgeGraphicItem* selectedItem = firstSelectedItem(m_selected)) {
         const auto selected = selectedBadgeIndices();
         sourceBadges.reserve(selected.size());
         for (int index : selected) {
@@ -3314,8 +3350,8 @@ void MainWindow::syncLayoutWorkspace(bool refreshDiagnostics) {
         if (!m_layoutBadges.isEmpty()) {
             templateBadge = badgeForLayoutPreview(m_layoutBadges.first());
             hasTemplate = true;
-        } else if (!m_selected.isEmpty()) {
-            templateBadge = badgeForLayoutPreview(m_selected.first()->badge());
+        } else if (BadgeGraphicItem* selectedItem = firstSelectedItem(m_selected)) {
+            templateBadge = badgeForLayoutPreview(selectedItem->badge());
             hasTemplate = true;
         } else if (!m_badges.isEmpty()) {
             templateBadge = badgeForLayoutPreview(m_badges.first());
@@ -3402,9 +3438,10 @@ void MainWindow::updateInspectorMode() {
 void MainWindow::updateLayerFillUi() {
     QColor color;
     const int row = m_layerList ? m_layerList->currentRow() : -1;
-    const bool hasTarget = !m_selected.isEmpty() && row >= 0;
+    BadgeGraphicItem* selectedItem = firstSelectedItem(m_selected);
+    const bool hasTarget = selectedItem != nullptr && row >= 0;
     if (hasTarget) {
-        const auto& layers = m_selected.first()->badge().layers;
+        const auto& layers = selectedItem->badge().layers;
         if (row >= 0 && row < layers.size()) {
             color = layers[row].fillColor;
         }
@@ -3492,8 +3529,9 @@ void MainWindow::onSendToLayout() {
     m_layoutPageNames.clear();
     m_layoutPageIndex = 0;
     const auto document = projectsync::currentDocument(m_badges, *m_comboPaperSize, *m_chkLandscape, *m_spinPaperMargin, *m_spinPaperSpacing, m_currentFile);
-    const double guideSizeMm = !m_selected.isEmpty()
-        ? badgeGuideSizeMm(m_selected.first()->badge())
+    BadgeGraphicItem* selectedItem = firstSelectedItem(m_selected);
+    const double guideSizeMm = selectedItem
+        ? badgeGuideSizeMm(selectedItem->badge())
         : (!m_badges.isEmpty() ? badgeGuideSizeMm(m_badges.first()) : 32.0);
     const QPointF guideCenterScene = m_designer && m_designer->scene()
         ? m_designer->scene()->sceneRect().center()

@@ -7,6 +7,7 @@
 #include <QGraphicsScene>
 #include <QFileInfo>
 #include <QApplication>
+#include <QPointer>
 #include <QStyleOptionGraphicsItem>
 #include <QCursor>
 #include <QRandomGenerator>
@@ -230,15 +231,17 @@ protected:
     QPointF m_startPos;
     
     void mousePressEvent(QGraphicsSceneMouseEvent* e) override {
+        if (!m_badge) {
+            e->ignore();
+            return;
+        }
         m_dragging = true;
         m_startPos = e->scenePos();
-        if (m_badge) {
-            m_badge->beginInteractiveEdit();
-        }
+        m_badge->beginInteractiveEdit();
         e->accept();
     }
     void mouseMoveEvent(QGraphicsSceneMouseEvent* e) override {
-        if (!m_dragging) return;
+        if (!m_dragging || !m_badge) return;
         QPointF deltaLocal = m_badge->mapFromScene(e->scenePos()) - m_badge->mapFromScene(m_startPos);
         m_startPos = e->scenePos();
         const double mmToPx = Constants::kMmToPx;
@@ -340,14 +343,15 @@ protected:
     }
     void mouseReleaseEvent(QGraphicsSceneMouseEvent*) override {
         m_dragging = false;
-        m_badge->syncFromBadge();
-        if (m_badge) {
-            m_badge->endInteractiveEdit();
+        if (!m_badge) {
+            return;
         }
+        m_badge->syncFromBadge();
+        m_badge->endInteractiveEdit();
     }
 private:
     HandleKind m_kind;
-    BadgeGraphicItem* m_badge;
+    QPointer<BadgeGraphicItem> m_badge;
     bool m_dragging = false;
 };
 
