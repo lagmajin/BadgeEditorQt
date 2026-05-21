@@ -1,10 +1,10 @@
 # Milestones
 
-## Current Milestone: Stability Pass on `develop`
+## Current Milestone: Gradual `std` Module Expansion
 - Keep working from the `develop` branch, not `master` or `main`.
-- Verify drag / move / resize no longer corrupts the heap.
-- Keep Debug builds on the Qt/WIC fallback path and avoid the unstable OIIO path there.
-- Next feature targets after stability: PNG/PDF export, then undo/redo cleanup, then document boundary cleanup.
+- Expand `import std;` gradually, starting from leaf modules that are mostly standard-library only.
+- Keep Qt-heavy modules on `#include`-based boundaries until the next pass.
+- Prefer small, reversible module steps over a broad source-wide migration.
 
 ## Phase 1: Surface Separation
 - Split Designer and Layout into separate widgets.
