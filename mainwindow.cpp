@@ -1841,9 +1841,15 @@ void MainWindow::onBadgeEditFinished(BadgeGraphicItem* item) {
         return;
     }
 
-    pushBadgeChange(QStringLiteral("編集"), beforeBadges, beforeSelection, afterBadges, afterSelection);
-    appendLog(QStringLiteral("編集内容を履歴に追加しました"));
-    requestBadgeEdited("badge edit finished");
+    QTimer::singleShot(0, this, [this,
+                                 beforeBadges,
+                                 beforeSelection,
+                                 afterBadges,
+                                 afterSelection]() {
+        pushBadgeChange(QStringLiteral("編集"), beforeBadges, beforeSelection, afterBadges, afterSelection);
+        appendLog(QStringLiteral("編集内容を履歴に追加しました"));
+        requestBadgeEdited("badge edit finished");
+    });
 }
 
 void MainWindow::onEyedropperColorPicked(const QColor& color) {
