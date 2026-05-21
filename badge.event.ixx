@@ -1,11 +1,8 @@
 module;
 
-#include <cstddef>
-#include <string>
-#include <utility>
-#include <vector>
-
 export module badge.event;
+
+import std;
 
 export namespace badge {
 
