@@ -112,7 +112,6 @@ QImage loadViaQtBytes(const QString& path) {
         return {};
     }
 
-    // Try a device-backed reader first so Qt can inspect the encoded stream directly.
     QBuffer buffer;
     buffer.setData(bytes);
     if (buffer.open(QIODevice::ReadOnly)) {
@@ -125,8 +124,6 @@ QImage loadViaQtBytes(const QString& path) {
         }
     }
 
-    // Fall back to raw byte decoding. Some PNGs decode here even when file/path-based
-    // readers reject them.
     QImage image = QImage::fromData(bytes);
     if (!image.isNull()) {
         return normalizeToSrgb(std::move(image));

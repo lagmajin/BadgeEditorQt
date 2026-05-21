@@ -1,7 +1,13 @@
 #include <QApplication>
 #include <QCoreApplication>
+#include <QColor>
 #include <QIcon>
 #include <QFont>
+#include <QLinearGradient>
+#include <QPainter>
+#include <QPointF>
+#include <QRectF>
+#include <QPixmap>
 #include <QTimer>
 #include <QStringList>
 #include <cstdio>
