@@ -1898,6 +1898,9 @@ void MainWindow::pushBadgeChange(const QString& label,
                                  const QList<BadgeItem>& afterBadges,
                                  const QList<int>& afterSelection,
                                  bool mergeable) {
+    if (badgeListEquals(beforeBadges, afterBadges) && beforeSelection == afterSelection) {
+        return;
+    }
     if (!m_undoStack) {
         applyDesignerBadges(afterBadges, afterSelection);
         return;
@@ -2431,22 +2434,29 @@ void MainWindow::onDuplicate() {
     }
 
     std::sort(selected.begin(), selected.end());
+    selected.erase(std::unique(selected.begin(), selected.end()), selected.end());
 
-    QList<BadgeItem> after = before;
+    QList<BadgeItem> after;
+    after.reserve(before.size() + selected.size());
     QList<int> afterSelection;
     afterSelection.reserve(selected.size());
 
     constexpr double kDuplicateOffsetMm = 2.0;
-    for (int index : selected) {
-        if (index < 0 || index >= before.size()) {
+    int selectedCursor = 0;
+    for (int index = 0; index < before.size(); ++index) {
+        const BadgeItem& source = before[index];
+        after.append(source);
+        if (selectedCursor >= selected.size() || selected[selectedCursor] != index) {
             continue;
         }
-        BadgeItem duplicate = before[index];
+
+        BadgeItem duplicate = source;
         duplicate.xMm += kDuplicateOffsetMm;
         duplicate.yMm += kDuplicateOffsetMm;
         duplicate.isSelected = false;
         after.append(duplicate);
         afterSelection.append(after.size() - 1);
+        ++selectedCursor;
     }
 
     if (afterSelection.isEmpty()) {
