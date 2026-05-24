@@ -576,6 +576,10 @@ QString badgeEditLabelForSnapshot(const QList<BadgeItem>& before,
     return QStringLiteral("編集");
 }
 
+QString actionLabelWithCount(const QString& base, int count) {
+    return count > 1 ? QStringLiteral("%1 (%2件)").arg(base).arg(count) : base;
+}
+
 BadgeItem badgeForLayoutPreview(BadgeItem badge) {
     // The current Designer guides describe a circular badge with bleed outside the finish size.
     badge.clipToCircle = true;
@@ -1344,6 +1348,24 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     if (m_actAlignBottom) {
         m_designerToolbar->addAction(m_actAlignBottom);
     }
+    auto* duplicateOffsetLabel = new QLabel(QStringLiteral("複製ずれ"));
+    m_designerToolbar->addWidget(duplicateOffsetLabel);
+    m_spinDuplicateOffset = new QDoubleSpinBox;
+    m_spinDuplicateOffset->setRange(0.0, 50.0);
+    m_spinDuplicateOffset->setDecimals(1);
+    m_spinDuplicateOffset->setSingleStep(0.5);
+    m_spinDuplicateOffset->setSuffix(QStringLiteral(" mm"));
+    m_spinDuplicateOffset->setValue(std::max(0.0, m_appSettings.duplicateOffsetMm));
+    m_spinDuplicateOffset->setToolTip(QStringLiteral("複製したバッジを少しずらして配置します"));
+    connect(m_spinDuplicateOffset, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this](double value) {
+        if (m_updatingUI) {
+            return;
+        }
+        m_appSettings.duplicateOffsetMm = std::max(0.0, value);
+        saveAppSettings();
+        appendLog(QStringLiteral("複製ずれを %1 mm に変更しました").arg(m_appSettings.duplicateOffsetMm, 0, 'f', 1));
+    });
+    m_designerToolbar->addWidget(m_spinDuplicateOffset);
     m_actMixedLayout = m_designerToolbar->addAction("面付け");
     connect(m_actMixedLayout, &QAction::triggered, this, [this]{ onMixedLayout(); });
     setMaterialIcon(m_actMixedLayout, QStringLiteral("view_quilt"));
@@ -2071,11 +2093,13 @@ void MainWindow::onBadgeEditFinished(BadgeGraphicItem* item) {
         return;
     }
 
-    const QString changeLabel = badgeEditLabelForSnapshot(beforeBadges,
-                                                          afterBadges,
-                                                          afterSelection,
-                                                          beforeSelection,
-                                                          afterSelection);
+    const QString changeLabel = actionLabelWithCount(
+        badgeEditLabelForSnapshot(beforeBadges,
+                                  afterBadges,
+                                  afterSelection,
+                                  beforeSelection,
+                                  afterSelection),
+        afterSelection.size());
 
     QTimer::singleShot(0, this, [this,
                                  beforeBadges,
@@ -2520,15 +2544,21 @@ void MainWindow::onPrint() {
 
 void MainWindow::onUndo() {
     if (m_undoStack) {
+        const QString label = m_undoStack->undoText();
         m_undoStack->undo();
-        appendLog("元に戻しました");
+        appendLog(label.isEmpty()
+                      ? QStringLiteral("元に戻しました")
+                      : QStringLiteral("元に戻しました: %1").arg(label));
     }
 }
 
 void MainWindow::onRedo() {
     if (m_undoStack) {
+        const QString label = m_undoStack->redoText();
         m_undoStack->redo();
-        appendLog("やり直しました");
+        appendLog(label.isEmpty()
+                      ? QStringLiteral("やり直しました")
+                      : QStringLiteral("やり直しました: %1").arg(label));
     }
 }
 
@@ -2547,8 +2577,9 @@ void MainWindow::onDelete() {
         }
     }
 
-    pushBadgeChange("削除", before, selected, after, {});
-    appendLog(QStringLiteral("選択中の %1 個を削除しました").arg(selected.size()));
+    const QString label = actionLabelWithCount(QStringLiteral("削除"), selected.size());
+    pushBadgeChange(label, before, selected, after, {});
+    appendLog(QStringLiteral("%1を履歴に追加しました").arg(label));
 }
 
 void MainWindow::onDuplicate() {
@@ -2588,8 +2619,9 @@ void MainWindow::onDuplicate() {
         return;
     }
 
-    pushBadgeChange("複製", before, selected, after, afterSelection);
-    appendLog(QStringLiteral("選択中の %1 個を複製しました").arg(afterSelection.size()));
+    const QString label = actionLabelWithCount(QStringLiteral("複製"), afterSelection.size());
+    pushBadgeChange(label, before, selected, after, afterSelection);
+    appendLog(QStringLiteral("%1を履歴に追加しました").arg(label));
 }
 
 void MainWindow::onToggleTheme() {
@@ -2888,8 +2920,9 @@ void MainWindow::onInspectorChanged() {
         m_designer->updateGuides(badgeGuideSizeMm(after[selected.first()]));
     }
 
-    pushBadgeChange("プロパティ変更", before, selected, after, selected, true);
-    appendLog(QStringLiteral("オブジェクト情報を更新しました"));
+    const QString label = actionLabelWithCount(QStringLiteral("プロパティ変更"), selected.size());
+    pushBadgeChange(label, before, selected, after, selected, true);
+    appendLog(QStringLiteral("%1を履歴に追加しました").arg(label));
 }
 
 void MainWindow::setInspectorControlsEnabled(bool on) {
@@ -3177,8 +3210,9 @@ void MainWindow::onSetImage() {
             setPrimaryImageLayer(after[index], path);
         }
     }
-    pushBadgeChange("画像レイヤー変更", before, selected, after, selected);
-    appendLog(QStringLiteral("画像レイヤーを更新しました: %1").arg(path));
+    const QString label = actionLabelWithCount(QStringLiteral("画像レイヤー変更"), selected.size());
+    pushBadgeChange(label, before, selected, after, selected);
+    appendLog(QStringLiteral("%1を履歴に追加しました: %2").arg(label, path));
 }
 
 void MainWindow::onNudgeRequested(double dxMm, double dyMm) {
@@ -3195,8 +3229,9 @@ void MainWindow::onNudgeRequested(double dxMm, double dyMm) {
         after[index].xMm += dxMm;
         after[index].yMm += dyMm;
     }
-    pushBadgeChange("移動", before, selected, after, selected, true);
-    appendLog(QStringLiteral("移動: %1 mm, %2 mm").arg(dxMm).arg(dyMm));
+    const QString label = actionLabelWithCount(QStringLiteral("移動"), selected.size());
+    pushBadgeChange(label, before, selected, after, selected, true);
+    appendLog(QStringLiteral("%1を履歴に追加しました: %2 mm, %3 mm").arg(label).arg(dxMm).arg(dyMm));
 }
 
 void MainWindow::onAlignLeft() {
@@ -3217,8 +3252,9 @@ void MainWindow::onAlignLeft() {
             after[index].xMm = left;
         }
     }
-    pushBadgeChange("左揃え", before, selected, after, selected);
-    appendLog("左揃えを実行しました");
+    const QString label = actionLabelWithCount(QStringLiteral("左揃え"), selected.size());
+    pushBadgeChange(label, before, selected, after, selected);
+    appendLog(QStringLiteral("%1を履歴に追加しました").arg(label));
 }
 
 void MainWindow::onAlignHCenter() {
@@ -3242,8 +3278,9 @@ void MainWindow::onAlignHCenter() {
             after[index].xMm = center - after[index].widthMm * 0.5;
         }
     }
-    pushBadgeChange("中央揃え(横)", before, selected, after, selected);
-    appendLog("中央揃え(横)を実行しました");
+    const QString label = actionLabelWithCount(QStringLiteral("中央揃え(横)"), selected.size());
+    pushBadgeChange(label, before, selected, after, selected);
+    appendLog(QStringLiteral("%1を履歴に追加しました").arg(label));
 }
 
 void MainWindow::onAlignRight() {
@@ -3264,8 +3301,9 @@ void MainWindow::onAlignRight() {
             after[index].xMm = right - after[index].widthMm;
         }
     }
-    pushBadgeChange("右揃え", before, selected, after, selected);
-    appendLog("右揃えを実行しました");
+    const QString label = actionLabelWithCount(QStringLiteral("右揃え"), selected.size());
+    pushBadgeChange(label, before, selected, after, selected);
+    appendLog(QStringLiteral("%1を履歴に追加しました").arg(label));
 }
 
 void MainWindow::onAlignTop() {
@@ -3286,8 +3324,9 @@ void MainWindow::onAlignTop() {
             after[index].yMm = top;
         }
     }
-    pushBadgeChange("上揃え", before, selected, after, selected);
-    appendLog("上揃えを実行しました");
+    const QString label = actionLabelWithCount(QStringLiteral("上揃え"), selected.size());
+    pushBadgeChange(label, before, selected, after, selected);
+    appendLog(QStringLiteral("%1を履歴に追加しました").arg(label));
 }
 
 void MainWindow::onAlignVCenter() {
@@ -3311,8 +3350,9 @@ void MainWindow::onAlignVCenter() {
             after[index].yMm = center - after[index].heightMm * 0.5;
         }
     }
-    pushBadgeChange("中央揃え(縦)", before, selected, after, selected);
-    appendLog("中央揃え(縦)を実行しました");
+    const QString label = actionLabelWithCount(QStringLiteral("中央揃え(縦)"), selected.size());
+    pushBadgeChange(label, before, selected, after, selected);
+    appendLog(QStringLiteral("%1を履歴に追加しました").arg(label));
 }
 
 void MainWindow::onAlignBottom() {
@@ -3333,8 +3373,9 @@ void MainWindow::onAlignBottom() {
             after[index].yMm = bottom - after[index].heightMm;
         }
     }
-    pushBadgeChange("下揃え", before, selected, after, selected);
-    appendLog("下揃えを実行しました");
+    const QString label = actionLabelWithCount(QStringLiteral("下揃え"), selected.size());
+    pushBadgeChange(label, before, selected, after, selected);
+    appendLog(QStringLiteral("%1を履歴に追加しました").arg(label));
 }
 
 // --- Effects ---
@@ -3463,8 +3504,9 @@ void MainWindow::onAddBadge() {
     b.yMm = center.y() / mmToPx - b.heightMm / 2;
     auto after = before;
     after.append(b);
-    pushBadgeChange("追加", before, QList<int>{}, after, QList<int>{static_cast<int>(after.size() - 1)});
-    appendLog("バッジを追加しました");
+    const QString label = QStringLiteral("追加");
+    pushBadgeChange(label, before, QList<int>{}, after, QList<int>{static_cast<int>(after.size() - 1)});
+    appendLog(QStringLiteral("%1を履歴に追加しました").arg(label));
 }
 
 void MainWindow::onBatchAdd() {
@@ -3572,8 +3614,9 @@ void MainWindow::onImageDropped(const QString& filePath) {
     b.label = QFileInfo(filePath).baseName();
     auto after = before;
     after.append(b);
-    pushBadgeChange("画像ドロップ", before, QList<int>{}, after, QList<int>{static_cast<int>(after.size() - 1)});
-    appendLog(QStringLiteral("画像を追加しました: %1").arg(filePath));
+    const QString label = QStringLiteral("画像ドロップ");
+    pushBadgeChange(label, before, QList<int>{}, after, QList<int>{static_cast<int>(after.size() - 1)});
+    appendLog(QStringLiteral("%1を履歴に追加しました: %2").arg(label, filePath));
 }
 
 void MainWindow::syncLayoutWorkspace(bool refreshDiagnostics) {
@@ -3939,6 +3982,10 @@ void MainWindow::applyAppSettings(const AppSettings& settings) {
     if (m_actSnapToGrid) {
         const QSignalBlocker blocker(m_actSnapToGrid);
         m_actSnapToGrid->setChecked(settings.snapToGrid);
+    }
+    if (m_spinDuplicateOffset) {
+        const QSignalBlocker blocker(m_spinDuplicateOffset);
+        m_spinDuplicateOffset->setValue(std::max(0.0, settings.duplicateOffsetMm));
     }
     if (m_designer) {
         m_designer->setGridVisible(settings.gridVisible);
