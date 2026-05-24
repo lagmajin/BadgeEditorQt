@@ -493,6 +493,28 @@ bool badgeEqualsIgnoringPosition(const BadgeItem& a, const BadgeItem& b) {
         && std::equal(a.layers.begin(), a.layers.end(), b.layers.begin(), badgeLayerEquals);
 }
 
+bool badgeEqualsIgnoringPositionAndSize(const BadgeItem& a, const BadgeItem& b) {
+    return a.productMode == b.productMode
+        && badgeGuideEquals(a.guide, b.guide)
+        && a.imageScale == b.imageScale
+        && a.materialPreset == b.materialPreset
+        && a.specularStrength == b.specularStrength
+        && a.envReflectionStrength == b.envReflectionStrength
+        && a.glitterStrength == b.glitterStrength
+        && a.rotation == b.rotation
+        && a.label == b.label
+        && a.imagePath == b.imagePath
+        && a.displayText == b.displayText
+        && a.clipToCircle == b.clipToCircle
+        && a.brightness == b.brightness
+        && a.contrast == b.contrast
+        && a.saturation == b.saturation
+        && a.flattenedForLayoutTransfer == b.flattenedForLayoutTransfer
+        && a.isSelected == b.isSelected
+        && a.layers.size() == b.layers.size()
+        && std::equal(a.layers.begin(), a.layers.end(), b.layers.begin(), badgeLayerEquals);
+}
+
 bool badgeListEquals(const QList<BadgeItem>& a, const QList<BadgeItem>& b) {
     if (a.size() != b.size()) {
         return false;
@@ -505,27 +527,53 @@ bool badgeListEquals(const QList<BadgeItem>& a, const QList<BadgeItem>& b) {
     return true;
 }
 
-bool badgeListMovesOnly(const QList<BadgeItem>& before, const QList<BadgeItem>& after, const QList<int>& selection) {
+QString badgeEditLabelForSnapshot(const QList<BadgeItem>& before,
+                                 const QList<BadgeItem>& after,
+                                 const QList<int>& selection,
+                                 const QList<int>& beforeSelection,
+                                 const QList<int>& afterSelection) {
+    if (beforeSelection != afterSelection) {
+        return QStringLiteral("編集");
+    }
     if (before.size() != after.size()) {
-        return false;
+        return QStringLiteral("編集");
     }
     if (selection.isEmpty()) {
-        return false;
+        return QStringLiteral("編集");
     }
+
     QSet<int> selected(selection.begin(), selection.end());
+    bool moved = false;
+    bool resized = false;
     for (int i = 0; i < before.size(); ++i) {
         if (selected.contains(i)) {
-            if (!badgeEqualsIgnoringPosition(before[i], after[i])) {
-                return false;
+            if (!badgeEqualsIgnoringPositionAndSize(before[i], after[i])) {
+                if (!badgeEqualsIgnoringPosition(before[i], after[i])) {
+                    return QStringLiteral("編集");
+                }
+                resized = true;
             }
-            if (before[i].xMm == after[i].xMm && before[i].yMm == after[i].yMm) {
-                return false;
+            if (before[i].widthMm != after[i].widthMm || before[i].heightMm != after[i].heightMm) {
+                resized = true;
+            }
+            if (before[i].xMm != after[i].xMm || before[i].yMm != after[i].yMm) {
+                moved = true;
             }
         } else if (!badgeEquals(before[i], after[i])) {
-            return false;
+            return QStringLiteral("編集");
         }
     }
-    return true;
+
+    if (moved && resized) {
+        return QStringLiteral("移動・サイズ変更");
+    }
+    if (moved) {
+        return QStringLiteral("移動");
+    }
+    if (resized) {
+        return QStringLiteral("サイズ変更");
+    }
+    return QStringLiteral("編集");
 }
 
 BadgeItem badgeForLayoutPreview(BadgeItem badge) {
@@ -2023,9 +2071,11 @@ void MainWindow::onBadgeEditFinished(BadgeGraphicItem* item) {
         return;
     }
 
-    const QString changeLabel = badgeListMovesOnly(beforeBadges, afterBadges, afterSelection)
-        ? QStringLiteral("移動")
-        : QStringLiteral("編集");
+    const QString changeLabel = badgeEditLabelForSnapshot(beforeBadges,
+                                                          afterBadges,
+                                                          afterSelection,
+                                                          beforeSelection,
+                                                          afterSelection);
 
     QTimer::singleShot(0, this, [this,
                                  beforeBadges,
