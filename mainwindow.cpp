@@ -31,6 +31,7 @@ import viewportbackend;
 #include <QDir>
 #include <QFile>
 #include <QHash>
+#include <QSet>
 #include <QIcon>
 #include <QMimeData>
 #include <QDragEnterEvent>
@@ -468,12 +469,59 @@ bool badgeEquals(const BadgeItem& a, const BadgeItem& b) {
         && std::equal(a.layers.begin(), a.layers.end(), b.layers.begin(), badgeLayerEquals);
 }
 
+bool badgeEqualsIgnoringPosition(const BadgeItem& a, const BadgeItem& b) {
+    return a.productMode == b.productMode
+        && badgeGuideEquals(a.guide, b.guide)
+        && a.widthMm == b.widthMm
+        && a.heightMm == b.heightMm
+        && a.imageScale == b.imageScale
+        && a.materialPreset == b.materialPreset
+        && a.specularStrength == b.specularStrength
+        && a.envReflectionStrength == b.envReflectionStrength
+        && a.glitterStrength == b.glitterStrength
+        && a.rotation == b.rotation
+        && a.label == b.label
+        && a.imagePath == b.imagePath
+        && a.displayText == b.displayText
+        && a.clipToCircle == b.clipToCircle
+        && a.brightness == b.brightness
+        && a.contrast == b.contrast
+        && a.saturation == b.saturation
+        && a.flattenedForLayoutTransfer == b.flattenedForLayoutTransfer
+        && a.isSelected == b.isSelected
+        && a.layers.size() == b.layers.size()
+        && std::equal(a.layers.begin(), a.layers.end(), b.layers.begin(), badgeLayerEquals);
+}
+
 bool badgeListEquals(const QList<BadgeItem>& a, const QList<BadgeItem>& b) {
     if (a.size() != b.size()) {
         return false;
     }
     for (int i = 0; i < a.size(); ++i) {
         if (!badgeEquals(a[i], b[i])) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool badgeListMovesOnly(const QList<BadgeItem>& before, const QList<BadgeItem>& after, const QList<int>& selection) {
+    if (before.size() != after.size()) {
+        return false;
+    }
+    if (selection.isEmpty()) {
+        return false;
+    }
+    QSet<int> selected(selection.begin(), selection.end());
+    for (int i = 0; i < before.size(); ++i) {
+        if (selected.contains(i)) {
+            if (!badgeEqualsIgnoringPosition(before[i], after[i])) {
+                return false;
+            }
+            if (before[i].xMm == after[i].xMm && before[i].yMm == after[i].yMm) {
+                return false;
+            }
+        } else if (!badgeEquals(before[i], after[i])) {
             return false;
         }
     }
@@ -1975,13 +2023,18 @@ void MainWindow::onBadgeEditFinished(BadgeGraphicItem* item) {
         return;
     }
 
+    const QString changeLabel = badgeListMovesOnly(beforeBadges, afterBadges, afterSelection)
+        ? QStringLiteral("移動")
+        : QStringLiteral("編集");
+
     QTimer::singleShot(0, this, [this,
                                  beforeBadges,
                                  beforeSelection,
                                  afterBadges,
-                                 afterSelection]() {
-        pushBadgeChange(QStringLiteral("編集"), beforeBadges, beforeSelection, afterBadges, afterSelection);
-        appendLog(QStringLiteral("編集内容を履歴に追加しました"));
+                                 afterSelection,
+                                 changeLabel]() {
+        pushBadgeChange(changeLabel, beforeBadges, beforeSelection, afterBadges, afterSelection);
+        appendLog(QStringLiteral("%1を履歴に追加しました").arg(changeLabel));
         requestBadgeEdited("badge edit finished");
     });
 }
