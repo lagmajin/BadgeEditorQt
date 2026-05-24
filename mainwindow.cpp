@@ -1102,6 +1102,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     auto* actRedo = editMenu->addAction("やり直し(&R)", this, &MainWindow::onRedo, QKeySequence::Redo);
     editMenu->addSeparator();
     auto* actDelete = editMenu->addAction("削除", this, &MainWindow::onDelete, QKeySequence::Delete);
+    auto* actDuplicate = editMenu->addAction("複製", this, &MainWindow::onDuplicate, QKeySequence("Ctrl+D"));
     editMenu->addSeparator();
     auto* actAlignLeft = editMenu->addAction("左揃え", this, &MainWindow::onAlignLeft, QKeySequence("Ctrl+Alt+Left"));
     auto* actAlignHCenter = editMenu->addAction("中央揃え(横)", this, &MainWindow::onAlignHCenter, QKeySequence("Ctrl+Alt+H"));
@@ -1132,6 +1133,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     setMaterialIcon(actUndo, QStringLiteral("undo"));
     setMaterialIcon(actRedo, QStringLiteral("redo"));
     setMaterialIcon(actDelete, QStringLiteral("delete"));
+    setMaterialIcon(actDuplicate, QStringLiteral("content_copy"));
     setMaterialIcon(actAlignLeft, QStringLiteral("format_align_left"));
     setMaterialIcon(actAlignHCenter, QStringLiteral("format_align_center"));
     setMaterialIcon(actAlignRight, QStringLiteral("format_align_right"));
@@ -1221,6 +1223,9 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     m_actBatchAdd = m_designerToolbar->addAction("一括");
     connect(m_actBatchAdd, &QAction::triggered, this, [this]{ onBatchAdd(); });
     setMaterialIcon(m_actBatchAdd, QStringLiteral("library_add"));
+    m_actDuplicate = m_designerToolbar->addAction("複製");
+    connect(m_actDuplicate, &QAction::triggered, this, [this]{ onDuplicate(); });
+    setMaterialIcon(m_actDuplicate, QStringLiteral("content_copy"));
     m_actMixedLayout = m_designerToolbar->addAction("面付け");
     connect(m_actMixedLayout, &QAction::triggered, this, [this]{ onMixedLayout(); });
     setMaterialIcon(m_actMixedLayout, QStringLiteral("view_quilt"));
@@ -2418,6 +2423,40 @@ void MainWindow::onDelete() {
     appendLog(QStringLiteral("選択中の %1 個を削除しました").arg(selected.size()));
 }
 
+void MainWindow::onDuplicate() {
+    const auto before = currentDesignerBadges();
+    auto selected = selectedBadgeIndices();
+    if (selected.isEmpty()) {
+        return;
+    }
+
+    std::sort(selected.begin(), selected.end());
+
+    QList<BadgeItem> after = before;
+    QList<int> afterSelection;
+    afterSelection.reserve(selected.size());
+
+    constexpr double kDuplicateOffsetMm = 2.0;
+    for (int index : selected) {
+        if (index < 0 || index >= before.size()) {
+            continue;
+        }
+        BadgeItem duplicate = before[index];
+        duplicate.xMm += kDuplicateOffsetMm;
+        duplicate.yMm += kDuplicateOffsetMm;
+        duplicate.isSelected = false;
+        after.append(duplicate);
+        afterSelection.append(after.size() - 1);
+    }
+
+    if (afterSelection.isEmpty()) {
+        return;
+    }
+
+    pushBadgeChange("複製", before, selected, after, afterSelection);
+    appendLog(QStringLiteral("選択中の %1 個を複製しました").arg(afterSelection.size()));
+}
+
 void MainWindow::onToggleTheme() {
     m_appSettings.darkTheme = !m_isDark;
     applyTheme(m_appSettings.darkTheme);
@@ -3552,6 +3591,9 @@ void MainWindow::updateToolbarsForMode() {
     }
     if (m_actBatchAdd) {
         m_actBatchAdd->setEnabled(designer);
+    }
+    if (m_actDuplicate) {
+        m_actDuplicate->setEnabled(designer);
     }
     if (m_actMixedLayout) {
         m_actMixedLayout->setEnabled(designer);

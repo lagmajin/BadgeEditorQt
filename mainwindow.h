@@ -62,6 +62,7 @@ private:
     void onUndo();
     void onRedo();
     void onDelete();
+    void onDuplicate();
 
     // View
     void onToggleTheme();
@@ -197,6 +198,7 @@ private:
     QMenu* m_savedPerspectiveMenu = nullptr;
     QAction* m_actAddBadge = nullptr;
     QAction* m_actBatchAdd = nullptr;
+    QAction* m_actDuplicate = nullptr;
     QAction* m_actMixedLayout = nullptr;
     QAction* m_actSendToLayout = nullptr;
     QAction* m_actClearLayout = nullptr;
