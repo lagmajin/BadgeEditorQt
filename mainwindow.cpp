@@ -1101,15 +1101,15 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     auto* actUndo = editMenu->addAction("元に戻す(&U)", this, &MainWindow::onUndo, QKeySequence::Undo);
     auto* actRedo = editMenu->addAction("やり直し(&R)", this, &MainWindow::onRedo, QKeySequence::Redo);
     editMenu->addSeparator();
-    auto* actDelete = editMenu->addAction("削除", this, &MainWindow::onDelete, QKeySequence::Delete);
-    auto* actDuplicate = editMenu->addAction("複製", this, &MainWindow::onDuplicate, QKeySequence("Ctrl+D"));
+    m_actDelete = editMenu->addAction("削除", this, &MainWindow::onDelete, QKeySequence::Delete);
+    m_actDuplicate = editMenu->addAction("複製", this, &MainWindow::onDuplicate, QKeySequence("Ctrl+D"));
     editMenu->addSeparator();
-    auto* actAlignLeft = editMenu->addAction("左揃え", this, &MainWindow::onAlignLeft, QKeySequence("Ctrl+Alt+Left"));
-    auto* actAlignHCenter = editMenu->addAction("中央揃え(横)", this, &MainWindow::onAlignHCenter, QKeySequence("Ctrl+Alt+H"));
-    auto* actAlignRight = editMenu->addAction("右揃え", this, &MainWindow::onAlignRight, QKeySequence("Ctrl+Alt+Right"));
-    auto* actAlignTop = editMenu->addAction("上揃え", this, &MainWindow::onAlignTop, QKeySequence("Ctrl+Alt+Up"));
-    auto* actAlignVCenter = editMenu->addAction("中央揃え(縦)", this, &MainWindow::onAlignVCenter, QKeySequence("Ctrl+Alt+V"));
-    auto* actAlignBottom = editMenu->addAction("下揃え", this, &MainWindow::onAlignBottom, QKeySequence("Ctrl+Alt+Down"));
+    m_actAlignLeft = editMenu->addAction("左揃え", this, &MainWindow::onAlignLeft, QKeySequence("Ctrl+Alt+Left"));
+    m_actAlignHCenter = editMenu->addAction("中央揃え(横)", this, &MainWindow::onAlignHCenter, QKeySequence("Ctrl+Alt+H"));
+    m_actAlignRight = editMenu->addAction("右揃え", this, &MainWindow::onAlignRight, QKeySequence("Ctrl+Alt+Right"));
+    m_actAlignTop = editMenu->addAction("上揃え", this, &MainWindow::onAlignTop, QKeySequence("Ctrl+Alt+Up"));
+    m_actAlignVCenter = editMenu->addAction("中央揃え(縦)", this, &MainWindow::onAlignVCenter, QKeySequence("Ctrl+Alt+V"));
+    m_actAlignBottom = editMenu->addAction("下揃え", this, &MainWindow::onAlignBottom, QKeySequence("Ctrl+Alt+Down"));
     auto* backspaceShortcut = new QShortcut(QKeySequence(Qt::Key_Backspace), this);
     connect(backspaceShortcut, &QShortcut::activated, this, [this]{ onDelete(); });
     auto* layoutHomeShortcut = new QShortcut(QKeySequence(Qt::Key_Home), this);
@@ -1132,14 +1132,14 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     });
     setMaterialIcon(actUndo, QStringLiteral("undo"));
     setMaterialIcon(actRedo, QStringLiteral("redo"));
-    setMaterialIcon(actDelete, QStringLiteral("delete"));
-    setMaterialIcon(actDuplicate, QStringLiteral("content_copy"));
-    setMaterialIcon(actAlignLeft, QStringLiteral("format_align_left"));
-    setMaterialIcon(actAlignHCenter, QStringLiteral("format_align_center"));
-    setMaterialIcon(actAlignRight, QStringLiteral("format_align_right"));
-    setMaterialIcon(actAlignTop, QStringLiteral("vertical_align_top"));
-    setMaterialIcon(actAlignVCenter, QStringLiteral("vertical_align_center"));
-    setMaterialIcon(actAlignBottom, QStringLiteral("vertical_align_bottom"));
+    setMaterialIcon(m_actDelete, QStringLiteral("delete"));
+    setMaterialIcon(m_actDuplicate, QStringLiteral("content_copy"));
+    setMaterialIcon(m_actAlignLeft, QStringLiteral("format_align_left"));
+    setMaterialIcon(m_actAlignHCenter, QStringLiteral("format_align_center"));
+    setMaterialIcon(m_actAlignRight, QStringLiteral("format_align_right"));
+    setMaterialIcon(m_actAlignTop, QStringLiteral("vertical_align_top"));
+    setMaterialIcon(m_actAlignVCenter, QStringLiteral("vertical_align_center"));
+    setMaterialIcon(m_actAlignBottom, QStringLiteral("vertical_align_bottom"));
 
     auto* viewMenu = menuBar()->addMenu("表示(&V)");
     auto* actViewZoomIn = viewMenu->addAction("ズームイン", this, [this]{ m_zoomScale *= 1.2; m_zoomLabel->setText(QString::number(m_zoomScale*100,'f',0)+"%"); });
@@ -1223,9 +1223,31 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     m_actBatchAdd = m_designerToolbar->addAction("一括");
     connect(m_actBatchAdd, &QAction::triggered, this, [this]{ onBatchAdd(); });
     setMaterialIcon(m_actBatchAdd, QStringLiteral("library_add"));
-    m_actDuplicate = m_designerToolbar->addAction("複製");
-    connect(m_actDuplicate, &QAction::triggered, this, [this]{ onDuplicate(); });
-    setMaterialIcon(m_actDuplicate, QStringLiteral("content_copy"));
+    m_designerToolbar->addSeparator();
+    if (m_actDelete) {
+        m_designerToolbar->addAction(m_actDelete);
+    }
+    if (m_actDuplicate) {
+        m_designerToolbar->addAction(m_actDuplicate);
+    }
+    if (m_actAlignLeft) {
+        m_designerToolbar->addAction(m_actAlignLeft);
+    }
+    if (m_actAlignHCenter) {
+        m_designerToolbar->addAction(m_actAlignHCenter);
+    }
+    if (m_actAlignRight) {
+        m_designerToolbar->addAction(m_actAlignRight);
+    }
+    if (m_actAlignTop) {
+        m_designerToolbar->addAction(m_actAlignTop);
+    }
+    if (m_actAlignVCenter) {
+        m_designerToolbar->addAction(m_actAlignVCenter);
+    }
+    if (m_actAlignBottom) {
+        m_designerToolbar->addAction(m_actAlignBottom);
+    }
     m_actMixedLayout = m_designerToolbar->addAction("面付け");
     connect(m_actMixedLayout, &QAction::triggered, this, [this]{ onMixedLayout(); });
     setMaterialIcon(m_actMixedLayout, QStringLiteral("view_quilt"));
@@ -2441,7 +2463,7 @@ void MainWindow::onDuplicate() {
     QList<int> afterSelection;
     afterSelection.reserve(selected.size());
 
-    constexpr double kDuplicateOffsetMm = 2.0;
+    const double duplicateOffsetMm = std::max(0.0, m_appSettings.duplicateOffsetMm);
     int selectedCursor = 0;
     for (int index = 0; index < before.size(); ++index) {
         const BadgeItem& source = before[index];
@@ -2451,8 +2473,8 @@ void MainWindow::onDuplicate() {
         }
 
         BadgeItem duplicate = source;
-        duplicate.xMm += kDuplicateOffsetMm;
-        duplicate.yMm += kDuplicateOffsetMm;
+        duplicate.xMm += duplicateOffsetMm;
+        duplicate.yMm += duplicateOffsetMm;
         duplicate.isSelected = false;
         after.append(duplicate);
         afterSelection.append(after.size() - 1);
@@ -3605,6 +3627,27 @@ void MainWindow::updateToolbarsForMode() {
     if (m_actDuplicate) {
         m_actDuplicate->setEnabled(designer);
     }
+    if (m_actDelete) {
+        m_actDelete->setEnabled(designer);
+    }
+    if (m_actAlignLeft) {
+        m_actAlignLeft->setEnabled(designer);
+    }
+    if (m_actAlignHCenter) {
+        m_actAlignHCenter->setEnabled(designer);
+    }
+    if (m_actAlignRight) {
+        m_actAlignRight->setEnabled(designer);
+    }
+    if (m_actAlignTop) {
+        m_actAlignTop->setEnabled(designer);
+    }
+    if (m_actAlignVCenter) {
+        m_actAlignVCenter->setEnabled(designer);
+    }
+    if (m_actAlignBottom) {
+        m_actAlignBottom->setEnabled(designer);
+    }
     if (m_actMixedLayout) {
         m_actMixedLayout->setEnabled(designer);
     }
@@ -4002,6 +4045,7 @@ void MainWindow::loadAppSettings() {
     loaded.glitterPattern = settings.value("app/glitterPattern", loaded.glitterPattern).toInt();
     loaded.printResolution = settings.value("app/printResolution", loaded.printResolution).toInt();
     loaded.experimentalGpuViewport = settings.value("app/experimentalGpuViewport", loaded.experimentalGpuViewport).toBool();
+    loaded.duplicateOffsetMm = settings.value("app/duplicateOffsetMm", loaded.duplicateOffsetMm).toDouble();
     applyAppSettings(loaded);
 }
 
@@ -4018,6 +4062,7 @@ void MainWindow::saveAppSettings() {
     settings.setValue("app/glitterPattern", m_appSettings.glitterPattern);
     settings.setValue("app/printResolution", std::max(72, m_appSettings.printResolution));
     settings.setValue("app/experimentalGpuViewport", m_appSettings.experimentalGpuViewport);
+    settings.setValue("app/duplicateOffsetMm", std::max(0.0, m_appSettings.duplicateOffsetMm));
 }
 
 void MainWindow::resetDockState() {

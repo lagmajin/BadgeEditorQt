@@ -199,6 +199,13 @@ private:
     QAction* m_actAddBadge = nullptr;
     QAction* m_actBatchAdd = nullptr;
     QAction* m_actDuplicate = nullptr;
+    QAction* m_actDelete = nullptr;
+    QAction* m_actAlignLeft = nullptr;
+    QAction* m_actAlignHCenter = nullptr;
+    QAction* m_actAlignRight = nullptr;
+    QAction* m_actAlignTop = nullptr;
+    QAction* m_actAlignVCenter = nullptr;
+    QAction* m_actAlignBottom = nullptr;
     QAction* m_actMixedLayout = nullptr;
     QAction* m_actSendToLayout = nullptr;
     QAction* m_actClearLayout = nullptr;

@@ -119,6 +119,13 @@ AppSettingsDialog::AppSettingsDialog(const AppSettings& settings, QWidget* paren
     m_printResolution->setSuffix(" DPI");
     m_printResolution->setValue(std::clamp(settings.printResolution, 72, 1200));
     printForm->addRow("解像度:", m_printResolution);
+    m_duplicateOffset = new QDoubleSpinBox;
+    m_duplicateOffset->setRange(0.0, 50.0);
+    m_duplicateOffset->setDecimals(1);
+    m_duplicateOffset->setSingleStep(0.5);
+    m_duplicateOffset->setSuffix(" mm");
+    m_duplicateOffset->setValue(std::max(0.0, settings.duplicateOffsetMm));
+    printForm->addRow("複製オフセット:", m_duplicateOffset);
     root->addWidget(printGroup);
 
     auto* advancedGroup = new QGroupBox("実験");
@@ -197,5 +204,6 @@ AppSettings AppSettingsDialog::settings() const {
     result.glitterPattern = m_glitterPattern ? m_glitterPattern->currentIndex() : 0;
     result.printResolution = m_printResolution ? m_printResolution->value() : 300;
     result.experimentalGpuViewport = m_experimentalGpuViewport ? m_experimentalGpuViewport->isChecked() : false;
+    result.duplicateOffsetMm = m_duplicateOffset ? m_duplicateOffset->value() : 2.0;
     return result;
 }
