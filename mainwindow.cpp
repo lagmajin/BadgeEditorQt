@@ -2218,7 +2218,10 @@ void MainWindow::onExportPdf() {
     default:
         break;
     }
-    if (!m_layoutWorkspace->exportPdf(pages, outPath, dlg.dpi(), colorModel, dlg.includeGuides())) {
+    const QString pdfTitle = m_currentFile.isEmpty()
+        ? QStringLiteral("BadgeEditorQt Layout")
+        : QFileInfo(m_currentFile).completeBaseName();
+    if (!m_layoutWorkspace->exportPdf(pages, outPath, dlg.dpi(), colorModel, dlg.includeGuides(), pdfTitle)) {
         showOperationWarning(this,
                              QStringLiteral("PDF出力"),
                              QStringLiteral("PDFの書き出し"),
