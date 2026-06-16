@@ -1021,8 +1021,12 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     setMaterialIcon(actPrint, QStringLiteral("print"));
 
     auto* editMenu = menuBar()->addMenu("編集(&E)");
-    auto* actUndo = editMenu->addAction("元に戻す(&U)", this, &MainWindow::onUndo, QKeySequence::Undo);
-    auto* actRedo = editMenu->addAction("やり直し(&R)", this, &MainWindow::onRedo, QKeySequence::Redo);
+    m_actUndo = m_undoStack->createUndoAction(this, QStringLiteral("元に戻す(&U)"));
+    m_actUndo->setShortcut(QKeySequence::Undo);
+    editMenu->addAction(m_actUndo);
+    m_actRedo = m_undoStack->createRedoAction(this, QStringLiteral("やり直し(&R)"));
+    m_actRedo->setShortcut(QKeySequence::Redo);
+    editMenu->addAction(m_actRedo);
     editMenu->addSeparator();
     auto* actDelete = editMenu->addAction("削除", this, &MainWindow::onDelete, QKeySequence::Delete);
     editMenu->addSeparator();
@@ -1052,8 +1056,8 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
         requestLayoutRefresh("page selected");
         flushInternalEvents();
     });
-    setMaterialIcon(actUndo, QStringLiteral("undo"));
-    setMaterialIcon(actRedo, QStringLiteral("redo"));
+    setMaterialIcon(m_actUndo, QStringLiteral("undo"));
+    setMaterialIcon(m_actRedo, QStringLiteral("redo"));
     setMaterialIcon(actDelete, QStringLiteral("delete"));
     setMaterialIcon(actAlignLeft, QStringLiteral("format_align_left"));
     setMaterialIcon(actAlignHCenter, QStringLiteral("format_align_center"));
@@ -1121,6 +1125,9 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     setMaterialIcon(m_actLayout, QStringLiteral("grid_view"));
     connect(m_actDesigner, &QAction::triggered, this, [this]{ onModeChanged(true); });
     connect(m_actLayout, &QAction::triggered, this, [this]{ onModeChanged(false); });
+    m_commonToolbar->addSeparator();
+    m_commonToolbar->addAction(m_actUndo);
+    m_commonToolbar->addAction(m_actRedo);
     m_commonToolbar->addSeparator();
     m_commonToolbar->addAction(m_actTheme);
     m_commonToolbar->addAction(m_actAppSettings);
@@ -2082,6 +2089,9 @@ W_OBJECT_IMPL(MainWindow)
 
 // --- File slots ---
 void MainWindow::onNew() {
+    if (m_undoStack) {
+        m_undoStack->clear();
+    }
     m_currentFile.clear();
     m_badges.clear();
     m_layoutBadges.clear();
@@ -2305,20 +2315,6 @@ void MainWindow::onPrint() {
         m_windowsIntegration->showToast(QStringLiteral("印刷を開始しました"),
                                         printer.printerName(),
                                         WindowsIntegration::ToastKind::Success);
-    }
-}
-
-void MainWindow::onUndo() {
-    if (m_undoStack) {
-        m_undoStack->undo();
-        appendLog("元に戻しました");
-    }
-}
-
-void MainWindow::onRedo() {
-    if (m_undoStack) {
-        m_undoStack->redo();
-        appendLog("やり直しました");
     }
 }
 

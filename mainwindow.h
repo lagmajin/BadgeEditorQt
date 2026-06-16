@@ -60,8 +60,6 @@ private:
     void onPrint();
 
     // Edit
-    void onUndo();
-    void onRedo();
     void onDelete();
 
     // View
@@ -194,6 +192,8 @@ private:
     QAction* m_actPrint = nullptr;
     QAction* m_actGridVisible = nullptr;
     QAction* m_actSnapToGrid = nullptr;
+    QAction* m_actUndo = nullptr;
+    QAction* m_actRedo = nullptr;
     QMenu* m_perspectiveMenu = nullptr;
     QMenu* m_savedPerspectiveMenu = nullptr;
     QAction* m_actAddBadge = nullptr;
