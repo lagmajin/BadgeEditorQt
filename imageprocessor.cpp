@@ -139,6 +139,17 @@ QImage loadViaQtBytes(const QString& path) {
     return {};
 }
 
+QImage downscaleToMaxSize(QImage image, int maxSize) {
+    if (maxSize <= 0 || image.isNull()) {
+        return image;
+    }
+    if (image.width() <= maxSize && image.height() <= maxSize) {
+        return image;
+    }
+    const QSize target = image.size().scaled(maxSize, maxSize, Qt::KeepAspectRatio);
+    return image.scaled(target, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+}
+
 QImage loadViaOiio(const QString& path) {
     const auto raw = badge::load_image(path.toUtf8().constData());
     if (!raw) {
@@ -243,7 +254,7 @@ QImage loadViaWic(const QString& path) {
 
 }
 
-QImage ImageProcessor::loadImage(const QString& path, QString* colorSpaceLabel) {
+QImage ImageProcessor::loadImage(const QString& path, QString* colorSpaceLabel, int maxSize) {
     const int dot = path.lastIndexOf(QLatin1Char('.'));
     const QString suffix = dot >= 0 ? path.mid(dot + 1).toLower() : QString();
 #ifdef BADGEEDITOR_HAS_QTSVG
@@ -279,7 +290,7 @@ QImage ImageProcessor::loadImage(const QString& path, QString* colorSpaceLabel) 
                 if (colorSpaceLabel) {
                     *colorSpaceLabel = QStringLiteral("SVG / sRGB");
                 }
-                return image;
+                return downscaleToMaxSize(std::move(image), maxSize);
             }
         }
     }
@@ -296,7 +307,7 @@ QImage ImageProcessor::loadImage(const QString& path, QString* colorSpaceLabel) 
         if (colorSpaceLabel) {
             *colorSpaceLabel = QStringLiteral("WIC / sRGB前提");
         }
-        return viaWic;
+        return downscaleToMaxSize(std::move(viaWic), maxSize);
     }
 #endif
 
@@ -304,14 +315,14 @@ QImage ImageProcessor::loadImage(const QString& path, QString* colorSpaceLabel) 
         if (colorSpaceLabel) {
             *colorSpaceLabel = describeColorSpace(viaQt);
         }
-        return viaQt;
+        return downscaleToMaxSize(std::move(viaQt), maxSize);
     }
 
     if (QImage viaQtBytes = loadViaQtBytes(path); !viaQtBytes.isNull()) {
         if (colorSpaceLabel) {
             *colorSpaceLabel = describeColorSpace(viaQtBytes);
         }
-        return viaQtBytes;
+        return downscaleToMaxSize(std::move(viaQtBytes), maxSize);
     }
 
 #ifdef BADGEEDITOR_ENABLE_OIIO
@@ -321,7 +332,7 @@ QImage ImageProcessor::loadImage(const QString& path, QString* colorSpaceLabel) 
         if (colorSpaceLabel) {
             *colorSpaceLabel = QStringLiteral("OIIO / sRGB前提");
         }
-        return viaOiio;
+        return downscaleToMaxSize(std::move(viaOiio), maxSize);
     }
 #endif
 
@@ -330,7 +341,7 @@ QImage ImageProcessor::loadImage(const QString& path, QString* colorSpaceLabel) 
         if (colorSpaceLabel) {
             *colorSpaceLabel = describeColorSpace(fallback);
         }
-        return normalizeToSrgb(std::move(fallback));
+        return downscaleToMaxSize(normalizeToSrgb(std::move(fallback)), maxSize);
     }
     if (colorSpaceLabel) {
         *colorSpaceLabel = QStringLiteral("読み込み失敗");
