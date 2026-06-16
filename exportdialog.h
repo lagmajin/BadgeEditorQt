@@ -14,7 +14,14 @@ class ExportDialog : public QDialog {
 public:
     enum class Format {
         Pdf,
+        Image,
+    };
+
+    enum class ImageFormat {
         Png,
+        Jpeg,
+        Tiff,
+        Webp,
     };
 
     explicit ExportDialog(Format format, const QString& defaultPath, QWidget* parent = nullptr);
@@ -24,6 +31,7 @@ public:
     bool whiteBackground() const;
     bool includeGuides() const;
     int pdfColorModelIndex() const;
+    ImageFormat imageFormat() const;
 
 private:
     Format m_format;
@@ -34,6 +42,7 @@ private:
     QComboBox* m_pdfPreset = nullptr;
     QComboBox* m_pdfColorModel = nullptr;
     QLabel* m_pdfPresetHelp = nullptr;
+    QComboBox* m_imageFormatCombo = nullptr;
 };
 
 #endif

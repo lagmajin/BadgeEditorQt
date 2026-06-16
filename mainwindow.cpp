@@ -2242,7 +2242,7 @@ void MainWindow::onExportPng() {
     const QString defaultName = m_currentFile.isEmpty()
         ? QStringLiteral("layout.png")
         : QFileInfo(m_currentFile).completeBaseName() + QStringLiteral("_layout.png");
-    ExportDialog dlg(ExportDialog::Format::Png, defaultName, this);
+    ExportDialog dlg(ExportDialog::Format::Image, defaultName, this);
     if (dlg.exec() != QDialog::Accepted) {
         return;
     }
@@ -2251,10 +2251,36 @@ void MainWindow::onExportPng() {
         QMessageBox::warning(this, "画像出力", "保存先を指定してください");
         return;
     }
-    if (!outPath.endsWith(".png", Qt::CaseInsensitive)) {
-        outPath += ".png";
+    QString imageFormatName = QStringLiteral("PNG");
+    switch (dlg.imageFormat()) {
+    case ExportDialog::ImageFormat::Jpeg:
+        imageFormatName = QStringLiteral("JPG");
+        if (!outPath.endsWith(QLatin1String(".jpg"), Qt::CaseInsensitive)
+            && !outPath.endsWith(QLatin1String(".jpeg"), Qt::CaseInsensitive)) {
+            outPath += QStringLiteral(".jpg");
+        }
+        break;
+    case ExportDialog::ImageFormat::Tiff:
+        imageFormatName = QStringLiteral("TIF");
+        if (!outPath.endsWith(QLatin1String(".tif"), Qt::CaseInsensitive)
+            && !outPath.endsWith(QLatin1String(".tiff"), Qt::CaseInsensitive)) {
+            outPath += QStringLiteral(".tif");
+        }
+        break;
+    case ExportDialog::ImageFormat::Webp:
+        imageFormatName = QStringLiteral("WEBP");
+        if (!outPath.endsWith(QLatin1String(".webp"), Qt::CaseInsensitive)) {
+            outPath += QStringLiteral(".webp");
+        }
+        break;
+    case ExportDialog::ImageFormat::Png:
+    default:
+        if (!outPath.endsWith(QLatin1String(".png"), Qt::CaseInsensitive)) {
+            outPath += QStringLiteral(".png");
+        }
+        break;
     }
-    if (!m_layoutWorkspace->exportPng(outPath, dlg.dpi(), dlg.whiteBackground(), dlg.includeGuides())) {
+    if (!m_layoutWorkspace->exportPng(outPath, dlg.dpi(), dlg.whiteBackground(), dlg.includeGuides(), imageFormatName)) {
         showOperationWarning(this,
                              QStringLiteral("画像出力"),
                              QStringLiteral("PNGの書き出し"),
