@@ -58,7 +58,7 @@ ExportDialog::ExportDialog(Format format, const QString& defaultPath, QWidget* p
     auto* info = new QLabel(
         format == Format::Pdf
             ? "用紙サイズは mm 基準で出力します。PDF は印刷向けの高解像度出力です。"
-            : "PNG はラスタ画像として出力します。解像度を上げると書き出しサイズも増えます。");
+            : "Image: write a raster image. Higher DPI increases the output file size.");
     info->setWordWrap(true);
     root->addWidget(info);
 
@@ -68,7 +68,7 @@ ExportDialog::ExportDialog(Format format, const QString& defaultPath, QWidget* p
     m_pathEdit = new QLineEdit(defaultPath);
     auto* browseBtn = new QPushButton("参照...");
     connect(browseBtn, &QPushButton::clicked, this, [this]() {
-        const QString filter = (m_format == Format::Pdf) ? "PDF (*.pdf)" : "PNG (*.png)";
+        const QString filter = (m_format == Format::Pdf) ? "PDF (*.pdf)" : "Image (*.png *.jpg *.jpeg *.tif *.tiff *.webp)";
         const QString selected = QFileDialog::getSaveFileName(this, windowTitle(), m_pathEdit->text(), filter);
         if (!selected.isEmpty()) {
             m_pathEdit->setText(selected);
@@ -89,7 +89,14 @@ ExportDialog::ExportDialog(Format format, const QString& defaultPath, QWidget* p
     m_includeGuides = new QCheckBox("切り抜きガイドを含める");
     m_includeGuides->setChecked(false);
     optForm->addRow(m_includeGuides);
-    if (m_format == Format::Png) {
+    if (m_format == Format::Image) {
+        m_imageFormatCombo = new QComboBox;
+        m_imageFormatCombo->addItem("PNG (*.png)", static_cast<int>(ImageFormat::Png));
+        m_imageFormatCombo->addItem("JPEG (*.jpg)", static_cast<int>(ImageFormat::Jpeg));
+        m_imageFormatCombo->addItem("TIFF (*.tif)", static_cast<int>(ImageFormat::Tiff));
+        m_imageFormatCombo->addItem("WebP (*.webp)", static_cast<int>(ImageFormat::Webp));
+        optForm->addRow("Format:", m_imageFormatCombo);
+
         m_whiteBackground = new QCheckBox("白背景で出力");
         m_whiteBackground->setChecked(true);
         optForm->addRow(m_whiteBackground);
@@ -176,4 +183,11 @@ bool ExportDialog::includeGuides() const {
 
 int ExportDialog::pdfColorModelIndex() const {
     return m_pdfColorModel ? m_pdfColorModel->currentIndex() : 0;
+}
+
+ExportDialog::ImageFormat ExportDialog::imageFormat() const {
+    if (!m_imageFormatCombo) {
+        return ImageFormat::Png;
+    }
+    return static_cast<ImageFormat>(m_imageFormatCombo->currentData().toInt());
 }

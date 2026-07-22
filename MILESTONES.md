@@ -1,5 +1,11 @@
 # Milestones
 
+## Current Milestone: Gradual `std` Module Expansion
+- Keep working from the `develop` branch, not `master` or `main`.
+- Expand `import std;` gradually, starting from leaf modules that are mostly standard-library only.
+- Keep Qt-heavy modules on `#include`-based boundaries until the next pass.
+- Prefer small, reversible module steps over a broad source-wide migration.
+
 ## Phase 1: Surface Separation
 - Split Designer and Layout into separate widgets.
 - Keep MainWindow as the wiring layer only.

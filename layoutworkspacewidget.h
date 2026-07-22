@@ -32,8 +32,8 @@ public:
     QString lastError() const;
     QPixmap renderPageThumbnail(const QList<BadgeItem>& pages, int sizePx = 96, bool includeGuides = false) const;
     bool exportPdf(const QString& filePath, int dpi = 300, QPdfWriter::ColorModel colorModel = QPdfWriter::ColorModel::RGB, bool includeGuides = false) const;
-    bool exportPdf(const QList<QList<BadgeItem>>& pages, const QString& filePath, int dpi = 300, QPdfWriter::ColorModel colorModel = QPdfWriter::ColorModel::RGB, bool includeGuides = false) const;
-    bool exportPng(const QString& filePath, int dpi = 300, bool whiteBackground = true, bool includeGuides = false) const;
+    bool exportPdf(const QList<QList<BadgeItem>>& pages, const QString& filePath, int dpi = 300, QPdfWriter::ColorModel colorModel = QPdfWriter::ColorModel::RGB, bool includeGuides = false, const QString& title = QString()) const;
+    bool exportPng(const QString& filePath, int dpi = 300, bool whiteBackground = true, bool includeGuides = false, const QString& imageFormat = QStringLiteral("PNG")) const;
     bool print(QPrinter* printer, bool includeGuides = false) const;
     bool print(QPrinter* printer, const QList<QList<BadgeItem>>& pages, bool includeGuides = false) const;
 

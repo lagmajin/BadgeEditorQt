@@ -113,7 +113,6 @@ QImage loadViaQtBytes(const QString& path) {
         return {};
     }
 
-    // Try a device-backed reader first so Qt can inspect the encoded stream directly.
     QBuffer buffer;
     buffer.setData(bytes);
     if (buffer.open(QIODevice::ReadOnly)) {
@@ -126,8 +125,6 @@ QImage loadViaQtBytes(const QString& path) {
         }
     }
 
-    // Fall back to raw byte decoding. Some PNGs decode here even when file/path-based
-    // readers reject them.
     QImage image = QImage::fromData(bytes);
     if (!image.isNull()) {
         return normalizeToSrgb(std::move(image));
@@ -141,6 +138,17 @@ QImage loadViaQtBytes(const QString& path) {
     }
 
     return {};
+}
+
+QImage downscaleToMaxSize(QImage image, int maxSize) {
+    if (maxSize <= 0 || image.isNull()) {
+        return image;
+    }
+    if (image.width() <= maxSize && image.height() <= maxSize) {
+        return image;
+    }
+    const QSize target = image.size().scaled(maxSize, maxSize, Qt::KeepAspectRatio);
+    return image.scaled(target, Qt::KeepAspectRatio, Qt::SmoothTransformation);
 }
 
 QImage loadViaOiio(const QString& path) {
@@ -283,7 +291,7 @@ QImage ImageProcessor::loadImage(const QString& path, QString* colorSpaceLabel) 
                 if (colorSpaceLabel) {
                     *colorSpaceLabel = QStringLiteral("SVG / sRGB");
                 }
-                return image;
+                return downscaleToMaxSize(std::move(image), maxSize);
             }
         }
     }
@@ -300,7 +308,7 @@ QImage ImageProcessor::loadImage(const QString& path, QString* colorSpaceLabel) 
         if (colorSpaceLabel) {
             *colorSpaceLabel = QStringLiteral("WIC / sRGB前提");
         }
-        return viaWic;
+        return downscaleToMaxSize(std::move(viaWic), maxSize);
     }
 #endif
 
@@ -308,14 +316,14 @@ QImage ImageProcessor::loadImage(const QString& path, QString* colorSpaceLabel) 
         if (colorSpaceLabel) {
             *colorSpaceLabel = describeColorSpace(viaQt);
         }
-        return viaQt;
+        return downscaleToMaxSize(std::move(viaQt), maxSize);
     }
 
     if (QImage viaQtBytes = loadViaQtBytes(path); !viaQtBytes.isNull()) {
         if (colorSpaceLabel) {
             *colorSpaceLabel = describeColorSpace(viaQtBytes);
         }
-        return viaQtBytes;
+        return downscaleToMaxSize(std::move(viaQtBytes), maxSize);
     }
 
 #ifdef BADGEEDITOR_ENABLE_OIIO
@@ -334,7 +342,7 @@ QImage ImageProcessor::loadImage(const QString& path, QString* colorSpaceLabel) 
         if (colorSpaceLabel) {
             *colorSpaceLabel = describeColorSpace(fallback);
         }
-        return normalizeToSrgb(std::move(fallback));
+        return downscaleToMaxSize(normalizeToSrgb(std::move(fallback)), maxSize);
     }
     if (colorSpaceLabel) {
         *colorSpaceLabel = QStringLiteral("読み込み失敗");

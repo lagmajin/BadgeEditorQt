@@ -8,12 +8,10 @@ module;
 #include <QFileInfo>
 #include <QString>
 #include "badge.model.h"
-#include <optional>
-#include <string>
-#include <vector>
 
 export module badge.documentio;
 
+import std;
 import badge.document;
 
 export namespace badge {

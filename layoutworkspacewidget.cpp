@@ -652,7 +652,7 @@ QPixmap LayoutWorkspaceWidget::renderPageThumbnail(const QList<BadgeItem>& page,
     return thumb;
 }
 
-bool LayoutWorkspaceWidget::exportPng(const QString& filePath, int dpi, bool whiteBackground, bool includeGuides) const {
+bool LayoutWorkspaceWidget::exportPng(const QString& filePath, int dpi, bool whiteBackground, bool includeGuides, const QString& imageFormat) const {
     if (!m_scene || m_impl->document.paper.widthMm <= 0.0 || m_impl->document.paper.heightMm <= 0.0) {
         m_impl->lastError = QStringLiteral("PNG 出力に必要な用紙サイズが未設定です");
         return false;
@@ -690,7 +690,7 @@ bool LayoutWorkspaceWidget::exportPng(const QString& filePath, int dpi, bool whi
         setSceneItemsVisible(emptyHints, true);
         setSceneItemsVisible(bleedGuides, true);
     }
-    const bool ok = image.save(filePath);
+    const bool ok = image.save(filePath, imageFormat.toUtf8().constData());
     if (ok) {
         m_impl->lastError.clear();
     } else {
@@ -719,6 +719,10 @@ bool LayoutWorkspaceWidget::exportPdf(const QString& filePath, int dpi, QPdfWrit
     writer.setColorModel(colorModel);
     if (colorModel == QPdfWriter::ColorModel::RGB) {
         writer.setOutputIntent(srgbOutputIntent());
+    }
+    writer.setCreator(QStringLiteral("BadgeEditorQt"));
+    if (!title.isEmpty()) {
+        writer.setTitle(title);
     }
     writer.setPageSize(QPageSize(QSizeF(m_impl->document.paper.widthMm, m_impl->document.paper.heightMm), QPageSize::Millimeter));
     writer.setPageMargins(QMarginsF(0, 0, 0, 0));
@@ -751,7 +755,8 @@ bool LayoutWorkspaceWidget::exportPdf(const QList<QList<BadgeItem>>& pages,
                                       const QString& filePath,
                                       int dpi,
                                       QPdfWriter::ColorModel colorModel,
-                                      bool includeGuides) const {
+                                      bool includeGuides,
+                                      const QString& title) const {
     if (pages.isEmpty()) {
         m_impl->lastError = QStringLiteral("PDF 出力するページがありません");
         return false;
@@ -762,6 +767,10 @@ bool LayoutWorkspaceWidget::exportPdf(const QList<QList<BadgeItem>>& pages,
     writer.setColorModel(colorModel);
     if (colorModel == QPdfWriter::ColorModel::RGB) {
         writer.setOutputIntent(srgbOutputIntent());
+    }
+    writer.setCreator(QStringLiteral("BadgeEditorQt"));
+    if (!title.isEmpty()) {
+        writer.setTitle(title);
     }
     const auto& firstPaper = m_impl->document.paper;
     writer.setPageSize(QPageSize(QSizeF(firstPaper.widthMm, firstPaper.heightMm), QPageSize::Millimeter));

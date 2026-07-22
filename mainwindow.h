@@ -14,6 +14,7 @@
 #include <QToolBar>
 #include <QUndoStack>
 #include <QByteArray>
+#include <QPointer>
 #include <QShowEvent>
 #include <QTimer>
 #include <QColor>
@@ -59,8 +60,6 @@ private:
     void onPrint();
 
     // Edit
-    void onUndo();
-    void onRedo();
     void onDelete();
     void onDuplicate();
 
@@ -194,6 +193,8 @@ private:
     QAction* m_actPrint = nullptr;
     QAction* m_actGridVisible = nullptr;
     QAction* m_actSnapToGrid = nullptr;
+    QAction* m_actUndo = nullptr;
+    QAction* m_actRedo = nullptr;
     QMenu* m_perspectiveMenu = nullptr;
     QMenu* m_savedPerspectiveMenu = nullptr;
     QAction* m_actAddBadge = nullptr;
@@ -256,7 +257,7 @@ private:
     QListWidget* m_logList = nullptr;
     QListWidget* m_issueList = nullptr;
     QListWidget* m_linkList = nullptr;
-    BadgeGraphicItem* m_pendingBadgeMoveItem = nullptr;
+    QPointer<BadgeGraphicItem> m_pendingBadgeMoveItem;
     badge::AppEventQueue m_internalEventQueue;
 
     // Inspector - color correction
@@ -285,7 +286,7 @@ private:
     QCheckBox* m_chkCutFriendlyLayout = nullptr;
 
     // State
-    QList<BadgeGraphicItem*> m_selected;
+    QList<QPointer<BadgeGraphicItem>> m_selected;
     QList<BadgeItem> m_badges;
     QList<BadgeItem> m_layoutBadges;
     QList<QString> m_layoutPageNames;
@@ -293,7 +294,7 @@ private:
     int m_lastLayerRow = -1;
     QList<BadgeItem> m_pendingEditBeforeBadges;
     QList<int> m_pendingEditBeforeSelection;
-    BadgeGraphicItem* m_pendingEditItem = nullptr;
+    QPointer<BadgeGraphicItem> m_pendingEditItem;
     bool m_pendingEditActive = false;
     bool m_pendingLayerReorderActive = false;
     QList<BadgeItem> m_pendingLayerReorderBeforeBadges;

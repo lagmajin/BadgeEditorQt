@@ -10,6 +10,7 @@
 #include <QApplication>
 #include <QFontMetricsF>
 #include <QScrollBar>
+#include <QSignalBlocker>
 #include <QTimer>
 #include <QPixmap>
 #include <QPalette>
@@ -193,6 +194,10 @@ void DesignerWidget::setBadgeItems(const QList<BadgeItem>& items, const QList<in
 }
 
 void DesignerWidget::clearBadges() {
+    if (!m_scene->selectedItems().isEmpty()) {
+        m_scene->clearSelection();
+    }
+    const QSignalBlocker blockSceneSignals(m_scene);
     for (auto* gi : std::as_const(m_graphicItems)) {
         m_scene->removeItem(gi);
         delete gi;
@@ -203,6 +208,10 @@ void DesignerWidget::clearBadges() {
 
 void DesignerWidget::removeSelectedBadges() {
     auto items = m_scene->selectedItems();
+    if (!items.isEmpty()) {
+        m_scene->clearSelection();
+    }
+    const QSignalBlocker blockSceneSignals(m_scene);
     for (auto* item : items) {
         if (auto* gi = dynamic_cast<BadgeGraphicItem*>(item)) {
             m_graphicItems.removeOne(gi);
