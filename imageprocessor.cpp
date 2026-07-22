@@ -3,9 +3,9 @@
 #include <QColorSpace>
 #include <QBuffer>
 #include <QFile>
-#include <QFileInfo>
 #include <QImageReader>
 #include <QImage>
+#include <QFileInfo>
 #include <QPainter>
 #include <cmath>
 #include <string>
@@ -108,7 +108,13 @@ QImage loadViaQtBytes(const QString& path) {
         return {};
     }
 
-    const QByteArray bytes = file.readAll();
+    if (file.size() <= 0 || file.size() > Constants::kMaxRasterFileBytes) {
+        return {};
+    }
+    const QByteArray bytes = file.read(Constants::kMaxRasterFileBytes + 1);
+    if (bytes.size() != file.size()) {
+        return {};
+    }
     if (bytes.isEmpty()) {
         return {};
     }
@@ -158,7 +164,10 @@ QImage loadViaOiio(const QString& path) {
     }
 
     const auto& img = *raw;
-    if (img.width <= 0 || img.height <= 0 || img.channels <= 0 || img.pixels.empty()) {
+    if (img.width <= 0 || img.height <= 0 || img.channels <= 0 || img.pixels.empty()
+        || img.width > Constants::kMaxRasterSide
+        || img.height > Constants::kMaxRasterSide
+        || static_cast<long long>(img.width) * img.height > Constants::kMaxRasterPixels) {
         return {};
     }
 
@@ -221,6 +230,11 @@ QImage loadViaWic(const QString& path) {
         if (FAILED(hr) || width == 0 || height == 0) {
             break;
         }
+        if (width > static_cast<UINT>(Constants::kMaxRasterSide)
+            || height > static_cast<UINT>(Constants::kMaxRasterSide)
+            || static_cast<unsigned long long>(width) * height > static_cast<unsigned long long>(Constants::kMaxRasterPixels)) {
+            break;
+        }
 
         hr = WICConvertBitmapSource(GUID_WICPixelFormat32bppBGRA, frame, &source);
         if (FAILED(hr) || !source) {
@@ -256,6 +270,16 @@ QImage loadViaWic(const QString& path) {
 }
 
 QImage ImageProcessor::loadImage(const QString& path, QString* colorSpaceLabel) {
+    if (path.isEmpty()) {
+        if (colorSpaceLabel) *colorSpaceLabel = QStringLiteral("パス未指定");
+        return {};
+    }
+    const QFileInfo fileInfo(path);
+    if (!fileInfo.exists() || !fileInfo.isFile()
+        || fileInfo.size() <= 0 || fileInfo.size() > Constants::kMaxRasterFileBytes) {
+        if (colorSpaceLabel) *colorSpaceLabel = QStringLiteral("画像サイズまたはファイルが不正");
+        return {};
+    }
     const int dot = path.lastIndexOf(QLatin1Char('.'));
     const QString suffix = dot >= 0 ? path.mid(dot + 1).toLower() : QString();
 #ifdef BADGEEDITOR_HAS_QTSVG
@@ -302,6 +326,16 @@ QImage ImageProcessor::loadImage(const QString& path, QString* colorSpaceLabel) 
         }
     }
 #endif
+
+    QImageReader probe(path);
+    const QSize decodedSize = probe.size();
+    if (decodedSize.isValid()
+        && (decodedSize.width() > Constants::kMaxRasterSide
+            || decodedSize.height() > Constants::kMaxRasterSide
+            || qint64(decodedSize.width()) * decodedSize.height() > Constants::kMaxRasterPixels)) {
+        if (colorSpaceLabel) *colorSpaceLabel = QStringLiteral("画像の展開サイズが上限を超えています");
+        return {};
+    }
 
 #ifdef Q_OS_WIN
     if (QImage viaWic = loadViaWic(path); !viaWic.isNull()) {
@@ -352,6 +386,9 @@ QImage ImageProcessor::loadImage(const QString& path, QString* colorSpaceLabel) 
 
 QPixmap ImageProcessor::applyCorrection(const QPixmap& src, double brightness, double contrast, double saturation) {
     QImage img = src.toImage().convertToFormat(QImage::Format_ARGB32_Premultiplied);
+    if (img.isNull()) {
+        return {};
+    }
     double b = brightness * 2.55;
     double c = contrast / 100.0;
     double s = saturation / 100.0 + 1.0;
@@ -381,5 +418,6 @@ QPixmap ImageProcessor::applyCorrection(const QPixmap& src, double brightness, d
             line[x] = qRgba(int(r * a / 255.0), int(g * a / 255.0), int(bl * a / 255.0), a);
         }
     }
-    return QPixmap::fromImage(img);
+    const QPixmap result = QPixmap::fromImage(img);
+    return result.isNull() ? QPixmap() : result;
 }

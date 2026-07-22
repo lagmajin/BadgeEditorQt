@@ -14,5 +14,8 @@ constexpr double kCircleBleedMm = 3.0;        // Extra bleed for circular badges
 // Image processing
 constexpr int kMaxSvgSide = 2048;             // Maximum dimension for SVG rendering
 constexpr int kDefaultSvgSize = 1024;         // Default size for SVG without viewBox
+constexpr long long kMaxRasterFileBytes = 512LL * 1024 * 1024;
+constexpr int kMaxRasterSide = 16384;
+constexpr long long kMaxRasterPixels = 16384LL * 16384;
 
 } // namespace Constants

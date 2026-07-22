@@ -687,23 +687,34 @@ void BadgeGraphicItem::renderCore(QPainter* painter, const QRectF& r, bool simpl
 }
 
 void BadgeGraphicItem::loadImage() {
-    m_loadedImagePath = !m_badge.layers.isEmpty() ? m_badge.layers.first().imagePath : m_badge.imagePath;
-    m_thumbnail = QPixmap();
-    m_processed = QPixmap();
-    m_colorSpaceLabel = QStringLiteral("読み込みなし");
-    m_previewCache = QImage();
-    m_previewCacheSignature.clear();
-    m_previewCachePixelSize = QSize();
-    m_layerPreviewCache.clear();
+    const QString nextPath = !m_badge.layers.isEmpty() ? m_badge.layers.first().imagePath : m_badge.imagePath;
 
-    if (m_loadedImagePath.isEmpty() || !QFileInfo::exists(m_loadedImagePath)) {
+    if (nextPath.isEmpty() || !QFileInfo::exists(nextPath)) {
+        m_loadedImagePath = nextPath;
+        m_thumbnail = {};
+        m_processed = {};
+        m_colorSpaceLabel = QStringLiteral("読み込みなし");
         update();
         return;
     }
 
     QString label;
-    m_thumbnail = QPixmap::fromImage(ImageProcessor::loadImage(m_loadedImagePath, &label));
+    const QImage loaded = ImageProcessor::loadImage(nextPath, &label);
+    const QPixmap nextThumbnail = loaded.isNull() ? QPixmap() : QPixmap::fromImage(loaded);
+    if (nextThumbnail.isNull()) {
+        m_colorSpaceLabel = label;
+        update();
+        return;
+    }
+
+    m_loadedImagePath = nextPath;
+    m_thumbnail = nextThumbnail;
+    m_processed = {};
     m_colorSpaceLabel = label;
+    m_previewCache = {};
+    m_previewCacheSignature.clear();
+    m_previewCachePixelSize = {};
+    m_layerPreviewCache.clear();
     applyColorCorrection();
 }
 
@@ -717,8 +728,13 @@ void BadgeGraphicItem::applyColorCorrection() {
         update();
         return;
     }
-    if (!m_thumbnail.isNull())
-        m_processed = ImageProcessor::applyCorrection(m_thumbnail, m_badge.brightness, m_badge.contrast, m_badge.saturation);
+    if (!m_thumbnail.isNull()) {
+        const QPixmap nextProcessed = ImageProcessor::applyCorrection(
+            m_thumbnail, m_badge.brightness, m_badge.contrast, m_badge.saturation);
+        if (!nextProcessed.isNull()) {
+            m_processed = nextProcessed;
+        }
+    }
     update();
 }
 
