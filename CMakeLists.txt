@@ -8,9 +8,10 @@ set(CMAKE_AUTOMOC OFF)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC OFF)
 
-set(BADGEEDITOR_VCPKG_INSTALLED_DIR "C:/vcpkg/installed/x64-windows")
+set(BADGEEDITOR_VCPKG_INSTALLED_DIR "" CACHE PATH
+    "Optional vcpkg installed directory (normally provided by the vcpkg toolchain)")
 
-if (WIN32)
+if (WIN32 AND BADGEEDITOR_VCPKG_INSTALLED_DIR)
     set(Qt6_DIR "${BADGEEDITOR_VCPKG_INSTALLED_DIR}/share/Qt6" CACHE PATH "Qt6 package config directory" FORCE)
     set(qtadvanceddocking-qt6_DIR "${BADGEEDITOR_VCPKG_INSTALLED_DIR}/share/qtadvanceddocking-qt6" CACHE PATH "qtadvanceddocking-qt6 package config directory" FORCE)
     set(OpenImageIO_DIR "${BADGEEDITOR_VCPKG_INSTALLED_DIR}/share/openimageio" CACHE PATH "OpenImageIO package config directory" FORCE)

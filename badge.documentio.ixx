@@ -7,6 +7,7 @@ module;
 #include <QJsonObject>
 #include <QFileInfo>
 #include <QString>
+#include <cmath>
 #include "badge.model.h"
 
 export module badge.documentio;
@@ -23,6 +24,103 @@ struct JsonDocumentResult {
 };
 
 namespace detail {
+
+constexpr int maxBadges = 10000;
+constexpr int maxLayers = 1000;
+
+inline bool validNumber(const QJsonObject& obj, const char* key, double minimum, double maximum) {
+    const QJsonValue value = obj[key];
+    if (value.isUndefined()) {
+        return true;
+    }
+    return value.isDouble() && std::isfinite(value.toDouble()) && value.toDouble() >= minimum && value.toDouble() <= maximum;
+}
+
+inline bool validOptionalObject(const QJsonObject& obj, const char* key) {
+    return obj[key].isUndefined() || obj[key].isObject();
+}
+
+inline bool validateLayer(const QJsonValue& value) {
+    if (!value.isObject()) {
+        return false;
+    }
+    const auto obj = value.toObject();
+    return validNumber(obj, "opacity", 0.0, 1.0)
+        && validNumber(obj, "offsetX", -100000.0, 100000.0)
+        && validNumber(obj, "offsetY", -100000.0, 100000.0);
+}
+
+inline bool validateBadge(const QJsonValue& value) {
+    if (!value.isObject()) {
+        return false;
+    }
+    const auto obj = value.toObject();
+    if (!validNumber(obj, "widthMm", 0.1, 1000.0)
+        || !validNumber(obj, "heightMm", 0.1, 1000.0)
+        || !validNumber(obj, "imageScale", 0.001, 100.0)
+        || !validNumber(obj, "specularStrength", 0.0, 1.0)
+        || !validNumber(obj, "envReflectionStrength", 0.0, 1.0)
+        || !validNumber(obj, "glitterStrength", 0.0, 1.0)
+        || !validNumber(obj, "xMm", -100000.0, 100000.0)
+        || !validNumber(obj, "yMm", -100000.0, 100000.0)
+        || !validNumber(obj, "rotation", -36000.0, 36000.0)
+        || !validNumber(obj, "brightness", -1.0, 1.0)
+        || !validNumber(obj, "contrast", -1.0, 1.0)
+        || !validNumber(obj, "saturation", -1.0, 1.0)
+        || !validOptionalObject(obj, "guide")) {
+        return false;
+    }
+    if (obj["guide"].isObject()) {
+        const auto guide = obj["guide"].toObject();
+        if (!validNumber(guide, "bleedMm", 0.0, 1000.0)
+            || !validNumber(guide, "safeInsetMm", 0.0, 1000.0)
+            || !validNumber(guide, "cornerRadiusMm", 0.0, 1000.0)) {
+            return false;
+        }
+    }
+    const QJsonValue layersValue = obj["layers"];
+    if (layersValue.isUndefined()) {
+        return true;
+    }
+    if (!layersValue.isArray() || layersValue.toArray().size() > maxLayers) {
+        return false;
+    }
+    for (const auto& layer : layersValue.toArray()) {
+        if (!validateLayer(layer)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+inline bool validatePaper(const QJsonValue& value) {
+    if (value.isUndefined()) {
+        return true;
+    }
+    if (!value.isObject()) {
+        return false;
+    }
+    const auto obj = value.toObject();
+    return validNumber(obj, "widthMm", 1.0, 10000.0)
+        && validNumber(obj, "heightMm", 1.0, 10000.0)
+        && validNumber(obj, "marginMm", 0.0, 1000.0)
+        && validNumber(obj, "spacingMm", 0.0, 1000.0);
+}
+
+inline bool validateBadges(const QJsonValue& value) {
+    if (value.isUndefined()) {
+        return true;
+    }
+    if (!value.isArray() || value.toArray().size() > maxBadges) {
+        return false;
+    }
+    for (const auto& badge : value.toArray()) {
+        if (!validateBadge(badge)) {
+            return false;
+        }
+    }
+    return true;
+}
 
 inline ProductMode productModeFromJsonValue(const QJsonValue& value) {
     if (value.isDouble()) {
@@ -249,11 +347,19 @@ export inline JsonDocumentResult loadDocumentFromJson(const QByteArray& json) {
     }
 
     if (doc.isArray()) {
+        if (doc.array().size() > detail::maxBadges) {
+            result.errorMessage = QStringLiteral("JSON 文書のバッジ数が上限を超えています");
+            return result;
+        }
         result.document.title = "";
         result.document.paper = PaperConfig{};
         const auto arr = doc.array();
         result.document.badges.reserve(arr.size());
         for (const auto& value : arr) {
+            if (!detail::validateBadge(value)) {
+                result.errorMessage = QStringLiteral("JSON 文書のバッジまたはレイヤーの形式が不正です");
+                return result;
+            }
             result.document.badges.push_back(detail::badgeFromJson(value.toObject()));
         }
         result.ok = true;
@@ -266,12 +372,20 @@ export inline JsonDocumentResult loadDocumentFromJson(const QByteArray& json) {
     }
 
     const QJsonObject obj = doc.object();
+    if (!detail::validatePaper(obj["paper"]) || !detail::validateBadges(obj["badges"])) {
+        result.errorMessage = QStringLiteral("JSON 文書の用紙、バッジ、またはレイヤーの形式が不正です");
+        return result;
+    }
     result.document.title = obj["title"].toString().toStdString();
     result.document.productMode = detail::productModeFromJsonValue(obj["productMode"]);
     result.document.paper = detail::paperFromJson(obj["paper"].toObject());
     const auto arr = obj["badges"].toArray();
     result.document.badges.reserve(arr.size());
     for (const auto& value : arr) {
+        if (!detail::validateBadge(value)) {
+            result.errorMessage = QStringLiteral("JSON 文書のバッジまたはレイヤーの形式が不正です");
+            return result;
+        }
         result.document.badges.push_back(detail::badgeFromJson(value.toObject()));
     }
     result.ok = true;
