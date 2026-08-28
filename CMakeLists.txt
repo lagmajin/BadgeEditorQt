@@ -1,4 +1,10 @@
 cmake_minimum_required(VERSION 3.28)
+
+# Enable CMake's experimental standard-library module support before
+# `project()` detects the C++ toolchain. Required for `import std;`.
+set(CMAKE_EXPERIMENTAL_CXX_IMPORT_STD
+    "d0edc3af-4c50-42ea-a356-e2862fe7a444")
+
 project(BadgeEditorQt VERSION 1.0.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 23)
@@ -70,6 +76,11 @@ set(HEADERS
 )
 
 add_executable(BadgeEditorQt ${SOURCES} ${HEADERS})
+
+# Request CMake's standard-library module support for `import std;`.
+# This makes CMake provide the compiler-generated std module before the
+# project modules that import it are compiled.
+set_property(TARGET BadgeEditorQt PROPERTY CXX_MODULE_STD ON)
 
 if (WIN32)
     target_sources(BadgeEditorQt PRIVATE appicon.rc)
