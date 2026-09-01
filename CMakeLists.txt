@@ -1,4 +1,15 @@
-cmake_minimum_required(VERSION 3.28)
+cmake_minimum_required(VERSION 3.30)
+
+# Enable CMake's experimental standard-library module support before
+# `project()` detects the C++ toolchain. Required for `import std;`.
+set(CMAKE_EXPERIMENTAL_CXX_IMPORT_STD
+    "d0edc3af-4c50-42ea-a356-e2862fe7a444"
+    CACHE STRING "Enable CMake experimental import std support" FORCE)
+# Enable detection and generation of the compiler-provided `std` module
+# while `project()` is detecting the C++ toolchain.
+set(CMAKE_CXX_MODULE_STD ON
+    CACHE BOOL "Enable compiler-provided C++ standard library modules" FORCE)
+
 project(BadgeEditorQt VERSION 1.0.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 23)
@@ -8,9 +19,10 @@ set(CMAKE_AUTOMOC OFF)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC OFF)
 
-set(BADGEEDITOR_VCPKG_INSTALLED_DIR "C:/vcpkg/installed/x64-windows")
+set(BADGEEDITOR_VCPKG_INSTALLED_DIR "" CACHE PATH
+    "Optional vcpkg installed directory (normally provided by the vcpkg toolchain)")
 
-if (WIN32)
+if (WIN32 AND BADGEEDITOR_VCPKG_INSTALLED_DIR)
     set(Qt6_DIR "${BADGEEDITOR_VCPKG_INSTALLED_DIR}/share/Qt6" CACHE PATH "Qt6 package config directory" FORCE)
     set(qtadvanceddocking-qt6_DIR "${BADGEEDITOR_VCPKG_INSTALLED_DIR}/share/qtadvanceddocking-qt6" CACHE PATH "qtadvanceddocking-qt6 package config directory" FORCE)
     set(OpenImageIO_DIR "${BADGEEDITOR_VCPKG_INSTALLED_DIR}/share/openimageio" CACHE PATH "OpenImageIO package config directory" FORCE)

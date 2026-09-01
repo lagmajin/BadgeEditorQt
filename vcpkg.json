@@ -1,6 +1,7 @@
 {
   "name": "badge-editor-qt",
   "version": "1.0.0",
+  "builtin-baseline": "7e43e0768a5af180a9cf75d87d692dce1b9da34f",
   "dependencies": [
     "qtbase",
     "qt-advanced-docking-system",

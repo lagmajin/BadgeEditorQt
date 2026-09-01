@@ -1,14 +1,14 @@
 module;
 
+export module badge.qtbridge;
+import std;
+
 #include <QColor>
 #include <QString>
 #include <QList>
 #include "badgeitem.h"
 #include "badge.model.h"
 
-export module badge.qtbridge;
-
-import std;
 export import badge.layout;
 
 namespace badge::qt::detail {

@@ -1,10 +1,9 @@
 module;
 
-#include <OpenImageIO/imageio.h>
-
 export module badge.imageio;
-
 import std;
+
+#include <OpenImageIO/imageio.h>
 
 export namespace badge {
 
