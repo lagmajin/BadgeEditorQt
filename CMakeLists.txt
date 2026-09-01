@@ -1,15 +1,7 @@
-cmake_minimum_required(VERSION 3.30)
+cmake_minimum_required(VERSION 3.28)
 
 # Enable CMake's experimental standard-library module support before
 # `project()` detects the C++ toolchain. Required for `import std;`.
-set(CMAKE_EXPERIMENTAL_CXX_IMPORT_STD
-    "d0edc3af-4c50-42ea-a356-e2862fe7a444"
-    CACHE STRING "Enable CMake experimental import std support" FORCE)
-# Enable detection and generation of the compiler-provided `std` module
-# while `project()` is detecting the C++ toolchain.
-set(CMAKE_CXX_MODULE_STD ON
-    CACHE BOOL "Enable compiler-provided C++ standard library modules" FORCE)
-
 project(BadgeEditorQt VERSION 1.0.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 23)

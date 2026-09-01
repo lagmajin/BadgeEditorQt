@@ -1,7 +1,7 @@
 module;
 
-export module badge.documentio;
-import std;
+#include <string>
+#include <vector>
 
 #include <QByteArray>
 #include <QJsonArray>
@@ -12,6 +12,8 @@ import std;
 #include <QString>
 #include <cmath>
 #include "badge.model.h"
+
+export module badge.documentio;
 
 import badge.document;
 

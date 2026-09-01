@@ -1,10 +1,11 @@
 module;
 
-export module badge.document;
-import std;
+#include <string>
+#include <vector>
 
 #include "badge.paper.h"
 #include "badge.model.h"
+export module badge.document;
 export import badge.layout;
 
 export namespace badge {

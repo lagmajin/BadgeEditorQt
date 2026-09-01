@@ -2463,7 +2463,7 @@ void MainWindow::onExportPng() {
     const QString defaultName = m_currentFile.isEmpty()
         ? QStringLiteral("layout.png")
         : QFileInfo(m_currentFile).completeBaseName() + QStringLiteral("_layout.png");
-    ExportDialog dlg(ExportDialog::Format::Png, defaultName, this);
+    ExportDialog dlg(ExportDialog::Format::Image, defaultName, this);
     if (dlg.exec() != QDialog::Accepted) {
         return;
     }
@@ -2678,7 +2678,10 @@ void MainWindow::onSelectionChanged() {
     if (m_updatingUI || !m_designer) {
         return;
     }
-    m_selected = m_designer->selectedGraphics();
+    m_selected.clear();
+    for (auto* item : m_designer->selectedGraphics()) {
+        m_selected.append(QPointer<BadgeGraphicItem>(item));
+    }
     if (m_selected.isEmpty()) {
         onBadgeDeselected();
         return;

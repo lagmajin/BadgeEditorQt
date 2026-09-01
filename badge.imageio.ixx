@@ -1,9 +1,14 @@
 module;
 
-export module badge.imageio;
-import std;
+#include <cstdint>
+#include <memory>
+#include <optional>
+#include <string>
+#include <vector>
 
 #include <OpenImageIO/imageio.h>
+
+export module badge.imageio;
 
 export namespace badge {
 

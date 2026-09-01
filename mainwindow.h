@@ -62,6 +62,8 @@ private:
     // Edit
     void onDelete();
     void onDuplicate();
+    void onUndo();
+    void onRedo();
 
     // View
     void onToggleTheme();

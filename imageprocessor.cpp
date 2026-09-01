@@ -269,7 +269,7 @@ QImage loadViaWic(const QString& path) {
 
 }
 
-QImage ImageProcessor::loadImage(const QString& path, QString* colorSpaceLabel) {
+QImage ImageProcessor::loadImage(const QString& path, QString* colorSpaceLabel, int maxSize) {
     if (path.isEmpty()) {
         if (colorSpaceLabel) *colorSpaceLabel = QStringLiteral("パス未指定");
         return {};
