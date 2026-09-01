@@ -1,5 +1,8 @@
 module;
 
+export module badge.documentio;
+import std;
+
 #include <QByteArray>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -10,9 +13,6 @@ module;
 #include <cmath>
 #include "badge.model.h"
 
-export module badge.documentio;
-
-import std;
 import badge.document;
 
 export namespace badge {

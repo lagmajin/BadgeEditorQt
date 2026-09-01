@@ -721,9 +721,6 @@ bool LayoutWorkspaceWidget::exportPdf(const QString& filePath, int dpi, QPdfWrit
         writer.setOutputIntent(srgbOutputIntent());
     }
     writer.setCreator(QStringLiteral("BadgeEditorQt"));
-    if (!title.isEmpty()) {
-        writer.setTitle(title);
-    }
     writer.setPageSize(QPageSize(QSizeF(m_impl->document.paper.widthMm, m_impl->document.paper.heightMm), QPageSize::Millimeter));
     writer.setPageMargins(QMarginsF(0, 0, 0, 0));
 
