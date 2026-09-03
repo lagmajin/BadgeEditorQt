@@ -30,6 +30,14 @@ find_package(Qt6 COMPONENTS Svg QUIET)
 set(SOURCES
     main.cpp
     mainwindow.cpp
+    mainwindow_support.cpp
+    mainwindow_layout.cpp
+    mainwindow_designer.cpp
+    mainwindow_edit.cpp
+    mainwindow_ui.cpp
+    mainwindow_io.cpp
+    mainwindow_inspector.cpp
+    layerpreview.cpp
     dockstylemanager.cpp
     designerwidget.cpp
     layoutworkspacewidget.cpp

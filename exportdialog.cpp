@@ -86,7 +86,8 @@ ExportDialog::ExportDialog(Format format, const QString& defaultPath, QWidget* p
     m_dpiSpin->setValue(300);
     m_dpiSpin->setSuffix(" DPI");
     optForm->addRow("解像度:", m_dpiSpin);
-    m_includeGuides = new QCheckBox("切り抜きガイドを含める");
+    m_includeGuides = new QCheckBox("カット・折込・塗り足しガイド線を含める");
+    m_includeGuides->setToolTip("赤: カット線、紫: 用紙中央の折込線、橙: 塗り足し、青: 安全域を出力します");
     m_includeGuides->setChecked(false);
     optForm->addRow(m_includeGuides);
     if (m_format == Format::Image) {

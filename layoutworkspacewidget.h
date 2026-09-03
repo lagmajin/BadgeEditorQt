@@ -7,6 +7,8 @@
 #include <QList>
 #include <QPixmap>
 #include <QHash>
+#include <QPoint>
+#include <functional>
 
 #include "badgeitem.h"
 
@@ -29,6 +31,7 @@ public:
     void setDocument(const badge::DocumentData& document);
     void refresh();
     void setExperimentalGpuViewport(bool on);
+    void setViewportContextMenuHandler(std::function<void(const QPoint& globalPos)> handler);
     QString lastError() const;
     QPixmap renderPageThumbnail(const QList<BadgeItem>& pages, int sizePx = 96, bool includeGuides = false) const;
     bool exportPdf(const QString& filePath, int dpi = 300, QPdfWriter::ColorModel colorModel = QPdfWriter::ColorModel::RGB, bool includeGuides = false) const;
@@ -43,6 +46,7 @@ private:
     struct Impl;
     Impl* m_impl = nullptr;
     mutable QHash<QString, QPixmap> m_thumbnailCache;
+    std::function<void(const QPoint& globalPos)> m_viewportContextMenuHandler;
 
     void rebuildScene();
     void updateSceneRect();

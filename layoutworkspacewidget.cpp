@@ -23,6 +23,7 @@
 #include <QString>
 #include <QFont>
 #include <QHash>
+#include <QMap>
 #include <QGraphicsSimpleTextItem>
 #include <QUrl>
 #include <QDir>
@@ -43,6 +44,7 @@ constexpr int kItemRole = 0;
 const char* kSafeGuideTag = "safe-guide";
 const char* kEmptyHintTag = "empty-hint";
 const char* kBleedGuideTag = "bleed-guide";
+const char* kFoldGuideTag = "fold-guide";
 
 QPainter::CompositionMode compositionModeForLayer(LayerBlendMode mode) {
     switch (mode) {
@@ -501,6 +503,18 @@ void populateSceneForDocument(QGraphicsScene* scene,
                                       safePen, Qt::NoBrush);
     safeGuide->setData(kItemRole, QString::fromLatin1(kSafeGuideTag));
 
+    if (includeGuides) {
+        QPen foldPen(QColor(112, 78, 170), 1.2, Qt::DashLine);
+        foldPen.setDashPattern({7, 4});
+        const bool landscape = document.paper.widthMm >= document.paper.heightMm;
+        QGraphicsLineItem* foldGuide = landscape
+            ? scene->addLine(document.paper.widthMm * mmToPx * 0.5, marginPx,
+                             document.paper.widthMm * mmToPx * 0.5, marginPx + safeHeightPx, foldPen)
+            : scene->addLine(marginPx, document.paper.heightMm * mmToPx * 0.5,
+                             marginPx + safeWidthPx, document.paper.heightMm * mmToPx * 0.5, foldPen);
+        foldGuide->setData(kItemRole, QString::fromLatin1(kFoldGuideTag));
+    }
+
     if (document.badges.empty()) {
         addEmptyHint(scene, QRectF(0.0,
                                    0.0,
@@ -562,6 +576,12 @@ LayoutWorkspaceWidget::LayoutWorkspaceWidget(QWidget* parent)
     m_view = new QGraphicsView(m_scene, this);
     m_view->setRenderHints(QPainter::Antialiasing);
     m_view->setBackgroundBrush(palette().brush(QPalette::Window));
+    m_view->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(m_view, &QWidget::customContextMenuRequested, this, [this](const QPoint& pos) {
+        if (m_viewportContextMenuHandler) {
+            m_viewportContextMenuHandler(m_view->mapToGlobal(pos));
+        }
+    });
     viewportbackend::applySceneViewportProfile(m_view, viewportbackend::experimentalGpuViewportEnabled());
     layout->addWidget(m_view);
 
@@ -603,6 +623,52 @@ void LayoutWorkspaceWidget::refresh() {
 
 void LayoutWorkspaceWidget::setExperimentalGpuViewport(bool on) {
     viewportbackend::applySceneViewportProfile(m_view, on);
+}
+
+QString pdfLayoutSummary(const badge::DocumentData& document) {
+    QMap<QString, int> counts;
+    for (const auto& badge : document.badges) {
+        const double widthMm = std::max(0.0, badge.widthMm);
+        const double heightMm = std::max(0.0, badge.heightMm);
+        const QString size = badge.clipToCircle
+            ? QStringLiteral("%1 mm円").arg(QString::number(std::max(widthMm, heightMm), 'f', 1))
+            : QStringLiteral("%1 × %2 mm").arg(QString::number(widthMm, 'f', 1),
+                                                   QString::number(heightMm, 'f', 1));
+        ++counts[size];
+    }
+
+    QStringList badgeCounts;
+    for (auto it = counts.cbegin(); it != counts.cend(); ++it) {
+        badgeCounts.append(QStringLiteral("%1 × %2").arg(it.key()).arg(it.value()));
+    }
+    const QString orientation = document.paper.widthMm >= document.paper.heightMm
+        ? QStringLiteral("横") : QStringLiteral("縦");
+    return QStringLiteral("用紙 %1 × %2 mm（%3） / 余白 %4 mm / 間隔 %5 mm / %6")
+        .arg(QString::number(document.paper.widthMm, 'f', 1),
+             QString::number(document.paper.heightMm, 'f', 1),
+             orientation,
+             QString::number(document.paper.marginMm, 'f', 1),
+             QString::number(document.paper.spacingMm, 'f', 1),
+             badgeCounts.isEmpty() ? QStringLiteral("バッジなし") : badgeCounts.join(QStringLiteral("、")));
+}
+
+void drawPdfLayoutSummary(QPainter* painter, const QRectF& pageRect, const badge::DocumentData& document) {
+    if (!painter) return;
+    painter->save();
+    QFont font = painter->font();
+    font.setPointSizeF(std::max(6.5, font.pointSizeF() > 0 ? font.pointSizeF() - 2.0 : 7.0));
+    painter->setFont(font);
+    painter->setPen(QColor(75, 75, 75, 190));
+    const qreal marginX = std::max(8.0, pageRect.width() * 0.035);
+    const qreal marginY = std::max(8.0, pageRect.height() * 0.035);
+    const QRectF textRect(pageRect.left() + marginX, pageRect.bottom() - marginY - QFontMetricsF(font).height(),
+                          pageRect.width() - marginX * 2.0, QFontMetricsF(font).height());
+    painter->drawText(textRect, Qt::AlignLeft | Qt::AlignVCenter, pdfLayoutSummary(document));
+    painter->restore();
+}
+
+void LayoutWorkspaceWidget::setViewportContextMenuHandler(std::function<void(const QPoint& globalPos)> handler) {
+    m_viewportContextMenuHandler = handler;
 }
 
 QString LayoutWorkspaceWidget::lastError() const {
@@ -661,10 +727,12 @@ bool LayoutWorkspaceWidget::exportPng(const QString& filePath, int dpi, bool whi
     const auto safeGuides = sceneItemsByTag(m_scene, QString::fromLatin1(kSafeGuideTag));
     const auto emptyHints = sceneItemsByTag(m_scene, QString::fromLatin1(kEmptyHintTag));
     const auto bleedGuides = sceneItemsByTag(m_scene, QString::fromLatin1(kBleedGuideTag));
+    const auto foldGuides = sceneItemsByTag(m_scene, QString::fromLatin1(kFoldGuideTag));
     if (!includeGuides) {
         setSceneItemsVisible(safeGuides, false);
         setSceneItemsVisible(emptyHints, false);
         setSceneItemsVisible(bleedGuides, false);
+        setSceneItemsVisible(foldGuides, false);
     }
 
     const QRectF rect = paperRectPx(m_impl->document, dpi);
@@ -675,6 +743,7 @@ bool LayoutWorkspaceWidget::exportPng(const QString& filePath, int dpi, bool whi
             setSceneItemsVisible(safeGuides, true);
             setSceneItemsVisible(emptyHints, true);
             setSceneItemsVisible(bleedGuides, true);
+            setSceneItemsVisible(foldGuides, true);
         }
         return false;
     }
@@ -689,6 +758,7 @@ bool LayoutWorkspaceWidget::exportPng(const QString& filePath, int dpi, bool whi
         setSceneItemsVisible(safeGuides, true);
         setSceneItemsVisible(emptyHints, true);
         setSceneItemsVisible(bleedGuides, true);
+        setSceneItemsVisible(foldGuides, true);
     }
     const bool ok = image.save(filePath, imageFormat.toUtf8().constData());
     if (ok) {
@@ -708,10 +778,12 @@ bool LayoutWorkspaceWidget::exportPdf(const QString& filePath, int dpi, QPdfWrit
     const auto safeGuides = sceneItemsByTag(m_scene, QString::fromLatin1(kSafeGuideTag));
     const auto emptyHints = sceneItemsByTag(m_scene, QString::fromLatin1(kEmptyHintTag));
     const auto bleedGuides = sceneItemsByTag(m_scene, QString::fromLatin1(kBleedGuideTag));
+    const auto foldGuides = sceneItemsByTag(m_scene, QString::fromLatin1(kFoldGuideTag));
     if (!includeGuides) {
         setSceneItemsVisible(safeGuides, false);
         setSceneItemsVisible(emptyHints, false);
         setSceneItemsVisible(bleedGuides, false);
+        setSceneItemsVisible(foldGuides, false);
     }
 
     QPdfWriter writer(filePath);
@@ -728,6 +800,7 @@ bool LayoutWorkspaceWidget::exportPdf(const QString& filePath, int dpi, QPdfWrit
     painter.setRenderHints(QPainter::Antialiasing | QPainter::SmoothPixmapTransform, true);
     const QRectF target(QPointF(0, 0), QSizeF(writer.width(), writer.height()));
     renderDocumentScene(m_scene, m_impl->document, &painter, Constants::kDisplayDpi, target);
+    drawPdfLayoutSummary(&painter, target, m_impl->document);
     painter.end();
     if (!includeGuides) {
         for (auto* item : safeGuides) {
@@ -739,6 +812,7 @@ bool LayoutWorkspaceWidget::exportPdf(const QString& filePath, int dpi, QPdfWrit
         for (auto* item : bleedGuides) {
             item->setVisible(true);
         }
+        setSceneItemsVisible(foldGuides, true);
     }
     if (QFileInfo::exists(filePath)) {
         m_impl->lastError.clear();
@@ -796,6 +870,7 @@ bool LayoutWorkspaceWidget::exportPdf(const QList<QList<BadgeItem>>& pages,
             setSceneItemsVisible(bleedGuides, false);
         }
         renderDocumentScene(&scene, doc, &painter, Constants::kDisplayDpi, target);
+        drawPdfLayoutSummary(&painter, target, doc);
         drawPageNumberLabel(&painter, target, i, pages.size());
         if (i + 1 < pages.size()) {
             writer.newPage();
@@ -820,6 +895,7 @@ bool LayoutWorkspaceWidget::print(QPrinter* printer, bool includeGuides) const {
     const auto safeGuides = sceneItemsByTag(m_scene, QString::fromLatin1(kSafeGuideTag));
     const auto emptyHints = sceneItemsByTag(m_scene, QString::fromLatin1(kEmptyHintTag));
     const auto bleedGuides = sceneItemsByTag(m_scene, QString::fromLatin1(kBleedGuideTag));
+    const auto foldGuides = sceneItemsByTag(m_scene, QString::fromLatin1(kFoldGuideTag));
     if (!includeGuides) {
         for (auto* item : safeGuides) {
             item->setVisible(false);
@@ -830,6 +906,7 @@ bool LayoutWorkspaceWidget::print(QPrinter* printer, bool includeGuides) const {
         for (auto* item : bleedGuides) {
             item->setVisible(false);
         }
+        setSceneItemsVisible(foldGuides, false);
     }
 
     QPainter painter(printer);
@@ -839,6 +916,7 @@ bool LayoutWorkspaceWidget::print(QPrinter* printer, bool includeGuides) const {
             setSceneItemsVisible(safeGuides, true);
             setSceneItemsVisible(emptyHints, true);
             setSceneItemsVisible(bleedGuides, true);
+            setSceneItemsVisible(foldGuides, true);
         }
         return false;
     }
@@ -853,6 +931,7 @@ bool LayoutWorkspaceWidget::print(QPrinter* printer, bool includeGuides) const {
         setSceneItemsVisible(safeGuides, true);
         setSceneItemsVisible(emptyHints, true);
         setSceneItemsVisible(bleedGuides, true);
+        setSceneItemsVisible(foldGuides, true);
     }
     m_impl->lastError.clear();
     return true;

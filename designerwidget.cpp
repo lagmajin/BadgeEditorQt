@@ -168,6 +168,10 @@ void DesignerWidget::addBadge(const BadgeItem& item) {
         }
         emit badgeEditFinished(item);
     });
+    // An image-backed item can build its preview cache on its first paint.
+    // Invalidate the viewport now so the first subsequent drag cannot retain
+    // a stale partial update from before the cache existed.
+    viewport()->update();
 }
 
 void DesignerWidget::setBadgeItems(const QList<BadgeItem>& items, const QList<int>& selectedIndices) {
@@ -761,7 +765,10 @@ void DesignerWidget::setSafetyGuideEntries(const QList<SafetyGuideEntry>& entrie
 }
 
 void DesignerWidget::setInteractiveViewportMode(bool on) {
-    setViewportUpdateMode(on ? QGraphicsView::BoundingRectViewportUpdate : QGraphicsView::SmartViewportUpdate);
+    // Image layers and antialiased handles can paint slightly beyond the
+    // moved item's previous update region. A full update while dragging
+    // avoids the one-time ghost left after adding a new image.
+    setViewportUpdateMode(on ? QGraphicsView::FullViewportUpdate : QGraphicsView::SmartViewportUpdate);
     viewport()->update();
 }
 
