@@ -507,12 +507,21 @@ void populateSceneForDocument(QGraphicsScene* scene,
         QPen foldPen(QColor(112, 78, 170), 1.2, Qt::DashLine);
         foldPen.setDashPattern({7, 4});
         const bool landscape = document.paper.widthMm >= document.paper.heightMm;
-        QGraphicsLineItem* foldGuide = landscape
-            ? scene->addLine(document.paper.widthMm * mmToPx * 0.5, marginPx,
-                             document.paper.widthMm * mmToPx * 0.5, marginPx + safeHeightPx, foldPen)
-            : scene->addLine(marginPx, document.paper.heightMm * mmToPx * 0.5,
-                             marginPx + safeWidthPx, document.paper.heightMm * mmToPx * 0.5, foldPen);
-        foldGuide->setData(kItemRole, QString::fromLatin1(kFoldGuideTag));
+        const qreal markLength = std::clamp(marginPx * 0.8, 8.0, 24.0);
+        const qreal paperWidthPx = document.paper.widthMm * mmToPx;
+        const qreal paperHeightPx = document.paper.heightMm * mmToPx;
+        const qreal center = landscape ? paperWidthPx * 0.5 : paperHeightPx * 0.5;
+        auto addFoldMark = [&](const QLineF& line) {
+            auto* mark = scene->addLine(line, foldPen);
+            mark->setData(kItemRole, QString::fromLatin1(kFoldGuideTag));
+        };
+        if (landscape) {
+            addFoldMark(QLineF(center, 0.0, center, markLength));
+            addFoldMark(QLineF(center, paperHeightPx, center, paperHeightPx - markLength));
+        } else {
+            addFoldMark(QLineF(0.0, center, markLength, center));
+            addFoldMark(QLineF(paperWidthPx, center, paperWidthPx - markLength, center));
+        }
     }
 
     if (document.badges.empty()) {

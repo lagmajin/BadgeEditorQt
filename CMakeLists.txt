@@ -82,6 +82,17 @@ set(HEADERS
 
 add_executable(BadgeEditorQt ${SOURCES} ${HEADERS})
 
+# Keep a single executable location for both single- and multi-config
+# generators. This prevents Visual Studio from launching an older
+# Debug\\BadgeEditorQt.exe while CMake/Ninja updates the binary at the build root.
+set_target_properties(BadgeEditorQt PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_BINARY_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO "${CMAKE_BINARY_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_MINSIZEREL "${CMAKE_BINARY_DIR}"
+)
+
 if (WIN32)
     target_sources(BadgeEditorQt PRIVATE appicon.rc)
 endif()

@@ -117,7 +117,7 @@ PrintDialog::PrintDialog(double paperWidthMm, double paperHeightMm, int defaultR
     optionForm->addRow(m_grayScale);
 
     m_includeGuides = new QCheckBox(QStringLiteral("カット・折込・塗り足しガイド線を含める"));
-    m_includeGuides->setToolTip(QStringLiteral("赤: カット線、紫: 用紙中央の折込線、橙: 塗り足し、青: 安全域を出力します"));
+    m_includeGuides->setToolTip(QStringLiteral("赤: カット線、紫: 用紙端の中央折込マーク、橙: 塗り足し、青: 安全域を出力します"));
     m_includeGuides->setChecked(false);
     optionForm->addRow(m_includeGuides);
     root->addWidget(optionGroup);
