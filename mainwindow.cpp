@@ -873,9 +873,6 @@ QImage renderLayoutDebugImage(const BadgeItem& badge, int targetPx) {
 
 BadgeItem makeLayoutTransferBadge(const BadgeItem& badge, const QImage& crop, double guideSizeMm) {
     BadgeItem out = badgeForLayoutTransfer(badge);
-    // The outer orange guide is the cut line: keep a 4 mm allowance around
-    // the finished, front-visible badge size for both new and legacy badges.
-    out.guide.bleedMm = 4.0;
     out.widthMm = std::max(0.1, guideSizeMm);
     out.heightMm = std::max(0.1, guideSizeMm);
     out.xMm = 0.0;
@@ -1715,11 +1712,22 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     auto* guideLayout = new QVBoxLayout(guideGroup);
     m_chkBleed = new QCheckBox("巻き込みエリア (塗り足し)"); m_chkBleed->setChecked(true);
     m_chkVisible = new QCheckBox("可視エリア (安全圏)"); m_chkVisible->setChecked(true);
+    m_spinCutLineOffset = new QDoubleSpinBox;
+    m_spinCutLineOffset->setRange(-3.9, 20.0);
+    m_spinCutLineOffset->setDecimals(1);
+    m_spinCutLineOffset->setSingleStep(0.1);
+    m_spinCutLineOffset->setSuffix(" mm");
+    m_spinCutLineOffset->setToolTip("基準のカットラインは仕上がり面の外側 4.0 mm です。32 mm バッジでは 40 mm になります。");
     guideLayout->addWidget(m_chkBleed);
     guideLayout->addWidget(m_chkVisible);
+    auto* cutLineForm = new QFormLayout;
+    cutLineForm->setContentsMargins(0, 0, 0, 0);
+    cutLineForm->addRow("カット線オフセット:", m_spinCutLineOffset);
+    guideLayout->addLayout(cutLineForm);
     inspLayout->addWidget(guideGroup);
     connect(m_chkBleed, &QCheckBox::toggled, this, [this](bool){ onGuideToggle(); });
     connect(m_chkVisible, &QCheckBox::toggled, this, [this](bool){ onGuideToggle(); });
+    connect(m_spinCutLineOffset, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this](double){ onInspectorChanged(); });
 
     // Effects group
     auto* effectGroup = new QGroupBox("エフェクト");
@@ -2253,6 +2261,9 @@ void MainWindow::onSelectionChanged() {
     if (m_sliderGlitterStrength) {
         m_sliderGlitterStrength->setValue(int(std::round(b.glitterStrength * 100.0)));
     }
+    if (m_spinCutLineOffset) {
+        m_spinCutLineOffset->setValue(b.guide.bleedMm - 4.0);
+    }
     m_lastGuideSizeMm = badgeGuideSizeMm(b);
     m_designer->updateGuides(badgeGuideSizeMm(b));
     m_updatingUI = false;
@@ -2279,6 +2290,9 @@ void MainWindow::onBadgeDeselected() {
     m_propText->setPlaceholderText(QString());
     if (m_propClipCircle) {
         m_propClipCircle->setChecked(true);
+    }
+    if (m_spinCutLineOffset) {
+        m_spinCutLineOffset->setValue(0.0);
     }
     m_propColorSpace->setText("未選択");
     if (m_comboMaterial) {
@@ -2398,7 +2412,8 @@ void MainWindow::onInspectorChanged() {
         || source == m_sliderEnvReflection
         || source == m_sliderGlitterStrength
         || source == m_comboLayerBlendMode
-        || source == m_sliderLayerOpacity;
+        || source == m_sliderLayerOpacity
+        || source == m_spinCutLineOffset;
     const bool layerSource = source == m_comboLayerBlendMode || source == m_sliderLayerOpacity;
 
     auto after = before;
@@ -2428,6 +2443,9 @@ void MainWindow::onInspectorChanged() {
             b.specularStrength = m_sliderSpecular ? (m_sliderSpecular->value() / 100.0) : b.specularStrength;
             b.envReflectionStrength = m_sliderEnvReflection ? (m_sliderEnvReflection->value() / 100.0) : b.envReflectionStrength;
             b.glitterStrength = m_sliderGlitterStrength ? (m_sliderGlitterStrength->value() / 100.0) : b.glitterStrength;
+            b.guide.bleedMm = m_spinCutLineOffset
+                ? std::max(0.0, 4.0 + m_spinCutLineOffset->value())
+                : b.guide.bleedMm;
             b.rotation = m_propRotation->value();
             b.displayText = m_propText->text();
             b.clipToCircle = m_propClipCircle ? m_propClipCircle->isChecked() : b.clipToCircle;

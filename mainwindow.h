@@ -270,6 +270,7 @@ private:
     // Inspector - guides & effects
     QCheckBox* m_chkBleed;
     QCheckBox* m_chkVisible;
+    QDoubleSpinBox* m_spinCutLineOffset = nullptr;
     QCheckBox* m_chkLighting;
     QCheckBox* m_chkGlitter;
     QComboBox* m_comboMaterial = nullptr;

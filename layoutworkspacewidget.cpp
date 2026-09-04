@@ -209,6 +209,18 @@ public:
         painter->setPen(QPen(bleedColor, 1.3, Qt::DashLine));
         painter->drawPath(shapePathForBadge(m_outerRect, m_shape, m_cornerRadiusPx));
 
+        // Registration marks bridge the finished edge and the outer cut line
+        // without entering the badge artwork area.
+        if (m_bleedPx > 0.0) {
+            const qreal centerX = m_baseRect.center().x();
+            const qreal centerY = m_baseRect.center().y();
+            painter->setPen(QPen(QColor(220, 96, 20, 230), 1.1));
+            painter->drawLine(QPointF(centerX, m_outerRect.top()), QPointF(centerX, m_baseRect.top()));
+            painter->drawLine(QPointF(centerX, m_baseRect.bottom()), QPointF(centerX, m_outerRect.bottom()));
+            painter->drawLine(QPointF(m_outerRect.left(), centerY), QPointF(m_baseRect.left(), centerY));
+            painter->drawLine(QPointF(m_baseRect.right(), centerY), QPointF(m_outerRect.right(), centerY));
+        }
+
         if (m_safeInsetPx > 0.0) {
             const QRectF innerRect = m_baseRect.adjusted(m_safeInsetPx,
                                                         m_safeInsetPx,
