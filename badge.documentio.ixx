@@ -199,7 +199,7 @@ inline GuideData guideFromJson(const QJsonObject& obj, bool clipToCircle) {
     }
 
     guide.shape = guideShapeFromJsonValue(obj["shape"]);
-    guide.bleedMm = obj["bleedMm"].toDouble(3.0);
+    guide.bleedMm = obj["bleedMm"].toDouble(4.0);
     guide.safeInsetMm = obj["safeInsetMm"].toDouble(2.0);
     guide.cornerRadiusMm = obj["cornerRadiusMm"].toDouble(3.0);
     return guide;

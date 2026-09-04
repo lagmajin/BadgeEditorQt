@@ -63,7 +63,7 @@ export enum class GuideShape {
 
 export struct GuideItemData {
     GuideShape shape = GuideShape::Circle;
-    double bleedMm = 3.0;
+    double bleedMm = 4.0;
     double safeInsetMm = 2.0;
     double cornerRadiusMm = 3.0;
 };

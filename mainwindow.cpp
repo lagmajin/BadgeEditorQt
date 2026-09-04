@@ -873,6 +873,9 @@ QImage renderLayoutDebugImage(const BadgeItem& badge, int targetPx) {
 
 BadgeItem makeLayoutTransferBadge(const BadgeItem& badge, const QImage& crop, double guideSizeMm) {
     BadgeItem out = badgeForLayoutTransfer(badge);
+    // The outer orange guide is the cut line: keep a 4 mm allowance around
+    // the finished, front-visible badge size for both new and legacy badges.
+    out.guide.bleedMm = 4.0;
     out.widthMm = std::max(0.1, guideSizeMm);
     out.heightMm = std::max(0.1, guideSizeMm);
     out.xMm = 0.0;
