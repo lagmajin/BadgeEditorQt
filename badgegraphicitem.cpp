@@ -205,8 +205,8 @@ public:
     ResizeHandle(HandleKind kind, BadgeGraphicItem* parent)
         : QGraphicsRectItem(parent), m_kind(kind), m_badge(parent) {
         setRect(-8, -8, 16, 16);
-        setBrush(Qt::white);
-        setPen(QPen(Qt::blue, 1.5));
+        setBrush(QColor(68, 151, 239));
+        setPen(QPen(QColor(198, 225, 255), 1.5));
         setFlag(ItemIgnoresTransformations, true);
         setFlag(ItemIsMovable, false);
         setFlag(ItemIsSelectable, false);
@@ -221,8 +221,8 @@ public:
             setPen(QPen(QColor(255, 242, 228), 1.5));
             setCursor(isCornerHandle(m_kind) ? Qt::SizeAllCursor : cursorForHandle(m_kind));
         } else {
-            setBrush(Qt::white);
-            setPen(QPen(Qt::blue, 1.5));
+            setBrush(QColor(68, 151, 239));
+            setPen(QPen(QColor(198, 225, 255), 1.5));
             setCursor(cursorForHandle(m_kind));
         }
         update();
@@ -493,6 +493,15 @@ void BadgeGraphicItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*,
     const QRectF r = contentRectPx();
     const qreal lod = QStyleOptionGraphicsItem::levelOfDetailFromTransform(painter->worldTransform());
     renderCore(painter, r, lod < 0.8);
+    if (m_badge.isSelected) {
+        painter->save();
+        QPen outline(QColor(68, 151, 239), 1.5, Qt::DashLine);
+        outline.setCosmetic(true);
+        painter->setPen(outline);
+        painter->setBrush(Qt::NoBrush);
+        painter->drawRect(visualRectPx().adjusted(1.0, 1.0, -1.0, -1.0));
+        painter->restore();
+    }
 }
 
 QString BadgeGraphicItem::previewCacheSignature() const {
