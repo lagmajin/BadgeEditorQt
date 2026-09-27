@@ -1242,7 +1242,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
 
     m_layoutToolbar = addToolBar("Layout");
     m_layoutToolbar->setFont(uiFont);
-    configureToolbar(m_layoutToolbar, Qt::ToolButtonTextUnderIcon);
+    configureToolbar(m_layoutToolbar, Qt::ToolButtonTextBesideIcon);
     m_actOpenLayoutPerspective = m_layoutToolbar->addAction("配置確認");
     connect(m_actOpenLayoutPerspective, &QAction::triggered, this, [this]{ openLayoutPerspective(); });
     m_actOpenLayoutPerspective->setShortcut(QKeySequence("Ctrl+L"));
@@ -1257,17 +1257,18 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     setMaterialIcon(m_actLayoutPagePrev, QStringLiteral("chevron_left"));
     m_actLayoutPagePrev->setShortcut(QKeySequence(Qt::Key_PageUp));
     m_layoutPageLabel = new QLabel(QStringLiteral("1 / 1"));
-    m_layoutPageLabel->setMinimumWidth(72);
+    m_layoutPageLabel->setMinimumWidth(56);
     m_layoutPageLabel->setAlignment(Qt::AlignCenter);
     m_layoutToolbar->addWidget(m_layoutPageLabel);
     m_layoutPageCombo = new QComboBox;
-    m_layoutPageCombo->setMinimumWidth(120);
+    m_layoutPageCombo->setMinimumWidth(104);
     m_layoutPageCombo->setSizeAdjustPolicy(QComboBox::AdjustToContents);
     connect(m_layoutPageCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int index) {
         onLayoutPageSelected(index);
     });
     m_layoutToolbar->addWidget(m_layoutPageCombo);
     m_layoutPageThumbList = new QListWidget;
+    m_layoutPageThumbList->setObjectName(QStringLiteral("layoutPageStrip"));
     m_layoutPageThumbList->setViewMode(QListView::IconMode);
     m_layoutPageThumbList->setFlow(QListView::LeftToRight);
     m_layoutPageThumbList->setWrapping(false);
@@ -1277,10 +1278,11 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     m_layoutPageThumbList->setSelectionMode(QAbstractItemView::SingleSelection);
     m_layoutPageThumbList->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
     m_layoutPageThumbList->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    m_layoutPageThumbList->setIconSize(QSize(72, 72));
-    m_layoutPageThumbList->setFixedHeight(92);
-    m_layoutPageThumbList->setMinimumWidth(220);
-    m_layoutPageThumbList->setSpacing(4);
+    m_layoutPageThumbList->setIconSize(QSize(56, 56));
+    m_layoutPageThumbList->setGridSize(QSize(68, 70));
+    m_layoutPageThumbList->setFixedHeight(76);
+    m_layoutPageThumbList->setMinimumWidth(150);
+    m_layoutPageThumbList->setSpacing(2);
     connect(m_layoutPageThumbList, &QListWidget::currentRowChanged, this, [this](int row) {
         onLayoutPageSelected(row);
     });
@@ -2587,13 +2589,6 @@ void MainWindow::updateLayoutPageUi() {
             QFont font = item->font();
             font.setBold(i == pageIndex);
             item->setFont(font);
-            if (i == pageIndex) {
-                item->setBackground(QBrush(QColor(86, 120, 255, 48)));
-                item->setForeground(QBrush(QColor(40, 60, 130)));
-            } else {
-                item->setBackground(QBrush(Qt::transparent));
-                item->setForeground(QBrush());
-            }
             m_layoutPageThumbList->addItem(item);
         }
         m_layoutPageThumbList->setCurrentRow(pageIndex);
@@ -3143,6 +3138,12 @@ void MainWindow::applyTheme(bool dark) {
             QToolBar QToolButton#sendToLayoutButton { background: #2e78d2;
                 border-color: #4c95ef; color: white; font-weight: 600; }
             QToolBar QToolButton#sendToLayoutButton:hover { background: #438dea; }
+            QToolBar QListWidget#layoutPageStrip { background: #192430; color: #edf3f9;
+                border: 1px solid #3b4b5d; border-radius: 5px; padding: 1px; }
+            QToolBar QListWidget#layoutPageStrip::item { background: transparent; color: #edf3f9;
+                border: 1px solid transparent; border-radius: 3px; padding: 1px; }
+            QToolBar QListWidget#layoutPageStrip::item:selected { background: #334d68;
+                border-color: #4c95ef; color: white; }
         )")
         : QString();
     if (m_commonToolbar) m_commonToolbar->setStyleSheet(toolbarStyle);
