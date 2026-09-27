@@ -46,6 +46,7 @@ import viewportbackend;
 #include <QTimer>
 #include <QSettings>
 #include <QShowEvent>
+#include <QStatusBar>
 #include <QTime>
 #include <QWindow>
 #include <QPageSize>
@@ -144,14 +145,14 @@ QString statusText(StatusLevel level) {
     }
 }
 
-QPalette makeCinema4DDarkPalette() {
-    const QColor window(0x29, 0x2B, 0x31);
-    const QColor panel(0x1D, 0x1F, 0x24);
-    const QColor button(0x33, 0x36, 0x3C);
+QPalette makeEditorDarkPalette() {
+    const QColor window(0x20, 0x2A, 0x36);
+    const QColor panel(0x19, 0x24, 0x30);
+    const QColor button(0x2A, 0x38, 0x48);
     const QColor text(0xF1, 0xF1, 0xF1);
-    const QColor border(0x48, 0x4C, 0x55);
-    const QColor highlight(0xE0, 0x8C, 0x2B);
-    const QColor highlightText(0x19, 0x1A, 0x1E);
+    const QColor border(0x3B, 0x4B, 0x5D);
+    const QColor highlight(0x32, 0x82, 0xE8);
+    const QColor highlightText(0xFF, 0xFF, 0xFF);
 
     QPalette pal;
     pal.setColor(QPalette::Window, window);
@@ -1021,7 +1022,7 @@ static void applyWinBackdrop(HWND hwnd, bool darkMode) {
 
 MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     setWindowTitle("Badge Editor Pro");
-    resize(1300, 900);
+    resize(1500, 900);
     setAcceptDrops(true);
     m_undoStack = new QUndoStack(this);
     m_windowsIntegration = new WindowsIntegration(this);
@@ -1144,6 +1145,10 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     m_commonToolbar = addToolBar("共通");
     m_commonToolbar->setFont(uiFont);
     configureToolbar(m_commonToolbar, Qt::ToolButtonTextBesideIcon);
+    m_commonToolbar->addAction(actNew);
+    m_commonToolbar->addAction(actOpen);
+    m_commonToolbar->addAction(actSave);
+    m_commonToolbar->addSeparator();
     m_actDesigner = m_commonToolbar->addAction("DESIGNER");
     m_actDesigner->setCheckable(true);
     m_actDesigner->setChecked(true);
@@ -1169,8 +1174,8 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
 
     m_designerToolbar = addToolBar("Designer");
     m_designerToolbar->setFont(uiFont);
-    configureToolbar(m_designerToolbar, Qt::ToolButtonTextUnderIcon);
-    m_actAddBadge = m_designerToolbar->addAction("＋");
+    configureToolbar(m_designerToolbar, Qt::ToolButtonTextBesideIcon);
+    m_actAddBadge = m_designerToolbar->addAction("追加");
     connect(m_actAddBadge, &QAction::triggered, this, [this]{ onAddBadge(); });
     setMaterialIcon(m_actAddBadge, QStringLiteral("add_circle"));
     m_actBatchAdd = m_designerToolbar->addAction("一括");
@@ -1226,6 +1231,9 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     m_actSendToLayout = m_designerToolbar->addAction("レイアウトへ送る");
     connect(m_actSendToLayout, &QAction::triggered, this, [this]{ onSendToLayout(); });
     setMaterialIcon(m_actSendToLayout, QStringLiteral("send"));
+    if (auto* sendButton = m_designerToolbar->widgetForAction(m_actSendToLayout)) {
+        sendButton->setObjectName(QStringLiteral("sendToLayoutButton"));
+    }
     m_designerToolbar->addSeparator();
     m_actOpenDesignerPerspective = m_designerToolbar->addAction("編集");
     connect(m_actOpenDesignerPerspective, &QAction::triggered, this, [this]{ openDesignerPerspective(); });
@@ -1386,11 +1394,14 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     // --- Inspector ---
     auto* scroll = new QScrollArea;
     scroll->setWidgetResizable(true);
-    scroll->setMinimumWidth(280);
+    scroll->setMinimumWidth(330);
     scroll->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     m_inspector = new QWidget;
+    m_inspector->setObjectName(QStringLiteral("editInspector"));
     m_inspector->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
     auto* inspLayout = new QVBoxLayout(m_inspector);
+    inspLayout->setContentsMargins(10, 10, 10, 10);
+    inspLayout->setSpacing(8);
 
     auto* checklistGroup = new QGroupBox("手順チェック");
     m_checklistGroup = checklistGroup;
@@ -1402,8 +1413,8 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
         if (!label) {
             continue;
         }
-        label->setWordWrap(true);
-        label->setMargin(7);
+        label->setWordWrap(false);
+        label->setMargin(5);
         label->setAutoFillBackground(true);
         checklistLayout->addWidget(label);
     }
@@ -1419,8 +1430,8 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
         if (!label) {
             continue;
         }
-        label->setWordWrap(true);
-        label->setMargin(8);
+        label->setWordWrap(false);
+        label->setMargin(5);
         label->setAutoFillBackground(true);
         safetyLayout->addWidget(label);
     }
@@ -1438,8 +1449,24 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     m_propImageScale = new QDoubleSpinBox; m_propImageScale->setSuffix(" %"); m_propImageScale->setRange(10, 500); m_propImageScale->setSingleStep(5); m_propImageScale->setValue(100);
     m_propRotation = new QSlider(Qt::Horizontal); m_propRotation->setRange(0, 360);
     m_propText = new QLineEdit;
-    propForm->addRow("X:", m_propX); propForm->addRow("Y:", m_propY);
-    propForm->addRow("幅:", m_propW); propForm->addRow("高さ:", m_propH);
+    auto* positionRow = new QWidget(propGroup);
+    auto* positionLayout = new QHBoxLayout(positionRow);
+    positionLayout->setContentsMargins(0, 0, 0, 0);
+    positionLayout->setSpacing(6);
+    positionLayout->addWidget(new QLabel("X", positionRow));
+    positionLayout->addWidget(m_propX, 1);
+    positionLayout->addWidget(new QLabel("Y", positionRow));
+    positionLayout->addWidget(m_propY, 1);
+    propForm->addRow(positionRow);
+    auto* sizeRow = new QWidget(propGroup);
+    auto* sizeLayout = new QHBoxLayout(sizeRow);
+    sizeLayout->setContentsMargins(0, 0, 0, 0);
+    sizeLayout->setSpacing(6);
+    sizeLayout->addWidget(new QLabel("幅", sizeRow));
+    sizeLayout->addWidget(m_propW, 1);
+    sizeLayout->addWidget(new QLabel("高さ", sizeRow));
+    sizeLayout->addWidget(m_propH, 1);
+    propForm->addRow(sizeRow);
     propForm->addRow("画像倍率:", m_propImageScale);
     // Size preset
     m_sizePreset = new QComboBox;
@@ -1528,7 +1555,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     m_layerGroup = layerGroup;
     auto* layerLayout = new QVBoxLayout(layerGroup);
     m_layerList = new QListWidget;
-    m_layerList->setMaximumHeight(120);
+    m_layerList->setMaximumHeight(84);
     m_layerList->setDragEnabled(true);
     m_layerList->setAcceptDrops(true);
     m_layerList->setDropIndicatorShown(true);
@@ -1537,7 +1564,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     m_layerList->setSelectionMode(QAbstractItemView::SingleSelection);
     layerLayout->addWidget(m_layerList);
     m_layerPreviewLabel = new QLabel;
-    m_layerPreviewLabel->setFixedSize(128, 128);
+    m_layerPreviewLabel->setFixedSize(72, 72);
     m_layerPreviewLabel->setAlignment(Qt::AlignCenter);
     m_layerPreviewLabel->setAutoFillBackground(true);
     layerLayout->addWidget(m_layerPreviewLabel);
@@ -1861,7 +1888,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     m_inspectorDock = new ads::CDockWidget("インスペクター");
     m_inspectorDock->setWidget(scroll);
     m_inspectorDock->setMinimumSizeHintMode(ads::CDockWidget::MinimumSizeHintFromDockWidget);
-    m_inspectorDock->resize(300, 800);
+    m_inspectorDock->resize(380, 800);
 
     auto* logTabs = new QTabWidget;
     m_logList = new QListWidget;
@@ -1874,7 +1901,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     m_logDock = new ads::CDockWidget("診断");
     m_logDock->setWidget(logTabs);
     m_logDock->setMinimumSizeHintMode(ads::CDockWidget::MinimumSizeHintFromDockWidget);
-    m_logDock->resize(420, 320);
+    m_logDock->resize(420, 190);
 
     m_dockArea = m_dockManager->setCentralWidget(m_designerDock);
     m_dockManager->addDockWidgetTabToArea(m_layoutDock, m_dockArea);
@@ -1893,6 +1920,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     openDesignerPerspective();
     updateLayoutPageUi();
     updateTitle();
+    statusBar()->showMessage(QStringLiteral("準備完了"));
 }
 
 QList<BadgeItem> MainWindow::currentDesignerBadges() const {
@@ -2268,6 +2296,7 @@ void MainWindow::onSelectionChanged() {
     m_designer->updateGuides(badgeGuideSizeMm(b));
     m_updatingUI = false;
     refreshLayerList();
+    updateSafetyGuideHud();
 }
 
 void MainWindow::onBadgeDeselected() {
@@ -2324,6 +2353,7 @@ void MainWindow::onBadgeDeselected() {
     updateLayerBlendModeUi();
     updateLayerPreviewUi();
     updateLayerFillUi();
+    updateSafetyGuideHud();
 }
 
 void MainWindow::onBadgeMoved(BadgeGraphicItem* item) {
@@ -2850,7 +2880,7 @@ void MainWindow::updateLayerPreviewUi() {
     }
 
     const auto& badge = m_selected.first()->badge();
-    const QPixmap preview = renderLayerPreviewPixmap(badge, row, m_layerPreviewLabel->palette(), 128);
+    const QPixmap preview = renderLayerPreviewPixmap(badge, row, m_layerPreviewLabel->palette(), 72);
     m_layerPreviewLabel->setText(QString());
     m_layerPreviewLabel->setPixmap(preview);
 }
@@ -3101,8 +3131,40 @@ void MainWindow::onShowTransferDebug() {
 
 void MainWindow::applyTheme(bool dark) {
     m_isDark = dark;
-    QPalette pal = dark ? makeCinema4DDarkPalette() : QApplication::style()->standardPalette();
+    QPalette pal = dark ? makeEditorDarkPalette() : QApplication::style()->standardPalette();
     QApplication::setPalette(pal);
+    const QString toolbarStyle = dark
+        ? QStringLiteral(R"(
+            QToolBar { background: #202a36; border: 0; spacing: 5px; }
+            QToolBar QToolButton { color: #edf3f9; border: 1px solid transparent;
+                border-radius: 5px; padding: 6px 8px; }
+            QToolBar QToolButton:hover { background: #33485f; }
+            QToolBar QToolButton:checked { background: #2e78d2; border-color: #4c95ef; color: white; }
+            QToolBar QToolButton#sendToLayoutButton { background: #2e78d2;
+                border-color: #4c95ef; color: white; font-weight: 600; }
+            QToolBar QToolButton#sendToLayoutButton:hover { background: #438dea; }
+        )")
+        : QString();
+    if (m_commonToolbar) m_commonToolbar->setStyleSheet(toolbarStyle);
+    if (m_designerToolbar) m_designerToolbar->setStyleSheet(toolbarStyle);
+    if (m_layoutToolbar) m_layoutToolbar->setStyleSheet(toolbarStyle);
+    if (m_inspector) {
+        m_inspector->setStyleSheet(dark
+            ? QStringLiteral(R"(
+                QWidget#editInspector { background: #202a36; }
+                QWidget#editInspector QGroupBox { background: #263443; border: 1px solid #3b4b5d;
+                    border-radius: 5px; margin-top: 18px; padding: 7px; }
+                QWidget#editInspector QGroupBox::title { color: #e8eef5;
+                    subcontrol-origin: margin; left: 9px; padding: 0 4px; }
+                QWidget#editInspector QDoubleSpinBox, QWidget#editInspector QLineEdit,
+                QWidget#editInspector QComboBox { background: #1a2632; color: #f1f5fa;
+                    border: 1px solid #42556a; border-radius: 4px; min-height: 23px; }
+                QWidget#editInspector QPushButton { background: #33455a; color: #f1f5fa;
+                    border: 1px solid #4a6078; border-radius: 4px; padding: 4px 7px; }
+                QWidget#editInspector QPushButton:hover { background: #405a75; }
+            )")
+            : QString());
+    }
     if (m_dockStyleManager) {
         m_dockStyleManager->applyTheme(QApplication::palette());
     }
@@ -3278,7 +3340,9 @@ void MainWindow::updateSafetyGuideHud() {
         if (!label) {
             return;
         }
-        label->setText(QStringLiteral("<b>%1</b><br>%2").arg(title, detail));
+        const QString fullText = QStringLiteral("%1  %2").arg(title, detail);
+        label->setText(label->fontMetrics().elidedText(fullText, Qt::ElideRight, qMax(290, label->width() - 20)));
+        label->setToolTip(fullText);
         QPalette pal = label->palette();
         pal.setColor(QPalette::Window, QColor(color.red(), color.green(), color.blue(), 36));
         pal.setColor(QPalette::WindowText, color);
@@ -3296,15 +3360,18 @@ void MainWindow::updateSafetyGuideHud() {
         setLabel(m_checklistColor, entries[2].title, entries[2].detail, entries[2].color);
     }
 
-    if (m_safetyGuideDesign) {
-        setLabel(m_safetyGuideDesign, entries[0].title, entries[0].detail, entries[0].color);
-    }
-    if (m_safetyGuideLayout) {
-        setLabel(m_safetyGuideLayout, entries[1].title, entries[1].detail, entries[1].color);
-    }
-    if (m_safetyGuideColor) {
-        setLabel(m_safetyGuideColor, entries[2].title, entries[2].detail, entries[2].color);
-    }
+    const double finishMm = activeGuideSizeMm();
+    const double bleedDiameterMm = finishMm + 3.0;
+    const double safeDiameterMm = std::max(0.0, finishMm - 4.0);
+    const QColor guideRed(0xEC, 0x79, 0x79);
+    const QColor guideGreen(0x69, 0xD6, 0x8D);
+    const QColor guideNeutral(0xCF, 0xD9, 0xE5);
+    setLabel(m_safetyGuideDesign, QStringLiteral("巻き込み線"),
+             QStringLiteral("直径 %1 mm").arg(bleedDiameterMm, 0, 'f', 1), guideRed);
+    setLabel(m_safetyGuideLayout, QStringLiteral("仕上がり"),
+             QStringLiteral("直径 %1 mm").arg(finishMm, 0, 'f', 1), guideNeutral);
+    setLabel(m_safetyGuideColor, QStringLiteral("安全圏"),
+             QStringLiteral("直径 %1 mm").arg(safeDiameterMm, 0, 'f', 1), guideGreen);
 }
 
 void MainWindow::dragEnterEvent(QDragEnterEvent* event) {

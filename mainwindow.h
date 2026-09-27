@@ -177,7 +177,7 @@ private:
     ads::CDockWidget* m_designerDock = nullptr;
     ads::CDockWidget* m_layoutDock = nullptr;
     DockStyleManager* m_dockStyleManager = nullptr;
-    QWidget* m_inspector;
+    QWidget* m_inspector = nullptr;
     DesignerWidget* m_designer;
     LayoutWorkspaceWidget* m_layoutWorkspace;
 
