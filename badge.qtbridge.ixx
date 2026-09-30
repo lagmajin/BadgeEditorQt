@@ -1,5 +1,8 @@
 module;
 
+#include <string>
+#include <vector>
+
 #include <QColor>
 #include <QString>
 #include <QList>
@@ -8,7 +11,6 @@ module;
 
 export module badge.qtbridge;
 
-import std;
 export import badge.layout;
 
 namespace badge::qt::detail {

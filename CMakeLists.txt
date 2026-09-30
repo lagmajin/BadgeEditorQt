@@ -1,4 +1,7 @@
 cmake_minimum_required(VERSION 3.28)
+
+# Enable CMake's experimental standard-library module support before
+# `project()` detects the C++ toolchain. Required for `import std;`.
 project(BadgeEditorQt VERSION 1.0.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 23)
@@ -8,9 +11,10 @@ set(CMAKE_AUTOMOC OFF)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC OFF)
 
-set(BADGEEDITOR_VCPKG_INSTALLED_DIR "C:/vcpkg/installed/x64-windows")
+set(BADGEEDITOR_VCPKG_INSTALLED_DIR "" CACHE PATH
+    "Optional vcpkg installed directory (normally provided by the vcpkg toolchain)")
 
-if (WIN32)
+if (WIN32 AND BADGEEDITOR_VCPKG_INSTALLED_DIR)
     set(Qt6_DIR "${BADGEEDITOR_VCPKG_INSTALLED_DIR}/share/Qt6" CACHE PATH "Qt6 package config directory" FORCE)
     set(qtadvanceddocking-qt6_DIR "${BADGEEDITOR_VCPKG_INSTALLED_DIR}/share/qtadvanceddocking-qt6" CACHE PATH "qtadvanceddocking-qt6 package config directory" FORCE)
     set(OpenImageIO_DIR "${BADGEEDITOR_VCPKG_INSTALLED_DIR}/share/openimageio" CACHE PATH "OpenImageIO package config directory" FORCE)
@@ -26,6 +30,14 @@ find_package(Qt6 COMPONENTS Svg QUIET)
 set(SOURCES
     main.cpp
     mainwindow.cpp
+    mainwindow_support.cpp
+    mainwindow_layout.cpp
+    mainwindow_designer.cpp
+    mainwindow_edit.cpp
+    mainwindow_ui.cpp
+    mainwindow_io.cpp
+    mainwindow_inspector.cpp
+    layerpreview.cpp
     dockstylemanager.cpp
     designerwidget.cpp
     layoutworkspacewidget.cpp
@@ -69,6 +81,17 @@ set(HEADERS
 )
 
 add_executable(BadgeEditorQt ${SOURCES} ${HEADERS})
+
+# Keep a single executable location for both single- and multi-config
+# generators. This prevents Visual Studio from launching an older
+# Debug\\BadgeEditorQt.exe while CMake/Ninja updates the binary at the build root.
+set_target_properties(BadgeEditorQt PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_BINARY_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO "${CMAKE_BINARY_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_MINSIZEREL "${CMAKE_BINARY_DIR}"
+)
 
 if (WIN32)
     target_sources(BadgeEditorQt PRIVATE appicon.rc)

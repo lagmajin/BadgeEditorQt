@@ -16,6 +16,7 @@ struct AppSettings {
     int glitterPattern = 0;
     int printResolution = 300;
     bool experimentalGpuViewport = false;
+    double duplicateOffsetMm = 2.0;
 };
 
 class QCheckBox;
@@ -47,6 +48,7 @@ private:
     QComboBox* m_glitterPattern = nullptr;
     QSpinBox* m_printResolution = nullptr;
     QCheckBox* m_experimentalGpuViewport = nullptr;
+    QDoubleSpinBox* m_duplicateOffset = nullptr;
     bool m_backdropApplied = false;
     bool m_darkTheme = true;
 };

@@ -61,6 +61,9 @@ private:
 
     // Edit
     void onDelete();
+    void onDuplicate();
+    void onUndo();
+    void onRedo();
 
     // View
     void onToggleTheme();
@@ -126,7 +129,7 @@ private:
     void applyDesignerBadges(const QList<BadgeItem>& badges, const QList<int>& selectedIndices = {});
     QList<int> selectedBadgeIndices() const;
     QList<BadgeItem> currentDesignerBadges() const;
-    void pushBadgeChange(const QString& label, const QList<BadgeItem>& beforeBadges, const QList<int>& beforeSelection, const QList<BadgeItem>& afterBadges, const QList<int>& afterSelection);
+    void pushBadgeChange(const QString& label, const QList<BadgeItem>& beforeBadges, const QList<int>& beforeSelection, const QList<BadgeItem>& afterBadges, const QList<int>& afterSelection, bool mergeable = false);
     void appendLog(const QString& message);
     void refreshDiagnostics();
     void requestDiagnosticsRefresh(const char* reason = nullptr);
@@ -174,7 +177,7 @@ private:
     ads::CDockWidget* m_designerDock = nullptr;
     ads::CDockWidget* m_layoutDock = nullptr;
     DockStyleManager* m_dockStyleManager = nullptr;
-    QWidget* m_inspector;
+    QWidget* m_inspector = nullptr;
     DesignerWidget* m_designer;
     LayoutWorkspaceWidget* m_layoutWorkspace;
 
@@ -198,6 +201,15 @@ private:
     QMenu* m_savedPerspectiveMenu = nullptr;
     QAction* m_actAddBadge = nullptr;
     QAction* m_actBatchAdd = nullptr;
+    QAction* m_actDuplicate = nullptr;
+    QAction* m_actDelete = nullptr;
+    QAction* m_actAlignLeft = nullptr;
+    QAction* m_actAlignHCenter = nullptr;
+    QAction* m_actAlignRight = nullptr;
+    QAction* m_actAlignTop = nullptr;
+    QAction* m_actAlignVCenter = nullptr;
+    QAction* m_actAlignBottom = nullptr;
+    QDoubleSpinBox* m_spinDuplicateOffset = nullptr;
     QAction* m_actMixedLayout = nullptr;
     QAction* m_actSendToLayout = nullptr;
     QAction* m_actClearLayout = nullptr;
@@ -258,6 +270,7 @@ private:
     // Inspector - guides & effects
     QCheckBox* m_chkBleed;
     QCheckBox* m_chkVisible;
+    QDoubleSpinBox* m_spinCutLineOffset = nullptr;
     QCheckBox* m_chkLighting;
     QCheckBox* m_chkGlitter;
     QComboBox* m_comboMaterial = nullptr;

@@ -205,8 +205,8 @@ public:
     ResizeHandle(HandleKind kind, BadgeGraphicItem* parent)
         : QGraphicsRectItem(parent), m_kind(kind), m_badge(parent) {
         setRect(-8, -8, 16, 16);
-        setBrush(Qt::white);
-        setPen(QPen(Qt::blue, 1.5));
+        setBrush(QColor(68, 151, 239));
+        setPen(QPen(QColor(198, 225, 255), 1.5));
         setFlag(ItemIgnoresTransformations, true);
         setFlag(ItemIsMovable, false);
         setFlag(ItemIsSelectable, false);
@@ -221,8 +221,8 @@ public:
             setPen(QPen(QColor(255, 242, 228), 1.5));
             setCursor(isCornerHandle(m_kind) ? Qt::SizeAllCursor : cursorForHandle(m_kind));
         } else {
-            setBrush(Qt::white);
-            setPen(QPen(Qt::blue, 1.5));
+            setBrush(QColor(68, 151, 239));
+            setPen(QPen(QColor(198, 225, 255), 1.5));
             setCursor(cursorForHandle(m_kind));
         }
         update();
@@ -493,6 +493,15 @@ void BadgeGraphicItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*,
     const QRectF r = contentRectPx();
     const qreal lod = QStyleOptionGraphicsItem::levelOfDetailFromTransform(painter->worldTransform());
     renderCore(painter, r, lod < 0.8);
+    if (m_badge.isSelected) {
+        painter->save();
+        QPen outline(QColor(68, 151, 239), 1.5, Qt::DashLine);
+        outline.setCosmetic(true);
+        painter->setPen(outline);
+        painter->setBrush(Qt::NoBrush);
+        painter->drawRect(visualRectPx().adjusted(1.0, 1.0, -1.0, -1.0));
+        painter->restore();
+    }
 }
 
 QString BadgeGraphicItem::previewCacheSignature() const {
@@ -687,23 +696,34 @@ void BadgeGraphicItem::renderCore(QPainter* painter, const QRectF& r, bool simpl
 }
 
 void BadgeGraphicItem::loadImage() {
-    m_loadedImagePath = !m_badge.layers.isEmpty() ? m_badge.layers.first().imagePath : m_badge.imagePath;
-    m_thumbnail = QPixmap();
-    m_processed = QPixmap();
-    m_colorSpaceLabel = QStringLiteral("読み込みなし");
-    m_previewCache = QImage();
-    m_previewCacheSignature.clear();
-    m_previewCachePixelSize = QSize();
-    m_layerPreviewCache.clear();
+    const QString nextPath = !m_badge.layers.isEmpty() ? m_badge.layers.first().imagePath : m_badge.imagePath;
 
-    if (m_loadedImagePath.isEmpty() || !QFileInfo::exists(m_loadedImagePath)) {
+    if (nextPath.isEmpty() || !QFileInfo::exists(nextPath)) {
+        m_loadedImagePath = nextPath;
+        m_thumbnail = {};
+        m_processed = {};
+        m_colorSpaceLabel = QStringLiteral("読み込みなし");
         update();
         return;
     }
 
     QString label;
-    m_thumbnail = QPixmap::fromImage(ImageProcessor::loadImage(m_loadedImagePath, &label));
+    const QImage loaded = ImageProcessor::loadImage(nextPath, &label);
+    const QPixmap nextThumbnail = loaded.isNull() ? QPixmap() : QPixmap::fromImage(loaded);
+    if (nextThumbnail.isNull()) {
+        m_colorSpaceLabel = label;
+        update();
+        return;
+    }
+
+    m_loadedImagePath = nextPath;
+    m_thumbnail = nextThumbnail;
+    m_processed = {};
     m_colorSpaceLabel = label;
+    m_previewCache = {};
+    m_previewCacheSignature.clear();
+    m_previewCachePixelSize = {};
+    m_layerPreviewCache.clear();
     applyColorCorrection();
 }
 
@@ -717,8 +737,13 @@ void BadgeGraphicItem::applyColorCorrection() {
         update();
         return;
     }
-    if (!m_thumbnail.isNull())
-        m_processed = ImageProcessor::applyCorrection(m_thumbnail, m_badge.brightness, m_badge.contrast, m_badge.saturation);
+    if (!m_thumbnail.isNull()) {
+        const QPixmap nextProcessed = ImageProcessor::applyCorrection(
+            m_thumbnail, m_badge.brightness, m_badge.contrast, m_badge.saturation);
+        if (!nextProcessed.isNull()) {
+            m_processed = nextProcessed;
+        }
+    }
     update();
 }
 
