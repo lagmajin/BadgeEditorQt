@@ -1,7 +1,7 @@
 module;
 
-#include "badge.paper.h"
-
 export module badge.paper;
 
-export import :paper;
+export {
+#include "badge.paper.h"
+}

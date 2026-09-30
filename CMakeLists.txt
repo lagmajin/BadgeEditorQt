@@ -2,6 +2,9 @@ cmake_minimum_required(VERSION 3.28)
 
 # Enable CMake's experimental standard-library module support before
 # `project()` detects the C++ toolchain. Required for `import std;`.
+set(CMAKE_EXPERIMENTAL_CXX_IMPORT_STD
+    "f35a9ac6-8463-4d38-8eec-5d6008153e7d")
+
 project(BadgeEditorQt VERSION 1.0.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 23)
@@ -52,6 +55,7 @@ set(SOURCES
     lightingeffect.cpp
     layoutengine.cpp
     imageprocessor.cpp
+    viewportbackend.cpp
     projectsync.cpp
     windowsintegration.cpp
     resources.qrc
@@ -101,12 +105,13 @@ target_sources(BadgeEditorQt
     PRIVATE
         FILE_SET cxx_modules TYPE CXX_MODULES FILES
             badge.event.ixx
+            badge.model.ixx
+            badge.paper.ixx
             badge.layout.ixx
             badge.imageio.ixx
             badge.document.ixx
             badge.documentio.ixx
             badge.qtbridge.ixx
-            viewportbackend.ixx
             constants.ixx
 )
 

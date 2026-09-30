@@ -4,9 +4,7 @@
 #include <QFileInfo>
 #include <QColor>
 #include <QList>
-#include <QPointF>
 #include <QString>
-#include <QSizeF>
 
 enum class LayerBlendMode {
     Normal = 0,
@@ -37,7 +35,7 @@ struct LayerItem {
     QString name;
     double opacity = 1.0;
     bool visible = true;
-    double offsetX = 0.0; // mm offset within badge
+    double offsetX = 0.0;
     double offsetY = 0.0;
     LayerBlendMode blendMode = LayerBlendMode::Normal;
     QColor fillColor;
@@ -64,7 +62,7 @@ enum class GuideShape {
 
 struct GuideItemData {
     GuideShape shape = GuideShape::Circle;
-    double bleedMm = 3.0;
+    double bleedMm = 4.0;
     double safeInsetMm = 2.0;
     double cornerRadiusMm = 3.0;
 };

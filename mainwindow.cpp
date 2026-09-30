@@ -12,7 +12,7 @@
 #include "windowsintegration.h"
 #include "mainwindow_support.h"
 #include "layerpreview.h"
-import viewportbackend;
+#include "viewportbackend.h"
 #include "constants.h"
 #include <QMenuBar>
 #include <QMenu>
@@ -207,7 +207,7 @@ QString materialIconAssetPath(const QString& name) {
 }
 
 QString materialIconResourcePath(const QString& name) {
-    return QStringLiteral(":/material-icons/%1.svg").arg(name);
+    return QStringLiteral(":/material-icons/assets/material-icons/%1.svg").arg(name);
 }
 
 QIcon loadMaterialIcon(const QString& name) {
@@ -477,6 +477,12 @@ bool badgeEqualsIgnoringPositionAndSize(const BadgeItem& a, const BadgeItem& b) 
         && a.isSelected == b.isSelected
         && a.layers.size() == b.layers.size()
         && std::equal(a.layers.begin(), a.layers.end(), b.layers.begin(), badgeLayerEquals);
+}
+
+QString badgeSizeText(const BadgeItem& badge) {
+    return QStringLiteral("%1 × %2 mm")
+        .arg(QString::number(std::max(0.0, badge.widthMm), 'f', 1),
+             QString::number(std::max(0.0, badge.heightMm), 'f', 1));
 }
 
 bool badgeListEquals(const QList<BadgeItem>& a, const QList<BadgeItem>& b) {
@@ -1020,7 +1026,8 @@ static void applyWinBackdrop(HWND hwnd, bool darkMode) {
 }
 #endif
 
-MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
+MainWindow::MainWindow(QWidget* parent)
+    : QMainWindow(parent), m_internalEventQueue(std::make_unique<badge::AppEventQueue>()) {
     setWindowTitle("Badge Editor Pro");
     resize(1500, 900);
     setAcceptDrops(true);
@@ -1033,6 +1040,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
 
     // --- Menu ---
     auto* fileMenu = menuBar()->addMenu("ファイル(&F)");
+    fileMenu->setObjectName(QStringLiteral("fileMenu"));
     auto* actNew = fileMenu->addAction("新規(&N)", this, &MainWindow::onNew, QKeySequence::New);
     auto* actOpen = fileMenu->addAction("開く(&O)...", this, &MainWindow::onOpen, QKeySequence::Open);
     auto* actSave = fileMenu->addAction("保存(&S)", this, &MainWindow::onSave, QKeySequence::Save);
@@ -1979,6 +1987,8 @@ void MainWindow::pushBadgeChange(const QString& label,
         }));
 }
 
+MainWindow::~MainWindow() = default;
+
 void MainWindow::onBadgeEditStarted(BadgeGraphicItem* item) {
     if (m_pendingEditActive || !item || !m_designer) {
         return;
@@ -2193,30 +2203,30 @@ void MainWindow::refreshDiagnostics() {
 }
 
 void MainWindow::requestDiagnosticsRefresh(const char* reason) {
-    if (m_internalEventQueue.containsKind(badge::AppEventKind::DiagnosticsDirty)) {
+    if (m_internalEventQueue->containsKind(badge::AppEventKind::DiagnosticsDirty)) {
         scheduleInternalEventFlush();
         return;
     }
-    m_internalEventQueue.postDirty(badge::AppEventKind::DiagnosticsDirty,
+    m_internalEventQueue->postDirty(badge::AppEventKind::DiagnosticsDirty,
                                    reason ? std::string(reason) : std::string{});
     scheduleInternalEventFlush();
 }
 
 void MainWindow::requestBadgeEdited(const char* reason) {
-    if (m_internalEventQueue.containsKind(badge::AppEventKind::BadgeEdited)) {
+    if (m_internalEventQueue->containsKind(badge::AppEventKind::BadgeEdited)) {
         scheduleInternalEventFlush();
         return;
     }
-    m_internalEventQueue.postBadgeEdited(reason ? std::string(reason) : std::string{});
+    m_internalEventQueue->postBadgeEdited(reason ? std::string(reason) : std::string{});
     scheduleInternalEventFlush();
 }
 
 void MainWindow::requestLayoutRefresh(const char* reason) {
-    if (m_internalEventQueue.containsKind(badge::AppEventKind::LayoutDirty)) {
+    if (m_internalEventQueue->containsKind(badge::AppEventKind::LayoutDirty)) {
         scheduleInternalEventFlush();
         return;
     }
-    m_internalEventQueue.postDirty(badge::AppEventKind::LayoutDirty,
+    m_internalEventQueue->postDirty(badge::AppEventKind::LayoutDirty,
                                    reason ? std::string(reason) : std::string{});
     scheduleInternalEventFlush();
 }
@@ -2304,7 +2314,7 @@ void MainWindow::onSelectionChanged() {
 void MainWindow::onBadgeDeselected() {
     m_selected.clear();
     m_pendingBadgeMoveItem = nullptr;
-    m_internalEventQueue.clear();
+    m_internalEventQueue->clear();
     m_internalEventFlushScheduled = false;
     setInspectorControlsEnabled(false);
     m_updatingUI = true;
@@ -2363,7 +2373,7 @@ void MainWindow::onBadgeMoved(BadgeGraphicItem* item) {
     m_pendingBadgeMoveItem = item;
     const int badgeIndex = m_designer ? m_designer->graphicItems().indexOf(item) : -1;
     const BadgeItem& badge = item->badge();
-    m_internalEventQueue.postBadgeMoved(badgeIndex, badge.xMm, badge.yMm);
+    m_internalEventQueue->postBadgeMoved(badgeIndex, badge.xMm, badge.yMm);
     scheduleInternalEventFlush();
     if (!m_isDesigner) {
         requestLayoutRefresh("badge moved in layout view");
@@ -2371,7 +2381,7 @@ void MainWindow::onBadgeMoved(BadgeGraphicItem* item) {
 }
 
 void MainWindow::flushInternalEvents() {
-    const auto events = m_internalEventQueue.drain();
+    const auto events = m_internalEventQueue->drain();
     bool sawBadgeMove = false;
     bool sawLayoutDirty = false;
     bool needsDiagnostics = false;
@@ -3128,6 +3138,34 @@ void MainWindow::applyTheme(bool dark) {
     m_isDark = dark;
     QPalette pal = dark ? makeEditorDarkPalette() : QApplication::style()->standardPalette();
     QApplication::setPalette(pal);
+    const QString menuStyle = dark
+        ? QStringLiteral(R"(
+            QMenuBar { background: #202a36; color: #edf3f9; border-bottom: 1px solid #3b4b5d; }
+            QMenuBar::item { background: transparent; color: #edf3f9; padding: 6px 10px; }
+            QMenuBar::item:selected { background: #33485f; color: #ffffff; }
+            QMenuBar::item:pressed { background: #2e78d2; color: #ffffff; }
+            QMenu { background: #192430; color: #edf3f9; border: 1px solid #3b4b5d; padding: 4px; }
+            QMenu::item { background: transparent; color: #edf3f9; padding: 6px 28px 6px 30px; }
+            QMenu::item:selected { background: #334d68; color: #ffffff; }
+            QMenu::item:disabled { color: #8290a0; }
+            QMenu::separator { height: 1px; background: #3b4b5d; margin: 4px 8px; }
+        )")
+        : QStringLiteral(R"(
+            QMenuBar { background: #f4f6f8; color: #263443; border-bottom: 1px solid #d2d9e0; }
+            QMenuBar::item { background: transparent; color: #263443; padding: 6px 10px; }
+            QMenuBar::item:selected { background: #e2eaf2; color: #17212b; }
+            QMenu { background: #ffffff; color: #263443; border: 1px solid #c7d0da; padding: 4px; }
+            QMenu::item { background: transparent; color: #263443; padding: 6px 28px 6px 30px; }
+            QMenu::item:selected { background: #dceaff; color: #17212b; }
+            QMenu::item:disabled { color: #89939e; }
+            QMenu::separator { height: 1px; background: #d2d9e0; margin: 4px 8px; }
+        )");
+    menuBar()->setStyleSheet(menuStyle);
+    for (QMenu* menu : findChildren<QMenu*>()) {
+        menu->setStyleSheet(menuStyle);
+        menu->setPalette(pal);
+    }
+
     const QString toolbarStyle = dark
         ? QStringLiteral(R"(
             QToolBar { background: #202a36; border: 0; spacing: 5px; }

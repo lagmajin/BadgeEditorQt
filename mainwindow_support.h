@@ -5,9 +5,9 @@
 #include <QString>
 #include <QColor>
 #include <QtGlobal>
-#include "badgeitem.h"
 
 class QWidget;
+struct BadgeItem;
 namespace badge { struct DocumentData; }
 
 void showOperationWarning(QWidget* parent,
@@ -16,11 +16,6 @@ void showOperationWarning(QWidget* parent,
                           const QString& path = QString(),
                           const QString& detail = QString());
 
-void configurePrinterForDocument(QPrinter& printer,
-                                 const badge::DocumentData& document,
-                                 int resolution);
-
 QColor blend(const QColor& a, const QColor& b, qreal ratio);
-QString badgeSizeText(const BadgeItem& badge);
 
 #endif

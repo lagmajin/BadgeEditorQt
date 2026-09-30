@@ -1,4 +1,5 @@
 #include "layoutworkspacewidget.h"
+#include "viewportbackend.h"
 #include "badgeitem.h"
 #include "badge.model.h"
 #include "imageprocessor.h"
@@ -28,7 +29,6 @@
 #include <QUrl>
 #include <QDir>
 #include <algorithm>
-import viewportbackend;
 
 import badge.imageio;
 import badge.document;

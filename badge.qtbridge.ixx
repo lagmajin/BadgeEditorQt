@@ -6,8 +6,8 @@ module;
 #include <QColor>
 #include <QString>
 #include <QList>
-#include "badgeitem.h"
 #include "badge.model.h"
+#include "badgeitem.h"
 
 export module badge.qtbridge;
 

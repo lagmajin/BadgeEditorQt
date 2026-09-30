@@ -1,8 +1,7 @@
 module;
 
 #include <QString>
-#include <QPointF>
-#include <QSizeF>
+#include <QColor>
 #include <QList>
 #include <QFileInfo>
 
@@ -40,6 +39,7 @@ export struct LayerItem {
     double offsetX = 0.0; // mm offset within badge
     double offsetY = 0.0;
     LayerBlendMode blendMode = LayerBlendMode::Normal;
+    QColor fillColor;
 };
 
 export inline LayerItem layerFromImagePath(const QString& imagePath) {

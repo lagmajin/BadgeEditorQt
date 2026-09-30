@@ -19,6 +19,7 @@
 #include <QTimer>
 #include <QColor>
 #include <functional>
+#include <memory>
 #include <wobjectdefs.h>
 #include "appsettingsdialog.h"
 #include "dockstylemanager.h"
@@ -26,7 +27,6 @@
 #include "designerwidget.h"
 #include "layoutworkspacewidget.h"
 #include "transferdebugdialog.h"
-import badge.event;
 
 namespace ads {
 class CDockManager;
@@ -41,11 +41,13 @@ class QPushButton;
 class WindowsIntegration;
 namespace badge {
 struct DocumentData;
+class AppEventQueue;
 }
 class MainWindow : public QMainWindow {
     W_OBJECT(MainWindow)
 public:
     explicit MainWindow(QWidget* parent = nullptr);
+    ~MainWindow() override;
     void openProjectPath(const QString& path);
 
 private:
@@ -260,7 +262,7 @@ private:
     QListWidget* m_issueList = nullptr;
     QListWidget* m_linkList = nullptr;
     QPointer<BadgeGraphicItem> m_pendingBadgeMoveItem;
-    badge::AppEventQueue m_internalEventQueue;
+    std::unique_ptr<badge::AppEventQueue> m_internalEventQueue;
 
     // Inspector - color correction
     QSlider* m_propBrightness;

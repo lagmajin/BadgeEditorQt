@@ -1,4 +1,5 @@
 #include "designerwidget.h"
+#include "viewportbackend.h"
 #include "constants.h"
 #include <QGraphicsSceneMouseEvent>
 #include <QWheelEvent>
@@ -18,7 +19,6 @@
 #include <cmath>
 #include <utility>
 #include <wobjectimpl.h>
-import viewportbackend;
 
 static QColor blend(const QColor& a, const QColor& b, qreal ratio) {
     const qreal clamped = std::clamp(ratio, 0.0, 1.0);

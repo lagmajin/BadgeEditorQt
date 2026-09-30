@@ -18,6 +18,20 @@
 import badge.documentio;
 import badge.document;
 
+namespace {
+void configurePrinterForDocument(QPrinter& printer,
+                                 const badge::DocumentData& document,
+                                 int resolution) {
+    printer.setResolution(std::max(72, resolution));
+    printer.setFullPage(true);
+    printer.setPageSize(QPageSize(QSizeF(document.paper.widthMm, document.paper.heightMm),
+                                  QPageSize::Millimeter));
+    printer.setPageOrientation(document.paper.widthMm >= document.paper.heightMm
+                                    ? QPageLayout::Landscape
+                                    : QPageLayout::Portrait);
+}
+}
+
 void MainWindow::onExportPng() {
     requestLayoutRefresh("export png");
     flushInternalEvents();

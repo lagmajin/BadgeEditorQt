@@ -1,7 +1,5 @@
 #include "mainwindow_support.h"
 
-import badge.document;
-
 #include <QDir>
 #include <QMessageBox>
 #include <QPageLayout>
@@ -18,12 +16,6 @@ QColor blend(const QColor& a, const QColor& b, qreal ratio) {
         a.alphaF() * (1.0 - clamped) + b.alphaF() * clamped);
 }
 
-QString badgeSizeText(const BadgeItem& badge) {
-    return QStringLiteral("%1 × %2 mm")
-        .arg(QString::number(std::max(0.0, badge.widthMm), 'f', 1),
-             QString::number(std::max(0.0, badge.heightMm), 'f', 1));
-}
-
 void showOperationWarning(QWidget* parent,
                           const QString& title,
                           const QString& action,
@@ -38,16 +30,4 @@ void showOperationWarning(QWidget* parent,
         lines.append(detail);
     }
     QMessageBox::warning(parent, title, lines.join(QStringLiteral("\n")));
-}
-
-void configurePrinterForDocument(QPrinter& printer,
-                                 const badge::DocumentData& document,
-                                 int resolution) {
-    printer.setResolution(std::max(72, resolution));
-    printer.setFullPage(true);
-    printer.setPageSize(QPageSize(QSizeF(document.paper.widthMm, document.paper.heightMm),
-                                  QPageSize::Millimeter));
-    printer.setPageOrientation(document.paper.widthMm >= document.paper.heightMm
-                                    ? QPageLayout::Landscape
-                                    : QPageLayout::Portrait);
 }
