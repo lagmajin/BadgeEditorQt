@@ -14,6 +14,7 @@
 #include "layerpreview.h"
 #include "viewportbackend.h"
 #include "constants.h"
+import badge.event;
 #include <QMenuBar>
 #include <QMenu>
 #include <QAction>
