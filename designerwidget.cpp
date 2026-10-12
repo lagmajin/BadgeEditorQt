@@ -695,13 +695,13 @@ void DesignerWidget::drawBackground(QPainter* painter, const QRectF& rect) {
         ? blend(palette().color(QPalette::Mid), palette().color(QPalette::Highlight), 0.10)
         : QColor(201, 205, 211);
     const int majorAlpha = dark && !printGuideGrid ? 150 : 105;
-    const int minorAlpha = dark && !printGuideGrid ? 86 : 48;
+    const int minorAlpha = dark && !printGuideGrid ? 86 : 58;
     const QColor majorGridColor = QColor::fromRgb(majorGridBase.red(), majorGridBase.green(), majorGridBase.blue(), majorAlpha);
     const QColor minorGridColor = QColor::fromRgb(minorGridBase.red(), minorGridBase.green(), minorGridBase.blue(), minorAlpha);
 
     const double screenFineStepPx = mmToPx * std::abs(transform().m11());
     if (printGuideGrid && gridSpacingMm > 1.0 && screenFineStepPx >= 3.0) {
-        const QColor fineGridColor(201, 205, 211, 24);
+        const QColor fineGridColor(191, 197, 206, 32);
         const double fineLeft = std::floor(rect.left() / mmToPx) * mmToPx;
         const double fineTop = std::floor(rect.top() / mmToPx) * mmToPx;
         painter->setPen(QPen(fineGridColor, 0.5));
