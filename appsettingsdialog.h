@@ -11,7 +11,7 @@ struct AppSettings {
     bool snapToGrid = true;
     double gridSpacingMm = 1.0;
     CanvasBackgroundMode canvasBackgroundMode = CanvasBackgroundMode::PrintGuideGrid;
-    double defaultBadgeSizeMm = 32.0;
+    double defaultBadgeSizeMm = 57.0;
     bool lightingEnabled = false;
     int lightAngle = 315;
     int lightIntensity = 45;

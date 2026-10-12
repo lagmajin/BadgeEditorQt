@@ -950,7 +950,7 @@ double activeGuideSizeMmFromBadges(const QList<BadgeItem>& badges, const QList<B
     if (!badges.isEmpty()) {
         return badgeGuideSizeMm(badges.first());
     }
-    return 32.0;
+    return 57.0;
 }
 
 bool badgeInsideCentralGuide(const BadgeItem& badge, double guideSizeMm) {
@@ -1445,7 +1445,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
             appendLog(QStringLiteral("スポイトを有効化しました。デザイナー上をクリックして色を拾います"));
         }
     });
-    m_designer->updateGuides(32);
+    m_designer->updateGuides(m_appSettings.defaultBadgeSizeMm);
     updateSafetyGuideHud();
 
     // Layout
@@ -1575,7 +1575,8 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
             m_propH->setValue(sizes[idx]);
         }
     });
-    m_sizePreset->setCurrentIndex(badgeSizePresetIndex(32.0, 32.0));
+    m_sizePreset->setCurrentIndex(badgeSizePresetIndex(m_appSettings.defaultBadgeSizeMm,
+                                                       m_appSettings.defaultBadgeSizeMm));
     propForm->addRow("回転:", m_propRotation); propForm->addRow("テキスト:", m_propText);
     m_propClipCircle = new QCheckBox("円形クリップ");
     m_propClipCircle->setChecked(true);
@@ -1831,7 +1832,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     m_spinCutLineOffset->setDecimals(1);
     m_spinCutLineOffset->setSingleStep(0.1);
     m_spinCutLineOffset->setSuffix(" mm");
-    m_spinCutLineOffset->setToolTip("基準のカットラインは仕上がり面の外側 4.0 mm です。32 mm バッジでは 40 mm になります。");
+    m_spinCutLineOffset->setToolTip("基準のカットラインは仕上がり面の外側 4.0 mm です。");
     guideLayout->addWidget(m_chkBleed);
     guideLayout->addWidget(m_chkVisible);
     auto* cutLineForm = new QFormLayout;
@@ -1859,14 +1860,14 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     m_spinGridSpacing->setValue(m_appSettings.gridSpacingMm);
     m_comboDefaultBadgeSize = new QComboBox;
     m_comboDefaultBadgeSize->addItem(QStringLiteral("25 mm"), 25.0);
-    m_comboDefaultBadgeSize->addItem(QStringLiteral("32 mm（標準）"), 32.0);
+    m_comboDefaultBadgeSize->addItem(QStringLiteral("32 mm"), 32.0);
     m_comboDefaultBadgeSize->addItem(QStringLiteral("44 mm"), 44.0);
-    m_comboDefaultBadgeSize->addItem(QStringLiteral("57 mm"), 57.0);
+    m_comboDefaultBadgeSize->addItem(QStringLiteral("57 mm（標準）"), 57.0);
     m_comboDefaultBadgeSize->addItem(QStringLiteral("65 mm"), 65.0);
     m_comboDefaultBadgeSize->addItem(QStringLiteral("76 mm"), 76.0);
     m_comboDefaultBadgeSize->addItem(QStringLiteral("100 mm"), 100.0);
     const int defaultBadgeSizeIndex = m_comboDefaultBadgeSize->findData(m_appSettings.defaultBadgeSizeMm);
-    m_comboDefaultBadgeSize->setCurrentIndex(defaultBadgeSizeIndex >= 0 ? defaultBadgeSizeIndex : 1);
+    m_comboDefaultBadgeSize->setCurrentIndex(defaultBadgeSizeIndex >= 0 ? defaultBadgeSizeIndex : 3);
     auto* backgroundOptions = new QWidget(canvasGroup);
     auto* backgroundLayout = new QVBoxLayout(backgroundOptions);
     backgroundLayout->setContentsMargins(0, 2, 0, 2);
@@ -3248,7 +3249,7 @@ void MainWindow::onSendToLayout() {
     const auto document = projectsync::currentDocument(m_badges, *m_comboPaperSize, *m_chkLandscape, *m_spinPaperMargin, *m_spinPaperSpacing, m_currentFile);
     const double guideSizeMm = !m_selected.isEmpty()
         ? badgeGuideSizeMm(m_selected.first()->badge())
-        : (!m_badges.isEmpty() ? badgeGuideSizeMm(m_badges.first()) : 32.0);
+        : (!m_badges.isEmpty() ? badgeGuideSizeMm(m_badges.first()) : m_appSettings.defaultBadgeSizeMm);
     const QPointF guideCenterScene = m_designer && m_designer->scene()
         ? m_designer->scene()->sceneRect().center()
         : QPointF(0.0, 0.0);
@@ -3485,7 +3486,7 @@ void MainWindow::applyAppSettings(const AppSettings& settings) {
     if (m_comboDefaultBadgeSize) {
         const QSignalBlocker blocker(m_comboDefaultBadgeSize);
         const int sizeIndex = m_comboDefaultBadgeSize->findData(settings.defaultBadgeSizeMm);
-        m_comboDefaultBadgeSize->setCurrentIndex(sizeIndex >= 0 ? sizeIndex : 1);
+        m_comboDefaultBadgeSize->setCurrentIndex(sizeIndex >= 0 ? sizeIndex : 3);
     }
     if (m_selected.isEmpty()) {
         const QSignalBlocker widthBlocker(m_propW);

@@ -303,7 +303,7 @@ private:
     QList<BadgeItem> m_badges;
     QList<BadgeItem> m_layoutBadges;
     QList<QString> m_layoutPageNames;
-    double m_lastGuideSizeMm = 32.0;
+    double m_lastGuideSizeMm = 57.0;
     int m_lastLayerRow = -1;
     QList<BadgeItem> m_pendingEditBeforeBadges;
     QList<int> m_pendingEditBeforeSelection;

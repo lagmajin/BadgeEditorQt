@@ -159,7 +159,7 @@ void MainWindow::loadAppSettings() {
     loaded.gridSpacingMm = settings.value("app/gridSpacingMm", loaded.gridSpacingMm).toDouble();
     loaded.defaultBadgeSizeMm = settings.value("app/defaultBadgeSizeMm", loaded.defaultBadgeSizeMm).toDouble();
     if (m_comboDefaultBadgeSize && m_comboDefaultBadgeSize->findData(loaded.defaultBadgeSizeMm) < 0) {
-        loaded.defaultBadgeSizeMm = 32.0;
+        loaded.defaultBadgeSizeMm = 57.0;
     }
     if (settings.contains("app/canvasBackgroundMode")) {
         const int canvasBackgroundMode = settings.value("app/canvasBackgroundMode").toInt();
