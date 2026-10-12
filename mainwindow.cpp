@@ -1696,8 +1696,9 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
         rowLayout->setContentsMargins(0, 0, 0, 0);
         rowLayout->setSpacing(8);
         auto* value = new QLabel(QStringLiteral("0"), row);
+        value->setObjectName(QStringLiteral("adjustmentValue"));
         value->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-        value->setMinimumWidth(28);
+        value->setMinimumWidth(36);
         QObject::connect(slider, &QSlider::valueChanged, value, [value](int current) {
             value->setText(QString::number(current));
         });
@@ -3636,6 +3637,12 @@ void MainWindow::applyTheme(bool dark) {
                 QWidget#editInspector QToolButton#inspectorSectionHeader { background: transparent; color: #e8eef5;
                     border: 0; border-radius: 5px; padding: 7px 5px; text-align: left; font-weight: 600; }
                 QWidget#editInspector QToolButton#inspectorSectionHeader:hover { background: #303f53; }
+                QWidget#editInspector QLabel#adjustmentValue { background: #192532; color: #e8eef5;
+                    border: 1px solid #42556a; border-radius: 5px; padding: 3px 5px; }
+                QWidget#editInspector QSlider::groove:horizontal { height: 5px; background: #42556a; border-radius: 2px; }
+                QWidget#editInspector QSlider::sub-page:horizontal { background: #4b83e6; border-radius: 2px; }
+                QWidget#editInspector QSlider::handle:horizontal { width: 13px; margin: -5px 0;
+                    background: #e8eef5; border: 2px solid #4b83e6; border-radius: 7px; }
                 QWidget#editInspector QDoubleSpinBox, QWidget#editInspector QLineEdit,
                 QWidget#editInspector QComboBox { background: #192532; color: #f1f5fa;
                     border: 1px solid #42556a; border-radius: 6px; min-height: 26px; padding: 2px 7px; }
@@ -3654,6 +3661,12 @@ void MainWindow::applyTheme(bool dark) {
                 QWidget#editInspector QToolButton#inspectorSectionHeader { background: transparent; color: #27324a;
                     border: 0; border-radius: 5px; padding: 7px 5px; text-align: left; font-weight: 600; }
                 QWidget#editInspector QToolButton#inspectorSectionHeader:hover { background: #edf0f8; }
+                QWidget#editInspector QLabel#adjustmentValue { background: #f7f8fb; color: #3547a0;
+                    border: 1px solid #d6dce8; border-radius: 5px; padding: 3px 5px; }
+                QWidget#editInspector QSlider::groove:horizontal { height: 5px; background: #d6dce8; border-radius: 2px; }
+                QWidget#editInspector QSlider::sub-page:horizontal { background: #4258d0; border-radius: 2px; }
+                QWidget#editInspector QSlider::handle:horizontal { width: 13px; margin: -5px 0;
+                    background: #ffffff; border: 2px solid #4258d0; border-radius: 7px; }
                 QWidget#editInspector QDoubleSpinBox, QWidget#editInspector QLineEdit,
                 QWidget#editInspector QComboBox { background: #ffffff; color: #27324a;
                     border: 1px solid #d6dce8; border-radius: 6px; min-height: 26px; padding: 2px 7px; }
