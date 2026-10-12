@@ -1315,8 +1315,8 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     m_toolPalette->setFont(uiFont);
     configureToolbar(m_toolPalette, Qt::ToolButtonTextBesideIcon);
     m_toolPalette->setIconSize(QSize(24, 24));
-    m_toolPalette->setMinimumWidth(250);
-    m_toolPalette->setMaximumWidth(270);
+    m_toolPalette->setMinimumWidth(280);
+    m_toolPalette->setMaximumWidth(300);
     auto* toolPaletteHeading = new QLabel(QStringLiteral("ツール"), m_toolPalette);
     toolPaletteHeading->setObjectName(QStringLiteral("toolPaletteHeading"));
     toolPaletteHeading->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
