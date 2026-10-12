@@ -1724,6 +1724,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     auto* layerLayout = new QVBoxLayout(layerGroup);
     m_layerList = new QListWidget;
     m_layerList->setMaximumHeight(84);
+    m_layerList->setIconSize(QSize(36, 36));
     m_layerList->setDragEnabled(true);
     m_layerList->setAcceptDrops(true);
     m_layerList->setDropIndicatorShown(true);
@@ -1786,6 +1787,25 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
         updateLayerOpacityUi();
         updateLayerPreviewUi();
         updateLayerFillUi();
+    });
+    connect(m_layerList, &QListWidget::itemChanged, this, [this](QListWidgetItem* item) {
+        if (!item || m_selected.isEmpty() || !m_designer) {
+            return;
+        }
+        const int row = m_layerList->row(item);
+        const auto before = currentDesignerBadges();
+        const auto selected = selectedBadgeIndices();
+        if (selected.isEmpty()) {
+            return;
+        }
+        const int badgeIndex = selected.first();
+        if (badgeIndex < 0 || badgeIndex >= before.size()
+            || row < 0 || row >= before[badgeIndex].layers.size()) {
+            return;
+        }
+        auto after = before;
+        after[badgeIndex].layers[row].visible = item->checkState() == Qt::Checked;
+        pushBadgeChange(QStringLiteral("レイヤー表示切替"), before, selected, after, selected);
     });
     connect(m_comboLayerBlendMode, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int){ onInspectorChanged(); });
     connect(m_sliderLayerOpacity, &QSlider::valueChanged, this, [this](int){ onInspectorChanged(); });
@@ -3169,15 +3189,23 @@ void MainWindow::refreshLayerList() {
     if (!m_layerList) {
         return;
     }
+    const QSignalBlocker blocker(m_layerList);
     const int previousRow = m_layerList->currentRow();
     m_layerList->clear();
     if (m_selected.isEmpty()) {
         m_lastLayerRow = -1;
         return;
     }
-    const auto& layers = m_selected.first()->badge().layers;
-    for (const auto& layer : layers) {
+    const auto& badge = m_selected.first()->badge();
+    const auto& layers = badge.layers;
+    for (int row = 0; row < layers.size(); ++row) {
+        const auto& layer = layers[row];
         auto* item = new QListWidgetItem(layerItemSummary(layer));
+        item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
+        item->setCheckState(layer.visible ? Qt::Checked : Qt::Unchecked);
+        item->setIcon(QIcon(renderLayerPreviewPixmap(badge, row, m_layerList->palette(), 36)));
+        item->setToolTip(QStringLiteral("%1\nチェックで表示を切り替えます")
+                             .arg(layer.imagePath.isEmpty() ? layer.name : layer.imagePath));
         m_layerList->addItem(item);
     }
     if (!layers.isEmpty()) {
