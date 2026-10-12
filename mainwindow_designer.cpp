@@ -5,6 +5,7 @@
 #include "constants.h"
 
 #include <QFileInfo>
+#include <QInputDialog>
 #include <QPointF>
 #include <algorithm>
 
@@ -93,6 +94,36 @@ void MainWindow::onAddBadge() {
     const QString label = QStringLiteral("追加");
     pushBadgeChange(label, before, QList<int>{}, after, QList<int>{static_cast<int>(after.size() - 1)});
     appendLog(QStringLiteral("%1を履歴に追加しました").arg(label));
+}
+
+void MainWindow::onAddTextBadge() {
+    bool accepted = false;
+    const QString text = QInputDialog::getText(this,
+                                               QStringLiteral("テキスト追加"),
+                                               QStringLiteral("バッジに表示する文字:"),
+                                               QLineEdit::Normal,
+                                               QString(),
+                                               &accepted).trimmed();
+    if (!accepted || text.isEmpty()) {
+        return;
+    }
+
+    const auto before = currentDesignerBadges();
+    BadgeItem badge;
+    badge.widthMm = m_appSettings.defaultBadgeSizeMm;
+    badge.heightMm = m_appSettings.defaultBadgeSizeMm;
+    badge.clipToCircle = true;
+    badge.displayText = text;
+    const QPointF center = m_designer->mapToScene(m_designer->viewport()->rect().center());
+    const double mmToPx = Constants::kMmToPx;
+    badge.xMm = center.x() / mmToPx - badge.widthMm / 2.0;
+    badge.yMm = center.y() / mmToPx - badge.heightMm / 2.0;
+
+    auto after = before;
+    after.append(badge);
+    const int addedIndex = static_cast<int>(after.size() - 1);
+    pushBadgeChange(QStringLiteral("テキスト追加"), before, {}, after, {addedIndex});
+    appendLog(QStringLiteral("文字入りバッジを追加しました"));
 }
 
 void MainWindow::onImageDropped(const QString& filePath) {

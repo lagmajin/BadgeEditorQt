@@ -1328,6 +1328,11 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     toolPaletteHeading->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     toolPaletteHeading->setMinimumHeight(30);
     m_toolPalette->addWidget(toolPaletteHeading);
+    auto* addTextAction = new QAction(m_toolPalette);
+    addTextAction->setText(QStringLiteral("テキスト"));
+    addTextAction->setToolTip(QStringLiteral("文字を入力してバッジを作成"));
+    setMaterialIcon(addTextAction, QStringLiteral("text_fields"));
+    connect(addTextAction, &QAction::triggered, this, &MainWindow::onAddTextBadge);
     m_actAddBadge->setText(QStringLiteral("新規"));
     m_actAddBadge->setToolTip(QStringLiteral("空のバッジを作成"));
     m_actBatchAdd->setText(QStringLiteral("一括追加"));
@@ -1348,6 +1353,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
             onImageDropped(path);
         }
     });
+    m_toolPalette->addAction(addTextAction);
     m_toolPalette->addAction(importImageAction);
     m_toolPalette->addAction(m_actAddBadge);
     m_toolPalette->addAction(m_actBatchAdd);
@@ -1358,7 +1364,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     if (auto* sendButton = m_toolPalette->widgetForAction(m_actSendToLayout)) {
         sendButton->setObjectName(QStringLiteral("sendToLayoutButton"));
     }
-    for (auto* action : {importImageAction, m_actAddBadge, m_actBatchAdd, m_actMixedLayout, m_actSendToLayout}) {
+    for (auto* action : {addTextAction, importImageAction, m_actAddBadge, m_actBatchAdd, m_actMixedLayout, m_actSendToLayout}) {
         if (auto* button = qobject_cast<QToolButton*>(m_toolPalette->widgetForAction(action))) {
             button->setMinimumSize(172, 52);
         }

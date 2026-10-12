@@ -100,6 +100,7 @@ private:
 
     // Badge
     void onAddBadge();
+    void onAddTextBadge();
     void onBatchAdd();
     void onMixedLayout();
     void onImageDropped(const QString& filePath);
