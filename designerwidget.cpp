@@ -762,22 +762,22 @@ void DesignerWidget::drawForeground(QPainter* painter, const QRectF& rect) {
                               contentHeight * 0.52);
 
         QFont titleFont = painter->font();
-        titleFont.setPointSizeF(std::clamp(visiblePx / 18.0, 8.0, 13.0));
+        titleFont.setPointSizeF(std::clamp(visiblePx / 23.0, 7.0, 11.0));
         titleFont.setBold(true);
         painter->setFont(titleFont);
         painter->setPen(title);
         painter->drawText(titleRect,
                           Qt::AlignCenter | Qt::TextWordWrap,
-                          QStringLiteral("ここにバッジを追加"));
+                          QStringLiteral("ここにバッジを追加してください"));
 
         QFont hintFont = painter->font();
-        hintFont.setPointSizeF(std::clamp(visiblePx / 22.0, 7.0, 10.0));
+        hintFont.setPointSizeF(std::clamp(visiblePx / 27.0, 6.0, 9.0));
         hintFont.setBold(false);
         painter->setFont(hintFont);
         painter->setPen(hint);
         painter->drawText(hintRect,
                           Qt::AlignCenter | Qt::TextWordWrap,
-                          QStringLiteral("画像をドロップ\nまたは左の「画像」から"));
+                          QStringLiteral("画像をドロップするか、\nツールバーから追加できます"));
         painter->restore();
     }
 
