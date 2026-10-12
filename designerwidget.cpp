@@ -827,15 +827,29 @@ void DesignerWidget::drawForeground(QPainter* painter, const QRectF& rect) {
         const QPointF sceneOrigin = sceneBounds.center();
         const QRectF visibleScene = mapToScene(viewportRect).boundingRect();
         const double pixelsPerMm = std::abs(transform().m11()) * mmToPx;
-        double intervalMm = 10.0;
-        while (intervalMm * pixelsPerMm < 52.0 && intervalMm < 1000.0) {
-            intervalMm *= 2.0;
-        }
+        const double targetIntervalMm = 32.0 / std::max(1e-6, pixelsPerMm);
+        const double intervalMagnitude = std::pow(10.0, std::floor(std::log10(targetIntervalMm)));
+        const double normalizedInterval = targetIntervalMm / intervalMagnitude;
+        const double intervalStep = normalizedInterval <= 1.0 ? 1.0
+                                  : normalizedInterval <= 2.0 ? 2.0
+                                  : normalizedInterval <= 5.0 ? 5.0
+                                  : 10.0;
+        const double intervalMm = intervalStep * intervalMagnitude;
         const double intervalScene = intervalMm * mmToPx;
+        const bool showMinorTicks = intervalMm * pixelsPerMm / 5.0 >= 6.0;
         const int firstX = static_cast<int>(std::ceil((visibleScene.left() - sceneOrigin.x()) / intervalScene));
         const int lastX = static_cast<int>(std::floor((visibleScene.right() - sceneOrigin.x()) / intervalScene));
         for (int tick = firstX; tick <= lastX; ++tick) {
-            const qreal x = mapFromScene(QPointF(sceneOrigin.x() + tick * intervalScene, sceneBounds.top())).x();
+            const double majorSceneX = sceneOrigin.x() + tick * intervalScene;
+            if (showMinorTicks) {
+                for (int minor = 1; minor < 5; ++minor) {
+                    const qreal minorX = mapFromScene(QPointF(majorSceneX + minor * intervalScene / 5.0,
+                                                              sceneBounds.top())).x();
+                    painter->setPen(QPen(rulerTick, 1.0));
+                    painter->drawLine(QPointF(minorX, kRulerHeight - 3), QPointF(minorX, kRulerHeight));
+                }
+            }
+            const qreal x = mapFromScene(QPointF(majorSceneX, sceneBounds.top())).x();
             painter->setPen(QPen(rulerTick, 1.0));
             painter->drawLine(QPointF(x, kRulerHeight - 6), QPointF(x, kRulerHeight));
             painter->setPen(rulerText);
@@ -847,7 +861,15 @@ void DesignerWidget::drawForeground(QPainter* painter, const QRectF& rect) {
         const int firstY = static_cast<int>(std::ceil((visibleScene.top() - sceneOrigin.y()) / intervalScene));
         const int lastY = static_cast<int>(std::floor((visibleScene.bottom() - sceneOrigin.y()) / intervalScene));
         for (int tick = firstY; tick <= lastY; ++tick) {
-            const qreal y = mapFromScene(QPointF(sceneBounds.left(), sceneOrigin.y() + tick * intervalScene)).y();
+            const double majorSceneY = sceneOrigin.y() + tick * intervalScene;
+            if (showMinorTicks) {
+                for (int minor = 1; minor < 5; ++minor) {
+                    const qreal minorY = mapFromScene(QPointF(sceneBounds.left(), majorSceneY + minor * intervalScene / 5.0)).y();
+                    painter->setPen(QPen(rulerTick, 1.0));
+                    painter->drawLine(QPointF(kRulerWidth - 3, minorY), QPointF(kRulerWidth, minorY));
+                }
+            }
+            const qreal y = mapFromScene(QPointF(sceneBounds.left(), majorSceneY)).y();
             painter->setPen(QPen(rulerTick, 1.0));
             painter->drawLine(QPointF(kRulerWidth - 6, y), QPointF(kRulerWidth, y));
             painter->setPen(rulerText);
