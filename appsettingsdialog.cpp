@@ -214,7 +214,7 @@ AppSettings AppSettingsDialog::settings() const {
     result.darkTheme = m_themeCombo ? (m_themeCombo->currentIndex() == 0) : false;
     result.gridVisible = m_gridVisible ? m_gridVisible->isChecked() : true;
     result.snapToGrid = m_snapToGrid ? m_snapToGrid->isChecked() : true;
-    result.gridSpacingMm = m_gridSpacing ? m_gridSpacing->value() : 1.0;
+    result.gridSpacingMm = m_gridSpacing ? m_gridSpacing->value() : 5.0;
     result.defaultBadgeSizeMm = m_defaultBadgeSize ? m_defaultBadgeSize->currentData().toDouble() : 57.0;
     result.canvasBackgroundMode = m_canvasBackground
         ? static_cast<CanvasBackgroundMode>(m_canvasBackground->currentData().toInt())

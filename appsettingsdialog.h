@@ -9,7 +9,7 @@ struct AppSettings {
     bool darkTheme = false;
     bool gridVisible = true;
     bool snapToGrid = true;
-    double gridSpacingMm = 1.0;
+    double gridSpacingMm = 5.0;
     CanvasBackgroundMode canvasBackgroundMode = CanvasBackgroundMode::PrintGuideGrid;
     double defaultBadgeSizeMm = 57.0;
     bool lightingEnabled = false;
