@@ -1150,6 +1150,16 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     m_commonToolbar->setObjectName(QStringLiteral("workspaceToolbar"));
     m_commonToolbar->setMinimumHeight(64);
     m_commonToolbar->setIconSize(QSize(24, 24));
+    auto* toolbarNew = m_commonToolbar->addAction(QStringLiteral("新規"), this, &MainWindow::onNew);
+    setToolbarIcon(toolbarNew, QStyle::SP_FileIcon);
+    toolbarNew->setToolTip(QStringLiteral("新しいドキュメントを作成 (Ctrl+N)"));
+    auto* toolbarOpen = m_commonToolbar->addAction(QStringLiteral("開く"), this, &MainWindow::onOpen);
+    setMaterialIcon(toolbarOpen, QStringLiteral("folder_open"));
+    toolbarOpen->setToolTip(QStringLiteral("ドキュメントを開く (Ctrl+O)"));
+    auto* toolbarSave = m_commonToolbar->addAction(QStringLiteral("保存"), this, &MainWindow::onSave);
+    setMaterialIcon(toolbarSave, QStringLiteral("save"));
+    toolbarSave->setToolTip(QStringLiteral("ドキュメントを保存 (Ctrl+S)"));
+    m_commonToolbar->addSeparator();
     m_actDesigner = m_commonToolbar->addAction("DESIGNER");
     m_actDesigner->setObjectName(QStringLiteral("designerModeAction"));
     m_actDesigner->setCheckable(true);
