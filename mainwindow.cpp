@@ -2055,9 +2055,51 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     auto* backgroundLayout = new QVBoxLayout(backgroundOptions);
     backgroundLayout->setContentsMargins(0, 2, 0, 2);
     backgroundLayout->setSpacing(4);
+    const auto makeBackgroundSwatch = [](CanvasBackgroundMode mode) {
+        QPixmap swatch(40, 26);
+        swatch.fill(Qt::transparent);
+        QPainter painter(&swatch);
+        painter.setRenderHint(QPainter::Antialiasing);
+        const QRectF tileRect(0.5, 0.5, 39.0, 25.0);
+        painter.setPen(QPen(QColor(117, 131, 151), 1.0));
+        painter.setBrush(QColor(248, 250, 253));
+        painter.drawRoundedRect(tileRect, 3.0, 3.0);
+        painter.save();
+        QPainterPath clipPath;
+        clipPath.addRoundedRect(tileRect, 3.0, 3.0);
+        painter.setClipPath(clipPath);
+        if (mode == CanvasBackgroundMode::PrintGuideGrid) {
+            painter.fillRect(tileRect, QColor(235, 238, 243));
+            painter.setPen(QPen(QColor(168, 178, 192), 0.7));
+            for (int x = 7; x < 40; x += 7) painter.drawLine(x, 0, x, 26);
+            for (int y = 7; y < 26; y += 7) painter.drawLine(0, y, 40, y);
+        } else if (mode == CanvasBackgroundMode::TransparentCheckerboard) {
+            constexpr int tile = 7;
+            for (int y = 0; y < 26; y += tile) {
+                for (int x = 0; x < 40; x += tile) {
+                    const bool shade = ((x / tile + y / tile) & 1) != 0;
+                    painter.fillRect(QRect(x, y, tile, tile), shade ? QColor(194, 202, 213) : QColor(250, 251, 253));
+                }
+            }
+        }
+        painter.restore();
+        painter.end();
+        return QIcon(swatch);
+    };
     m_radioCanvasGrid = new QRadioButton(QStringLiteral("グリッド（印刷ガイド）"), backgroundOptions);
     m_radioCanvasWhite = new QRadioButton(QStringLiteral("白"), backgroundOptions);
     m_radioCanvasTransparent = new QRadioButton(QStringLiteral("透明（チェック柄）"), backgroundOptions);
+    for (auto* option : {m_radioCanvasGrid, m_radioCanvasWhite, m_radioCanvasTransparent}) {
+        option->setObjectName(QStringLiteral("canvasBackgroundOption"));
+        option->setIconSize(QSize(32, 21));
+        option->setMinimumHeight(34);
+    }
+    m_radioCanvasGrid->setIcon(makeBackgroundSwatch(CanvasBackgroundMode::PrintGuideGrid));
+    m_radioCanvasWhite->setIcon(makeBackgroundSwatch(CanvasBackgroundMode::White));
+    m_radioCanvasTransparent->setIcon(makeBackgroundSwatch(CanvasBackgroundMode::TransparentCheckerboard));
+    m_radioCanvasGrid->setToolTip(QStringLiteral("印刷ガイドに合わせたグリッドを表示します"));
+    m_radioCanvasWhite->setToolTip(QStringLiteral("白い背景でバッジの見た目を確認します"));
+    m_radioCanvasTransparent->setToolTip(QStringLiteral("透明部分をチェック柄で表示します"));
     m_radioCanvasGrid->setChecked(true);
     backgroundLayout->addWidget(m_radioCanvasGrid);
     backgroundLayout->addWidget(m_radioCanvasWhite);
@@ -3689,6 +3731,10 @@ void MainWindow::applyTheme(bool dark) {
                 QWidget#editInspector QGroupBox#checklistGroup { margin-top: 3px; padding: 5px; }
                 QWidget#editInspector QGroupBox#paperSettingsGroup { margin-top: 3px; padding: 5px; }
                 QWidget#editInspector QLabel#paperDimensions { color: #e8eef5; font-weight: 600; }
+                QWidget#editInspector QRadioButton#canvasBackgroundOption { background: #202f40; color: #dbe5f3;
+                    border: 1px solid #3b4b5d; border-radius: 6px; padding: 5px 8px; spacing: 8px; }
+                QWidget#editInspector QRadioButton#canvasBackgroundOption:hover { border-color: #6385e8; }
+                QWidget#editInspector QRadioButton#canvasBackgroundOption:checked { background: #314b70; border-color: #6385e8; color: white; }
                 QWidget#editInspector QGroupBox::title { color: #e8eef5; font-weight: 600;
                     subcontrol-origin: margin; left: 9px; padding: 0 5px; }
                 QWidget#editInspector QToolButton#inspectorSectionHeader { background: transparent; color: #e8eef5;
@@ -3715,6 +3761,10 @@ void MainWindow::applyTheme(bool dark) {
                 QWidget#editInspector QGroupBox#checklistGroup { margin-top: 3px; padding: 5px; }
                 QWidget#editInspector QGroupBox#paperSettingsGroup { margin-top: 3px; padding: 5px; }
                 QWidget#editInspector QLabel#paperDimensions { color: #27324a; font-weight: 600; }
+                QWidget#editInspector QRadioButton#canvasBackgroundOption { background: #f7f8fb; color: #35415a;
+                    border: 1px solid #d6dce8; border-radius: 6px; padding: 5px 8px; spacing: 8px; }
+                QWidget#editInspector QRadioButton#canvasBackgroundOption:hover { border-color: #aab8de; }
+                QWidget#editInspector QRadioButton#canvasBackgroundOption:checked { background: #e9edff; border-color: #4258d0; color: #3547a0; }
                 QWidget#editInspector QGroupBox::title { color: #27324a; font-weight: 600;
                     subcontrol-origin: margin; left: 9px; padding: 0 5px; }
                 QWidget#editInspector QToolButton#inspectorSectionHeader { background: transparent; color: #27324a;
