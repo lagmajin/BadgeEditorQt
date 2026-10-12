@@ -1289,6 +1289,11 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     m_toolPalette->setIconSize(QSize(22, 22));
     m_toolPalette->setMinimumWidth(112);
     m_toolPalette->setMaximumWidth(132);
+    auto* toolPaletteHeading = new QLabel(QStringLiteral("ツール"), m_toolPalette);
+    toolPaletteHeading->setObjectName(QStringLiteral("toolPaletteHeading"));
+    toolPaletteHeading->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+    toolPaletteHeading->setMinimumHeight(30);
+    m_toolPalette->addWidget(toolPaletteHeading);
     m_actAddBadge->setText(QStringLiteral("新規"));
     m_actAddBadge->setToolTip(QStringLiteral("空のバッジを作成"));
     m_actBatchAdd->setText(QStringLiteral("一括追加"));
@@ -3345,6 +3350,7 @@ void MainWindow::applyTheme(bool dark) {
             QToolBar#toolPalette QToolButton { min-width: 72px; color: #dbe5f3;
                 border: 1px solid transparent; border-radius: 8px; margin: 2px 5px; padding: 8px 3px; }
             QToolBar#toolPalette QToolButton:hover { background: #293a50; border-color: #405675; }
+            QToolBar#toolPalette QLabel#toolPaletteHeading { color: #91a8c4; font-weight: 600; padding: 4px 9px; }
             QToolBar QToolButton:checked { background: #315bb8; border-color: #6385e8; color: white; }
             QToolBar QToolButton#designerModeAction:checked { background: #315bb8; }
             QToolBar QToolButton#layoutModeAction:checked { background: #315bb8; }
@@ -3373,6 +3379,7 @@ void MainWindow::applyTheme(bool dark) {
             QToolBar#toolPalette QToolButton { min-width: 82px; color: #dbe5f3;
                 border: 1px solid transparent; border-radius: 8px; margin: 2px 5px; padding: 8px 3px; }
             QToolBar#toolPalette QToolButton:hover { background: #2d3e55; border-color: #405675; }
+            QToolBar#toolPalette QLabel#toolPaletteHeading { color: #91a8c4; font-weight: 600; padding: 4px 9px; }
             QToolBar QToolButton:checked { background: #e9edff; border-color: #b8c4ff; color: #354fc0; }
             QToolBar QToolButton#designerModeAction,
             QToolBar QToolButton#layoutModeAction { padding: 8px 14px; font-weight: 600; }
