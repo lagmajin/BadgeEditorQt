@@ -1230,6 +1230,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     m_designerToolbar = addToolBar("Designer");
     m_designerToolbar->setFont(uiFont);
     configureToolbar(m_designerToolbar, Qt::ToolButtonTextBesideIcon);
+    m_designerToolbar->setIconSize(QSize(20, 20));
     m_actAddBadge = m_designerToolbar->addAction("追加");
     connect(m_actAddBadge, &QAction::triggered, this, [this]{ onAddBadge(); });
     setMaterialIcon(m_actAddBadge, QStringLiteral("add_circle"));
@@ -1394,6 +1395,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     m_layoutToolbar = addToolBar("Layout");
     m_layoutToolbar->setFont(uiFont);
     configureToolbar(m_layoutToolbar, Qt::ToolButtonTextBesideIcon);
+    m_layoutToolbar->setIconSize(QSize(20, 20));
     m_actOpenLayoutPerspective = m_layoutToolbar->addAction("配置確認");
     connect(m_actOpenLayoutPerspective, &QAction::triggered, this, [this]{ openLayoutPerspective(); });
     m_actOpenLayoutPerspective->setShortcut(QKeySequence("Ctrl+L"));
