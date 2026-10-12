@@ -340,7 +340,7 @@ private:
     QUndoStack* m_undoStack;
     QByteArray m_defaultDockState;
     double m_zoomScale = 1.0;
-    bool m_isDark = true;
+    bool m_isDark = false;
     AppSettings m_appSettings;
     bool m_updatingUI = false;
     bool m_isDesigner = true;

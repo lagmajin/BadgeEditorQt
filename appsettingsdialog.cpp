@@ -211,7 +211,7 @@ void AppSettingsDialog::applyBackdrop() {
 
 AppSettings AppSettingsDialog::settings() const {
     AppSettings result;
-    result.darkTheme = m_themeCombo ? (m_themeCombo->currentIndex() == 0) : true;
+    result.darkTheme = m_themeCombo ? (m_themeCombo->currentIndex() == 0) : false;
     result.gridVisible = m_gridVisible ? m_gridVisible->isChecked() : true;
     result.snapToGrid = m_snapToGrid ? m_snapToGrid->isChecked() : true;
     result.gridSpacingMm = m_gridSpacing ? m_gridSpacing->value() : 1.0;

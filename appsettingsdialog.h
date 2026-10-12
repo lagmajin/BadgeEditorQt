@@ -6,7 +6,7 @@
 #include "canvasbackgroundmode.h"
 
 struct AppSettings {
-    bool darkTheme = true;
+    bool darkTheme = false;
     bool gridVisible = true;
     bool snapToGrid = true;
     double gridSpacingMm = 1.0;
