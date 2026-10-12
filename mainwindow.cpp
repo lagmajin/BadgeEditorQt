@@ -1551,9 +1551,30 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     inspLayout->setContentsMargins(10, 10, 10, 10);
     inspLayout->setSpacing(8);
 
-    auto* checklistGroup = new QGroupBox("手順チェック");
+    auto* checklistGroup = new QGroupBox;
+    checklistGroup->setObjectName(QStringLiteral("checklistGroup"));
     m_checklistGroup = checklistGroup;
-    auto* checklistLayout = new QVBoxLayout(checklistGroup);
+    auto* checklistGroupLayout = new QVBoxLayout(checklistGroup);
+    checklistGroupLayout->setContentsMargins(5, 5, 5, 5);
+    checklistGroupLayout->setSpacing(3);
+    auto* checklistHeader = new QToolButton(checklistGroup);
+    checklistHeader->setObjectName(QStringLiteral("inspectorSectionHeader"));
+    checklistHeader->setText(QStringLiteral("手順チェック"));
+    checklistHeader->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+    checklistHeader->setArrowType(Qt::DownArrow);
+    checklistHeader->setCheckable(true);
+    checklistHeader->setChecked(true);
+    checklistHeader->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+    auto* checklistContents = new QWidget(checklistGroup);
+    auto* checklistLayout = new QVBoxLayout(checklistContents);
+    checklistLayout->setContentsMargins(0, 0, 0, 0);
+    checklistLayout->setSpacing(4);
+    checklistGroupLayout->addWidget(checklistHeader);
+    checklistGroupLayout->addWidget(checklistContents);
+    connect(checklistHeader, &QToolButton::toggled, this, [checklistHeader, checklistContents](bool expanded) {
+        checklistContents->setVisible(expanded);
+        checklistHeader->setArrowType(expanded ? Qt::DownArrow : Qt::RightArrow);
+    });
     m_checklistDesign = new QLabel;
     m_checklistLayout = new QLabel;
     m_checklistColor = new QLabel;
@@ -1562,7 +1583,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
             continue;
         }
         label->setWordWrap(false);
-        label->setMargin(5);
+        label->setMargin(4);
         label->setAutoFillBackground(true);
         checklistLayout->addWidget(label);
     }
@@ -1571,6 +1592,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     auto* safetyGroup = new QGroupBox("ガイド寸法");
     m_safetyGuideGroup = safetyGroup;
     auto* safetyLayout = new QVBoxLayout(safetyGroup);
+    safetyLayout->setSpacing(4);
     m_safetyGuideDesign = new QLabel;
     m_safetyGuideColor = new QLabel;
     for (auto* label : {m_safetyGuideDesign, m_safetyGuideColor}) {
@@ -1578,7 +1600,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
             continue;
         }
         label->setWordWrap(true);
-        label->setMargin(7);
+        label->setMargin(4);
         label->setAutoFillBackground(true);
         safetyLayout->addWidget(label);
     }
@@ -3608,6 +3630,7 @@ void MainWindow::applyTheme(bool dark) {
                 QWidget#editInspector QGroupBox { background: #263443; border: 1px solid #3b4b5d;
                     border-radius: 8px; margin-top: 16px; padding: 8px; }
                 QWidget#editInspector QGroupBox#pageSettingsGroup { margin-top: 3px; padding: 5px; }
+                QWidget#editInspector QGroupBox#checklistGroup { margin-top: 3px; padding: 5px; }
                 QWidget#editInspector QGroupBox::title { color: #e8eef5; font-weight: 600;
                     subcontrol-origin: margin; left: 9px; padding: 0 5px; }
                 QWidget#editInspector QToolButton#inspectorSectionHeader { background: transparent; color: #e8eef5;
@@ -3625,6 +3648,7 @@ void MainWindow::applyTheme(bool dark) {
                 QWidget#editInspector QGroupBox { background: #ffffff; color: #27324a;
                     border: 1px solid #dfe3ec; border-radius: 8px; margin-top: 16px; padding: 8px; }
                 QWidget#editInspector QGroupBox#pageSettingsGroup { margin-top: 3px; padding: 5px; }
+                QWidget#editInspector QGroupBox#checklistGroup { margin-top: 3px; padding: 5px; }
                 QWidget#editInspector QGroupBox::title { color: #27324a; font-weight: 600;
                     subcontrol-origin: margin; left: 9px; padding: 0 5px; }
                 QWidget#editInspector QToolButton#inspectorSectionHeader { background: transparent; color: #27324a;
