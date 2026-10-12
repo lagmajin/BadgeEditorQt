@@ -1731,6 +1731,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     m_layerList->setDragDropMode(QAbstractItemView::InternalMove);
     m_layerList->setDefaultDropAction(Qt::MoveAction);
     m_layerList->setSelectionMode(QAbstractItemView::SingleSelection);
+    m_layerList->setEditTriggers(QAbstractItemView::EditKeyPressed | QAbstractItemView::DoubleClicked);
     layerLayout->addWidget(m_layerList);
     auto* layerDetailsRow = new QWidget(layerGroup);
     auto* layerDetailsLayout = new QHBoxLayout(layerDetailsRow);
@@ -1803,9 +1804,28 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
             || row < 0 || row >= before[badgeIndex].layers.size()) {
             return;
         }
+        const auto& originalLayer = before[badgeIndex].layers[row];
+        const QString originalName = originalLayer.name.isEmpty()
+            ? QFileInfo(originalLayer.imagePath).baseName()
+            : originalLayer.name;
+        const QString editedName = item->text().trimmed();
+        if (editedName.isEmpty()) {
+            const QSignalBlocker blocker(m_layerList);
+            item->setText(originalName);
+            return;
+        }
+        const bool renamed = editedName != originalName;
+        const bool visibilityChanged = originalLayer.visible != (item->checkState() == Qt::Checked);
         auto after = before;
-        after[badgeIndex].layers[row].visible = item->checkState() == Qt::Checked;
-        pushBadgeChange(QStringLiteral("レイヤー表示切替"), before, selected, after, selected);
+        auto& changedLayer = after[badgeIndex].layers[row];
+        changedLayer.visible = item->checkState() == Qt::Checked;
+        if (renamed) {
+            changedLayer.name = editedName;
+        }
+        if (renamed || visibilityChanged) {
+            pushBadgeChange(renamed ? QStringLiteral("レイヤー名変更") : QStringLiteral("レイヤー表示切替"),
+                            before, selected, after, selected);
+        }
     });
     connect(m_comboLayerBlendMode, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int){ onInspectorChanged(); });
     connect(m_sliderLayerOpacity, &QSlider::valueChanged, this, [this](int){ onInspectorChanged(); });
@@ -3200,12 +3220,12 @@ void MainWindow::refreshLayerList() {
     const auto& layers = badge.layers;
     for (int row = 0; row < layers.size(); ++row) {
         const auto& layer = layers[row];
-        auto* item = new QListWidgetItem(layerItemSummary(layer));
-        item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
+        auto* item = new QListWidgetItem(layer.name.isEmpty() ? QFileInfo(layer.imagePath).baseName() : layer.name);
+        item->setFlags(item->flags() | Qt::ItemIsUserCheckable | Qt::ItemIsEditable);
         item->setCheckState(layer.visible ? Qt::Checked : Qt::Unchecked);
         item->setIcon(QIcon(renderLayerPreviewPixmap(badge, row, m_layerList->palette(), 36)));
-        item->setToolTip(QStringLiteral("%1\nチェックで表示を切り替えます")
-                             .arg(layer.imagePath.isEmpty() ? layer.name : layer.imagePath));
+        item->setToolTip(QStringLiteral("チェックで表示を切替、ダブルクリックで名前を変更\n%1")
+                             .arg(layer.imagePath));
         m_layerList->addItem(item);
     }
     if (!layers.isEmpty()) {
