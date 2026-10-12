@@ -214,10 +214,10 @@ void DockStyleManager::refreshDockDecorations() {
         const QColor textColor = m_palette.color(QPalette::WindowText);
         const QColor borderColor = m_palette.color(QPalette::Mid);
         const QColor baseColor = m_palette.color(QPalette::Base);
-        const QColor buttonColor = m_palette.color(QPalette::Button);
-        const QColor accentColor = m_palette.color(QPalette::Highlight);
-        const QColor accentTextColor = m_palette.color(QPalette::HighlightedText);
-        const QColor activeTabBg = blend(buttonColor, accentColor, 0.18);
+        const bool dark = windowColor.lightness() < 128;
+        const QColor accentColor = dark ? QColor(0x31, 0x5b, 0xb8) : QColor(0x40, 0x59, 0xed);
+        const QColor accentTextColor(Qt::white);
+        const QColor activeTabBg = accentColor;
         const QColor inactiveTabBg = blend(windowColor, baseColor, 0.58);
         const QColor inactiveTextColor = textColor.lighter(112);
         const bool isActiveTab = dock->tabWidget() && dock->tabWidget()->isActiveTab();
