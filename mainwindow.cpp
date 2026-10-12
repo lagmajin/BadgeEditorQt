@@ -1290,8 +1290,8 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     m_toolPalette->setFont(uiFont);
     configureToolbar(m_toolPalette, Qt::ToolButtonTextUnderIcon);
     m_toolPalette->setIconSize(QSize(22, 22));
-    m_toolPalette->setMinimumWidth(94);
-    m_toolPalette->setMaximumWidth(110);
+    m_toolPalette->setMinimumWidth(112);
+    m_toolPalette->setMaximumWidth(132);
     m_actAddBadge->setText(QStringLiteral("新規"));
     m_actAddBadge->setToolTip(QStringLiteral("空のバッジを作成"));
     m_actBatchAdd->setText(QStringLiteral("一括追加"));
@@ -3305,10 +3305,10 @@ void MainWindow::applyTheme(bool dark) {
             QToolBar QToolButton { color: #283249; border: 1px solid transparent;
                 border-radius: 7px; padding: 7px 10px; }
             QToolBar QToolButton:hover { background: #edf0f8; border-color: #d9deeb; }
-            QToolBar#toolPalette { background: #f0f2f8; border: 0; border-right: 1px solid #dce1ed; spacing: 8px; }
-            QToolBar#toolPalette QToolButton { min-width: 72px; color: #394660;
+            QToolBar#toolPalette { background: #202c3d; border: 0; border-right: 1px solid #344358; spacing: 8px; }
+            QToolBar#toolPalette QToolButton { min-width: 82px; color: #dbe5f3;
                 border: 1px solid transparent; border-radius: 8px; margin: 2px 5px; padding: 8px 3px; }
-            QToolBar#toolPalette QToolButton:hover { background: #e5e9f4; border-color: #d3daeb; }
+            QToolBar#toolPalette QToolButton:hover { background: #2d3e55; border-color: #405675; }
             QToolBar QToolButton:checked { background: #e9edff; border-color: #b8c4ff; color: #354fc0; }
             QToolBar QToolButton#designerModeAction,
             QToolBar QToolButton#layoutModeAction { padding: 8px 14px; font-weight: 600; }
