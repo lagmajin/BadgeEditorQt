@@ -4084,9 +4084,9 @@ void MainWindow::updateSafetyGuideHud() {
     const double safeDiameterMm = std::max(0.0, finishMm - 4.0);
     const QColor guideRed(0xEF, 0x44, 0x44);
     const QColor guideGreen(0x22, 0xC5, 0x5E);
-    setLabel(m_safetyGuideDesign, QStringLiteral("塗り足し線"),
+    setLabel(m_safetyGuideDesign, QStringLiteral("- - -  塗り足し線"),
              QStringLiteral("直径 %1 mm").arg(bleedDiameterMm, 0, 'f', 1), guideRed, true);
-    setLabel(m_safetyGuideColor, QStringLiteral("安全圏"),
+    setLabel(m_safetyGuideColor, QStringLiteral("━━━━  安全圏"),
              QStringLiteral("直径 %1 mm").arg(safeDiameterMm, 0, 'f', 1), guideGreen, true);
 }
 
