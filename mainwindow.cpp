@@ -1716,20 +1716,29 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     m_layerList->setDefaultDropAction(Qt::MoveAction);
     m_layerList->setSelectionMode(QAbstractItemView::SingleSelection);
     layerLayout->addWidget(m_layerList);
-    m_layerPreviewLabel = new QLabel;
-    m_layerPreviewLabel->setFixedSize(72, 72);
+    auto* layerDetailsRow = new QWidget(layerGroup);
+    auto* layerDetailsLayout = new QHBoxLayout(layerDetailsRow);
+    layerDetailsLayout->setContentsMargins(0, 0, 0, 0);
+    layerDetailsLayout->setSpacing(8);
+    m_layerPreviewLabel = new QLabel(layerDetailsRow);
+    m_layerPreviewLabel->setFixedSize(56, 56);
     m_layerPreviewLabel->setAlignment(Qt::AlignCenter);
     m_layerPreviewLabel->setAutoFillBackground(true);
-    layerLayout->addWidget(m_layerPreviewLabel);
+    layerDetailsLayout->addWidget(m_layerPreviewLabel);
+    auto* layerAdjustments = new QVBoxLayout;
+    layerAdjustments->setContentsMargins(0, 0, 0, 0);
+    layerAdjustments->setSpacing(4);
     auto* layerOpacityLabel = new QLabel("不透明度");
-    layerLayout->addWidget(layerOpacityLabel);
+    layerAdjustments->addWidget(layerOpacityLabel);
     m_sliderLayerOpacity = new QSlider(Qt::Horizontal);
     m_sliderLayerOpacity->setRange(0, 100);
     m_sliderLayerOpacity->setValue(100);
-    layerLayout->addWidget(m_sliderLayerOpacity);
+    layerAdjustments->addWidget(m_sliderLayerOpacity);
     m_comboLayerBlendMode = new QComboBox;
     m_comboLayerBlendMode->addItems({"Normal", "Multiply", "Screen", "Overlay", "Soft Light", "Add"});
-    layerLayout->addWidget(m_comboLayerBlendMode);
+    layerAdjustments->addWidget(m_comboLayerBlendMode);
+    layerDetailsLayout->addLayout(layerAdjustments, 1);
+    layerLayout->addWidget(layerDetailsRow);
     auto* layerBtnRow = new QHBoxLayout;
     auto* btnAddLayer = new QPushButton;
     auto* btnDelLayer = new QPushButton;
@@ -3179,12 +3188,12 @@ void MainWindow::updateLayerPreviewUi() {
     const bool valid = hasSelection && row >= 0 && row < m_selected.first()->badge().layers.size();
     if (!valid) {
         m_layerPreviewLabel->setPixmap({});
-        m_layerPreviewLabel->setText(QStringLiteral("Composite Preview"));
+        m_layerPreviewLabel->setText(QStringLiteral("合成\nプレビュー"));
         return;
     }
 
     const auto& badge = m_selected.first()->badge();
-    const QPixmap preview = renderLayerPreviewPixmap(badge, row, m_layerPreviewLabel->palette(), 72);
+    const QPixmap preview = renderLayerPreviewPixmap(badge, row, m_layerPreviewLabel->palette(), 56);
     m_layerPreviewLabel->setText(QString());
     m_layerPreviewLabel->setPixmap(preview);
 }
