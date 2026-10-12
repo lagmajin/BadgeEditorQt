@@ -1548,7 +1548,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     }
     inspLayout->addWidget(checklistGroup);
 
-    auto* safetyGroup = new QGroupBox("安全ガイド");
+    auto* safetyGroup = new QGroupBox("ガイド寸法");
     m_safetyGuideGroup = safetyGroup;
     auto* safetyLayout = new QVBoxLayout(safetyGroup);
     m_safetyGuideDesign = new QLabel;
@@ -1563,7 +1563,6 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
         label->setAutoFillBackground(true);
         safetyLayout->addWidget(label);
     }
-    inspLayout->addWidget(safetyGroup);
 
     // Properties group
     auto* propGroup = new QGroupBox("オブジェクト情報");
@@ -1921,6 +1920,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     backgroundLayout->addWidget(m_radioCanvasWhite);
     backgroundLayout->addWidget(m_radioCanvasTransparent);
     canvasForm->addRow(QStringLiteral("バッジサイズ:"), m_comboDefaultBadgeSize);
+    canvasForm->insertRow(1, m_safetyGuideGroup);
     canvasForm->addRow(m_chkGridVisible);
     canvasForm->addRow(m_chkSnapToGrid);
     canvasForm->addRow(QStringLiteral("間隔:"), m_spinGridSpacing);
@@ -2108,8 +2108,6 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     inspLayout->insertWidget(0, m_canvasGroup);
     inspLayout->removeWidget(m_guideGroup);
     inspLayout->insertWidget(1, m_guideGroup);
-    inspLayout->removeWidget(m_safetyGuideGroup);
-    inspLayout->insertWidget(2, m_safetyGuideGroup);
     inspLayout->addStretch();
     scroll->setWidget(m_inspector);
 
