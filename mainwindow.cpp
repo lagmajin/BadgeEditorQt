@@ -3369,7 +3369,7 @@ void MainWindow::applyTheme(bool dark) {
     if (m_actTheme) {
         setMaterialIcon(m_actTheme, dark ? QStringLiteral("dark_mode") : QStringLiteral("light_mode"));
     }
-    m_actTheme->setText(dark ? "☀ テーマ切替" : "☾ テーマ切替");
+    m_actTheme->setText(QStringLiteral("テーマ切替"));
     applyWindowsBackdrop();
 }
 
