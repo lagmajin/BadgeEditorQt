@@ -1607,18 +1607,38 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     safetyGroup->setObjectName(QStringLiteral("safetyGuideGroup"));
     m_safetyGuideGroup = safetyGroup;
     auto* safetyLayout = new QVBoxLayout(safetyGroup);
-    safetyLayout->setSpacing(4);
+    safetyLayout->setSpacing(6);
     m_safetyGuideDesign = new QLabel;
     m_safetyGuideColor = new QLabel;
-    for (auto* label : {m_safetyGuideDesign, m_safetyGuideColor}) {
-        if (!label) {
-            continue;
-        }
+    const auto addSafetyGuideEntry = [safetyGroup, safetyLayout](QLabel* label,
+                                                                 const QColor& color,
+                                                                 Qt::PenStyle penStyle) {
+        auto* row = new QWidget(safetyGroup);
+        auto* rowLayout = new QHBoxLayout(row);
+        rowLayout->setContentsMargins(0, 0, 0, 0);
+        rowLayout->setSpacing(8);
+        auto* swatch = new QLabel(row);
+        swatch->setFixedSize(32, 32);
+        swatch->setAlignment(Qt::AlignCenter);
+        QPixmap pixmap(32, 32);
+        pixmap.fill(Qt::transparent);
+        QPainter painter(&pixmap);
+        painter.setRenderHint(QPainter::Antialiasing);
+        painter.setPen(QPen(color, 2.0, penStyle));
+        painter.setBrush(Qt::NoBrush);
+        painter.drawEllipse(QRectF(4.0, 4.0, 24.0, 24.0));
+        painter.end();
+        swatch->setPixmap(pixmap);
         label->setWordWrap(true);
-        label->setMargin(4);
-        label->setAutoFillBackground(true);
-        safetyLayout->addWidget(label);
-    }
+        label->setMargin(0);
+        label->setAutoFillBackground(false);
+        label->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+        rowLayout->addWidget(swatch);
+        rowLayout->addWidget(label, 1);
+        safetyLayout->addWidget(row);
+    };
+    addSafetyGuideEntry(m_safetyGuideDesign, QColor(0xEF, 0x44, 0x44), Qt::DashLine);
+    addSafetyGuideEntry(m_safetyGuideColor, QColor(0x22, 0xC5, 0x5E), Qt::SolidLine);
 
     auto* selectionPlaceholder = new QGroupBox(QStringLiteral("オブジェクト設定"));
     selectionPlaceholder->setObjectName(QStringLiteral("selectionPlaceholder"));
@@ -4185,12 +4205,11 @@ void MainWindow::updateSafetyGuideHud() {
     const double finishMm = activeGuideSizeMm();
     const double bleedDiameterMm = finishMm + 3.0;
     const double safeDiameterMm = std::max(0.0, finishMm - 4.0);
-    const QColor guideRed(0xEF, 0x44, 0x44);
-    const QColor guideGreen(0x22, 0xC5, 0x5E);
-    setLabel(m_safetyGuideDesign, QStringLiteral("- - -  塗り足し線"),
-             QStringLiteral("直径 %1 mm").arg(bleedDiameterMm, 0, 'f', 1), guideRed, true);
-    setLabel(m_safetyGuideColor, QStringLiteral("━━━━  安全圏"),
-             QStringLiteral("直径 %1 mm").arg(safeDiameterMm, 0, 'f', 1), guideGreen, true);
+    const QColor guideTextColor = m_isDark ? QColor(0xE8, 0xEE, 0xF5) : QColor(0x55, 0x62, 0x78);
+    setLabel(m_safetyGuideDesign, QStringLiteral("塗り足し線"),
+             QStringLiteral("直径 %1 mm").arg(bleedDiameterMm, 0, 'f', 1), guideTextColor, true);
+    setLabel(m_safetyGuideColor, QStringLiteral("安全圏"),
+             QStringLiteral("直径 %1 mm").arg(safeDiameterMm, 0, 'f', 1), guideTextColor, true);
 }
 
 void MainWindow::dragEnterEvent(QDragEnterEvent* event) {
