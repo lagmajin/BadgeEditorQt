@@ -696,7 +696,7 @@ void DesignerWidget::drawForeground(QPainter* painter, const QRectF& rect) {
 
     // Bleed line (red dashed)
     if (m_guideBleed->isVisible()) {
-        QPen pen(QColor(255, 0, 0), 1.5);
+        QPen pen(QColor(239, 68, 68), 1.5);
         pen.setDashPattern({4, 2});
         painter->setPen(pen);
         painter->setBrush(Qt::NoBrush);
@@ -705,7 +705,7 @@ void DesignerWidget::drawForeground(QPainter* painter, const QRectF& rect) {
 
     // Visible area (green solid)
     if (m_guideVisible->isVisible()) {
-        QPen pen(QColor(0, 255, 0), 2.0);
+        QPen pen(QColor(34, 197, 94), 2.0);
         painter->setPen(pen);
         painter->setBrush(Qt::NoBrush);
         painter->drawEllipse(QPointF(cx, cy), rv, rv);
