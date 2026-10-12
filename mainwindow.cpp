@@ -3860,7 +3860,9 @@ void MainWindow::applyTheme(bool dark) {
                 QWidget#editInspector QGroupBox#safetyGuideGroup { background: transparent;
                     border: 0; border-radius: 0; margin-top: 4px; padding: 2px 0 4px 0; }
                 QWidget#editInspector QGroupBox#safetyGuideGroup::title { left: 0; padding: 0 4px; }
-                QWidget#editInspector QGroupBox#checklistGroup { margin-top: 3px; padding: 5px; }
+                QWidget#editInspector QGroupBox#checklistGroup { background: transparent;
+                    border: 0; border-bottom: 1px solid #e3e7ef; border-radius: 0;
+                    margin-top: 3px; padding: 2px 0 4px 0; }
                 QWidget#editInspector QLabel#paperDimensions { color: #27324a; font-weight: 600; }
                 QWidget#editInspector QCheckBox#guideVisibilityToggle { background: #f7f8fb; color: #35415a;
                     border: 1px solid #d6dce8; border-radius: 6px; padding: 4px 6px; spacing: 5px; }
