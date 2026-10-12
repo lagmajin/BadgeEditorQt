@@ -2424,6 +2424,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     m_dockManager->addDockWidgetTabToArea(m_layoutDock, m_dockArea);
     m_dockManager->addDockWidget(ads::RightDockWidgetArea, m_inspectorDock, m_dockArea);
     m_dockManager->addDockWidget(ads::BottomDockWidgetArea, m_logDock, m_dockArea);
+    m_logDock->setVisible(false);
     m_defaultDockState = m_dockManager->saveState(1);
     m_dockManager->addPerspective("designer");
     m_layoutDock->setAsCurrentTab();
