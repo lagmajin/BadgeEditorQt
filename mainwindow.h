@@ -258,7 +258,6 @@ private:
     QLabel* m_checklistLayout = nullptr;
     QLabel* m_checklistColor = nullptr;
     QLabel* m_safetyGuideDesign = nullptr;
-    QLabel* m_safetyGuideLayout = nullptr;
     QLabel* m_safetyGuideColor = nullptr;
     ads::CDockWidget* m_logDock = nullptr;
     QListWidget* m_logList = nullptr;

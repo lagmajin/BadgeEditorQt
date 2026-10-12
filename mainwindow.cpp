@@ -1552,14 +1552,13 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     m_safetyGuideGroup = safetyGroup;
     auto* safetyLayout = new QVBoxLayout(safetyGroup);
     m_safetyGuideDesign = new QLabel;
-    m_safetyGuideLayout = new QLabel;
     m_safetyGuideColor = new QLabel;
-    for (auto* label : {m_safetyGuideDesign, m_safetyGuideLayout, m_safetyGuideColor}) {
+    for (auto* label : {m_safetyGuideDesign, m_safetyGuideColor}) {
         if (!label) {
             continue;
         }
-        label->setWordWrap(false);
-        label->setMargin(5);
+        label->setWordWrap(true);
+        label->setMargin(7);
         label->setAutoFillBackground(true);
         safetyLayout->addWidget(label);
     }
@@ -3721,8 +3720,8 @@ void MainWindow::updateSafetyGuideHud() {
         if (!label) {
             return;
         }
-        const QString fullText = QStringLiteral("%1  %2").arg(title, detail);
-        label->setText(label->fontMetrics().elidedText(fullText, Qt::ElideRight, qMax(290, label->width() - 20)));
+        const QString fullText = QStringLiteral("%1\n%2").arg(title, detail);
+        label->setText(fullText);
         label->setToolTip(fullText);
         QPalette pal = label->palette();
         pal.setColor(QPalette::Window, QColor(color.red(), color.green(), color.blue(), 36));
@@ -3746,11 +3745,8 @@ void MainWindow::updateSafetyGuideHud() {
     const double safeDiameterMm = std::max(0.0, finishMm - 4.0);
     const QColor guideRed(0xEF, 0x44, 0x44);
     const QColor guideGreen(0x22, 0xC5, 0x5E);
-    const QColor guideNeutral(0xCF, 0xD9, 0xE5);
-    setLabel(m_safetyGuideDesign, QStringLiteral("巻き込み線"),
+    setLabel(m_safetyGuideDesign, QStringLiteral("塗り足し線"),
              QStringLiteral("直径 %1 mm").arg(bleedDiameterMm, 0, 'f', 1), guideRed);
-    setLabel(m_safetyGuideLayout, QStringLiteral("仕上がり"),
-             QStringLiteral("直径 %1 mm").arg(finishMm, 0, 'f', 1), guideNeutral);
     setLabel(m_safetyGuideColor, QStringLiteral("安全圏"),
              QStringLiteral("直径 %1 mm").arg(safeDiameterMm, 0, 'f', 1), guideGreen);
 }
