@@ -654,7 +654,9 @@ void DesignerWidget::drawBackground(QPainter* painter, const QRectF& rect) {
     const QColor windowColor = palette().color(QPalette::Window);
     const QColor baseColor = palette().color(QPalette::Base);
     const bool dark = windowColor.lightness() < 128;
-    const QColor c1 = dark ? blend(windowColor, baseColor, 0.16) : QColor(248, 247, 243);
+    const bool printGuideGrid = m_canvasBackgroundMode == CanvasBackgroundMode::PrintGuideGrid;
+    const QColor c1 = printGuideGrid ? QColor(250, 249, 246)
+                                     : (dark ? blend(windowColor, baseColor, 0.16) : QColor(248, 247, 243));
 
     if (m_canvasBackgroundMode == CanvasBackgroundMode::White) {
         painter->fillRect(rect, Qt::white);
@@ -686,12 +688,12 @@ void DesignerWidget::drawBackground(QPainter* painter, const QRectF& rect) {
 
     painter->save();
     painter->setRenderHint(QPainter::Antialiasing, false);
-    const QColor majorGridBase = dark ? palette().color(QPalette::Mid) : QColor(170, 179, 194);
-    const QColor minorGridBase = dark
+    const QColor majorGridBase = dark && !printGuideGrid ? palette().color(QPalette::Mid) : QColor(170, 179, 194);
+    const QColor minorGridBase = dark && !printGuideGrid
         ? blend(palette().color(QPalette::Mid), palette().color(QPalette::Highlight), 0.10)
         : QColor(201, 205, 211);
-    const int majorAlpha = dark ? 150 : 105;
-    const int minorAlpha = dark ? 86 : 54;
+    const int majorAlpha = dark && !printGuideGrid ? 150 : 105;
+    const int minorAlpha = dark && !printGuideGrid ? 86 : 48;
     const QColor majorGridColor = QColor::fromRgb(majorGridBase.red(), majorGridBase.green(), majorGridBase.blue(), majorAlpha);
     const QColor minorGridColor = QColor::fromRgb(minorGridBase.red(), minorGridBase.green(), minorGridBase.blue(), minorAlpha);
 
