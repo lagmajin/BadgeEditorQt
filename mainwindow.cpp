@@ -2219,10 +2219,29 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     applyMaterialPreset(0);
 
     // Layout config group
-    auto* layoutGroup = new QGroupBox("用紙設定");
+    auto* layoutGroup = new QGroupBox;
+    layoutGroup->setObjectName(QStringLiteral("paperSettingsGroup"));
     m_layoutGroup = layoutGroup;
-    auto* layoutForm = new QFormLayout(layoutGroup);
+    auto* layoutGroupLayout = new QVBoxLayout(layoutGroup);
+    layoutGroupLayout->setContentsMargins(5, 5, 5, 5);
+    layoutGroupLayout->setSpacing(3);
+    auto* layoutHeader = new QToolButton(layoutGroup);
+    layoutHeader->setObjectName(QStringLiteral("inspectorSectionHeader"));
+    layoutHeader->setText(QStringLiteral("用紙設定"));
+    layoutHeader->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+    layoutHeader->setArrowType(Qt::DownArrow);
+    layoutHeader->setCheckable(true);
+    layoutHeader->setChecked(true);
+    layoutHeader->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+    auto* layoutContents = new QWidget(layoutGroup);
+    auto* layoutForm = new QFormLayout(layoutContents);
     layoutForm->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
+    layoutGroupLayout->addWidget(layoutHeader);
+    layoutGroupLayout->addWidget(layoutContents);
+    connect(layoutHeader, &QToolButton::toggled, this, [layoutHeader, layoutContents](bool expanded) {
+        layoutContents->setVisible(expanded);
+        layoutHeader->setArrowType(expanded ? Qt::DownArrow : Qt::RightArrow);
+    });
     m_comboPaperSize = new QComboBox;
     m_comboPaperSize->addItems({
         "A3 (297 x 420 mm)",
@@ -3632,6 +3651,7 @@ void MainWindow::applyTheme(bool dark) {
                     border-radius: 8px; margin-top: 16px; padding: 8px; }
                 QWidget#editInspector QGroupBox#pageSettingsGroup { margin-top: 3px; padding: 5px; }
                 QWidget#editInspector QGroupBox#checklistGroup { margin-top: 3px; padding: 5px; }
+                QWidget#editInspector QGroupBox#paperSettingsGroup { margin-top: 3px; padding: 5px; }
                 QWidget#editInspector QGroupBox::title { color: #e8eef5; font-weight: 600;
                     subcontrol-origin: margin; left: 9px; padding: 0 5px; }
                 QWidget#editInspector QToolButton#inspectorSectionHeader { background: transparent; color: #e8eef5;
@@ -3656,6 +3676,7 @@ void MainWindow::applyTheme(bool dark) {
                     border: 1px solid #dfe3ec; border-radius: 8px; margin-top: 16px; padding: 8px; }
                 QWidget#editInspector QGroupBox#pageSettingsGroup { margin-top: 3px; padding: 5px; }
                 QWidget#editInspector QGroupBox#checklistGroup { margin-top: 3px; padding: 5px; }
+                QWidget#editInspector QGroupBox#paperSettingsGroup { margin-top: 3px; padding: 5px; }
                 QWidget#editInspector QGroupBox::title { color: #27324a; font-weight: 600;
                     subcontrol-origin: margin; left: 9px; padding: 0 5px; }
                 QWidget#editInspector QToolButton#inspectorSectionHeader { background: transparent; color: #27324a;
