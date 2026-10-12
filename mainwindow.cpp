@@ -39,6 +39,7 @@ import viewportbackend;
 #include <QDragEnterEvent>
 #include <QDropEvent>
 #include <QPushButton>
+#include <QToolButton>
 #include <QShortcut>
 #include <QSize>
 #include <QStyle>
@@ -1157,10 +1158,16 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     m_actDesigner->setCheckable(true);
     m_actDesigner->setChecked(true);
     setMaterialIcon(m_actDesigner, QStringLiteral("edit"));
+    if (auto* designerButton = m_commonToolbar->widgetForAction(m_actDesigner)) {
+        designerButton->setObjectName(QStringLiteral("designerModeAction"));
+    }
     m_actLayout = m_commonToolbar->addAction("LAYOUT");
     m_actLayout->setObjectName(QStringLiteral("layoutModeAction"));
     m_actLayout->setCheckable(true);
     setMaterialIcon(m_actLayout, QStringLiteral("grid_view"));
+    if (auto* layoutButton = m_commonToolbar->widgetForAction(m_actLayout)) {
+        layoutButton->setObjectName(QStringLiteral("layoutModeAction"));
+    }
     connect(m_actDesigner, &QAction::triggered, this, [this]{ onModeChanged(true); });
     connect(m_actLayout, &QAction::triggered, this, [this]{ onModeChanged(false); });
     m_commonToolbar->addSeparator();
@@ -1171,8 +1178,16 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     m_commonToolbar->addSeparator();
     m_actZoomIn = m_commonToolbar->addAction("ズームイン", this, [this]{ m_zoomScale *= 1.2; m_zoomLabel->setText(QString::number(m_zoomScale*100,'f',0)+"%"); });
     setMaterialIcon(m_actZoomIn, QStringLiteral("zoom_in"));
+    if (auto* zoomInButton = qobject_cast<QToolButton*>(m_commonToolbar->widgetForAction(m_actZoomIn))) {
+        zoomInButton->setToolButtonStyle(Qt::ToolButtonIconOnly);
+        zoomInButton->setToolTip(QStringLiteral("ズームイン"));
+    }
     m_actZoomOut = m_commonToolbar->addAction("ズームアウト", this, [this]{ m_zoomScale /= 1.2; m_zoomLabel->setText(QString::number(m_zoomScale*100,'f',0)+"%"); });
     setMaterialIcon(m_actZoomOut, QStringLiteral("zoom_out"));
+    if (auto* zoomOutButton = qobject_cast<QToolButton*>(m_commonToolbar->widgetForAction(m_actZoomOut))) {
+        zoomOutButton->setToolButtonStyle(Qt::ToolButtonIconOnly);
+        zoomOutButton->setToolTip(QStringLiteral("ズームアウト"));
+    }
     m_commonToolbar->addSeparator();
     m_zoomLabel = new QLabel("100%");
     m_zoomLabel->setObjectName(QStringLiteral("zoomValueLabel"));
