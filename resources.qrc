@@ -25,6 +25,7 @@
     <file>assets/material-icons/image.svg</file>
     <file>assets/material-icons/layer_fill.svg</file>
     <file>assets/material-icons/library_add.svg</file>
+    <file alias="note_add.svg">assets/material-icons/note_add.svg</file>
     <file>assets/material-icons/light_mode.svg</file>
     <file>assets/material-icons/picture_as_pdf.svg</file>
     <file>assets/material-icons/print.svg</file>

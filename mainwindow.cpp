@@ -200,12 +200,6 @@ void configureToolbar(QToolBar* toolbar, Qt::ToolButtonStyle style) {
     }
 }
 
-void setToolbarIcon(QAction* action, QStyle::StandardPixmap pixmap) {
-    if (action) {
-        action->setIcon(standardToolbarIcon(pixmap));
-    }
-}
-
 QString materialIconAssetPath(const QString& name) {
     const QString sourceDir = QString::fromUtf8(BADGEEDITOR_SOURCE_DIR);
     return QDir(sourceDir).filePath(QStringLiteral("assets/material-icons/%1.svg").arg(name));
@@ -1151,7 +1145,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     m_commonToolbar->setMinimumHeight(64);
     m_commonToolbar->setIconSize(QSize(24, 24));
     auto* toolbarNew = m_commonToolbar->addAction(QStringLiteral("新規"), this, &MainWindow::onNew);
-    setToolbarIcon(toolbarNew, QStyle::SP_FileIcon);
+    setMaterialIcon(toolbarNew, QStringLiteral("note_add"));
     toolbarNew->setToolTip(QStringLiteral("新しいドキュメントを作成 (Ctrl+N)"));
     auto* toolbarOpen = m_commonToolbar->addAction(QStringLiteral("開く"), this, &MainWindow::onOpen);
     setMaterialIcon(toolbarOpen, QStringLiteral("folder_open"));
