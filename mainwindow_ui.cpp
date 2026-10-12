@@ -138,6 +138,7 @@ void MainWindow::saveAppSettings() {
     settings.setValue("app/gridVisible", m_appSettings.gridVisible);
     settings.setValue("app/snapToGrid", m_appSettings.snapToGrid);
     settings.setValue("app/gridSpacingMm", m_appSettings.gridSpacingMm);
+    settings.setValue("app/defaultBadgeSizeMm", m_appSettings.defaultBadgeSizeMm);
     settings.setValue("app/canvasBackgroundMode", static_cast<int>(m_appSettings.canvasBackgroundMode));
     settings.setValue("app/lightingEnabled", m_appSettings.lightingEnabled);
     settings.setValue("app/lightAngle", m_appSettings.lightAngle);
@@ -156,6 +157,10 @@ void MainWindow::loadAppSettings() {
     loaded.gridVisible = settings.value("app/gridVisible", loaded.gridVisible).toBool();
     loaded.snapToGrid = settings.value("app/snapToGrid", loaded.snapToGrid).toBool();
     loaded.gridSpacingMm = settings.value("app/gridSpacingMm", loaded.gridSpacingMm).toDouble();
+    loaded.defaultBadgeSizeMm = settings.value("app/defaultBadgeSizeMm", loaded.defaultBadgeSizeMm).toDouble();
+    if (m_comboDefaultBadgeSize && m_comboDefaultBadgeSize->findData(loaded.defaultBadgeSizeMm) < 0) {
+        loaded.defaultBadgeSizeMm = 32.0;
+    }
     if (settings.contains("app/canvasBackgroundMode")) {
         const int canvasBackgroundMode = settings.value("app/canvasBackgroundMode").toInt();
         if (canvasBackgroundMode >= static_cast<int>(CanvasBackgroundMode::PrintGuideGrid)

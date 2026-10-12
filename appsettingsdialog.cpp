@@ -85,6 +85,17 @@ AppSettingsDialog::AppSettingsDialog(const AppSettings& settings, QWidget* paren
     gridForm->addRow(m_gridVisible);
     gridForm->addRow(m_snapToGrid);
     gridForm->addRow("間隔:", m_gridSpacing);
+    m_defaultBadgeSize = new QComboBox;
+    m_defaultBadgeSize->addItem(QStringLiteral("25 mm"), 25.0);
+    m_defaultBadgeSize->addItem(QStringLiteral("32 mm（標準）"), 32.0);
+    m_defaultBadgeSize->addItem(QStringLiteral("44 mm"), 44.0);
+    m_defaultBadgeSize->addItem(QStringLiteral("57 mm"), 57.0);
+    m_defaultBadgeSize->addItem(QStringLiteral("65 mm"), 65.0);
+    m_defaultBadgeSize->addItem(QStringLiteral("76 mm"), 76.0);
+    m_defaultBadgeSize->addItem(QStringLiteral("100 mm"), 100.0);
+    const int badgeSizeIndex = m_defaultBadgeSize->findData(settings.defaultBadgeSizeMm);
+    m_defaultBadgeSize->setCurrentIndex(badgeSizeIndex >= 0 ? badgeSizeIndex : 1);
+    gridForm->addRow(QStringLiteral("バッジサイズ:"), m_defaultBadgeSize);
     m_canvasBackground = new QComboBox;
     m_canvasBackground->addItem(QStringLiteral("グリッド（印刷ガイド）"), static_cast<int>(CanvasBackgroundMode::PrintGuideGrid));
     m_canvasBackground->addItem(QStringLiteral("白"), static_cast<int>(CanvasBackgroundMode::White));
@@ -204,6 +215,7 @@ AppSettings AppSettingsDialog::settings() const {
     result.gridVisible = m_gridVisible ? m_gridVisible->isChecked() : true;
     result.snapToGrid = m_snapToGrid ? m_snapToGrid->isChecked() : true;
     result.gridSpacingMm = m_gridSpacing ? m_gridSpacing->value() : 1.0;
+    result.defaultBadgeSizeMm = m_defaultBadgeSize ? m_defaultBadgeSize->currentData().toDouble() : 32.0;
     result.canvasBackgroundMode = m_canvasBackground
         ? static_cast<CanvasBackgroundMode>(m_canvasBackground->currentData().toInt())
         : CanvasBackgroundMode::PrintGuideGrid;

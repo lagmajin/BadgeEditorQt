@@ -11,6 +11,7 @@ struct AppSettings {
     bool snapToGrid = true;
     double gridSpacingMm = 1.0;
     CanvasBackgroundMode canvasBackgroundMode = CanvasBackgroundMode::PrintGuideGrid;
+    double defaultBadgeSizeMm = 32.0;
     bool lightingEnabled = false;
     int lightAngle = 315;
     int lightIntensity = 45;
@@ -44,6 +45,7 @@ private:
     QCheckBox* m_snapToGrid = nullptr;
     QDoubleSpinBox* m_gridSpacing = nullptr;
     QComboBox* m_canvasBackground = nullptr;
+    QComboBox* m_defaultBadgeSize = nullptr;
     QCheckBox* m_lightingEnabled = nullptr;
     QSpinBox* m_lightAngle = nullptr;
     QSpinBox* m_lightIntensity = nullptr;

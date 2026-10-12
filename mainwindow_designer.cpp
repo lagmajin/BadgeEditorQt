@@ -81,6 +81,8 @@ void MainWindow::onDelete() {
 void MainWindow::onAddBadge() {
     const auto before = currentDesignerBadges();
     BadgeItem b;
+    b.widthMm = m_appSettings.defaultBadgeSizeMm;
+    b.heightMm = m_appSettings.defaultBadgeSizeMm;
     b.clipToCircle = true;
     const QPointF center = m_designer->mapToScene(m_designer->viewport()->rect().center());
     const double mmToPx = Constants::kMmToPx;
@@ -104,6 +106,8 @@ void MainWindow::onImageDropped(const QString& filePath) {
     }
     const auto before = currentDesignerBadges();
     BadgeItem b;
+    b.widthMm = m_appSettings.defaultBadgeSizeMm;
+    b.heightMm = m_appSettings.defaultBadgeSizeMm;
     b.layers.append(layerFromImagePath(filePath));
     b.clipToCircle = true;
     b.label = QFileInfo(filePath).baseName();

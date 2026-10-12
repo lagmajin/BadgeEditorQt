@@ -1857,6 +1857,16 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     m_spinGridSpacing->setDecimals(1);
     m_spinGridSpacing->setSuffix(QStringLiteral(" mm"));
     m_spinGridSpacing->setValue(m_appSettings.gridSpacingMm);
+    m_comboDefaultBadgeSize = new QComboBox;
+    m_comboDefaultBadgeSize->addItem(QStringLiteral("25 mm"), 25.0);
+    m_comboDefaultBadgeSize->addItem(QStringLiteral("32 mm（標準）"), 32.0);
+    m_comboDefaultBadgeSize->addItem(QStringLiteral("44 mm"), 44.0);
+    m_comboDefaultBadgeSize->addItem(QStringLiteral("57 mm"), 57.0);
+    m_comboDefaultBadgeSize->addItem(QStringLiteral("65 mm"), 65.0);
+    m_comboDefaultBadgeSize->addItem(QStringLiteral("76 mm"), 76.0);
+    m_comboDefaultBadgeSize->addItem(QStringLiteral("100 mm"), 100.0);
+    const int defaultBadgeSizeIndex = m_comboDefaultBadgeSize->findData(m_appSettings.defaultBadgeSizeMm);
+    m_comboDefaultBadgeSize->setCurrentIndex(defaultBadgeSizeIndex >= 0 ? defaultBadgeSizeIndex : 1);
     auto* backgroundOptions = new QWidget(canvasGroup);
     auto* backgroundLayout = new QVBoxLayout(backgroundOptions);
     backgroundLayout->setContentsMargins(0, 2, 0, 2);
@@ -1868,6 +1878,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     backgroundLayout->addWidget(m_radioCanvasGrid);
     backgroundLayout->addWidget(m_radioCanvasWhite);
     backgroundLayout->addWidget(m_radioCanvasTransparent);
+    canvasForm->addRow(QStringLiteral("バッジサイズ:"), m_comboDefaultBadgeSize);
     canvasForm->addRow(m_chkGridVisible);
     canvasForm->addRow(m_chkSnapToGrid);
     canvasForm->addRow(QStringLiteral("間隔:"), m_spinGridSpacing);
@@ -1899,6 +1910,28 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
         m_appSettings.gridSpacingMm = mm;
         if (m_designer) {
             m_designer->setGridSpacingMm(mm);
+        }
+        saveAppSettings();
+    });
+    connect(m_comboDefaultBadgeSize, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int index) {
+        if (index < 0 || !m_comboDefaultBadgeSize) {
+            return;
+        }
+        m_appSettings.defaultBadgeSizeMm = m_comboDefaultBadgeSize->currentData().toDouble();
+        if (m_selected.isEmpty()) {
+            m_updatingUI = true;
+            m_propW->setValue(m_appSettings.defaultBadgeSizeMm);
+            m_propH->setValue(m_appSettings.defaultBadgeSizeMm);
+            if (m_sizePreset) {
+                m_sizePreset->setCurrentIndex(badgeSizePresetIndex(m_appSettings.defaultBadgeSizeMm,
+                                                                   m_appSettings.defaultBadgeSizeMm));
+            }
+            m_updatingUI = false;
+            m_lastGuideSizeMm = m_appSettings.defaultBadgeSizeMm;
+            if (m_designer) {
+                m_designer->updateGuides(m_lastGuideSizeMm);
+            }
+            updateSafetyGuideHud();
         }
         saveAppSettings();
     });
@@ -2474,12 +2507,14 @@ void MainWindow::onBadgeDeselected() {
     setInspectorControlsEnabled(false);
     m_updatingUI = true;
     m_propX->setValue(0); m_propY->setValue(0);
-    m_propW->setValue(32); m_propH->setValue(32);
+    m_propW->setValue(m_appSettings.defaultBadgeSizeMm);
+    m_propH->setValue(m_appSettings.defaultBadgeSizeMm);
     if (m_propImageScale) {
         m_propImageScale->setValue(100.0);
     }
     if (m_sizePreset) {
-        m_sizePreset->setCurrentIndex(badgeSizePresetIndex(32.0, 32.0));
+        m_sizePreset->setCurrentIndex(badgeSizePresetIndex(m_appSettings.defaultBadgeSizeMm,
+                                                           m_appSettings.defaultBadgeSizeMm));
     }
     m_propRotation->setValue(0);
     m_propText->clear();
@@ -2512,6 +2547,7 @@ void MainWindow::onBadgeDeselected() {
     if (m_comboGlitter) {
         m_comboGlitter->setEnabled(false);
     }
+    m_lastGuideSizeMm = m_appSettings.defaultBadgeSizeMm;
     m_designer->updateGuides(m_lastGuideSizeMm);
     m_updatingUI = false;
     if (m_layerList) {
@@ -3446,6 +3482,22 @@ void MainWindow::applyAppSettings(const AppSettings& settings) {
         const QSignalBlocker blocker(m_spinGridSpacing);
         m_spinGridSpacing->setValue(settings.gridSpacingMm);
     }
+    if (m_comboDefaultBadgeSize) {
+        const QSignalBlocker blocker(m_comboDefaultBadgeSize);
+        const int sizeIndex = m_comboDefaultBadgeSize->findData(settings.defaultBadgeSizeMm);
+        m_comboDefaultBadgeSize->setCurrentIndex(sizeIndex >= 0 ? sizeIndex : 1);
+    }
+    if (m_selected.isEmpty()) {
+        const QSignalBlocker widthBlocker(m_propW);
+        const QSignalBlocker heightBlocker(m_propH);
+        m_propW->setValue(settings.defaultBadgeSizeMm);
+        m_propH->setValue(settings.defaultBadgeSizeMm);
+        if (m_sizePreset) {
+            const QSignalBlocker presetBlocker(m_sizePreset);
+            m_sizePreset->setCurrentIndex(badgeSizePresetIndex(settings.defaultBadgeSizeMm,
+                                                               settings.defaultBadgeSizeMm));
+        }
+    }
     if (m_radioCanvasGrid && m_radioCanvasWhite && m_radioCanvasTransparent) {
         const QSignalBlocker gridBlocker(m_radioCanvasGrid);
         const QSignalBlocker whiteBlocker(m_radioCanvasWhite);
@@ -3463,6 +3515,10 @@ void MainWindow::applyAppSettings(const AppSettings& settings) {
         m_designer->setCanvasBackgroundMode(settings.canvasBackgroundMode);
         m_designer->setSnapToGrid(settings.snapToGrid);
         m_designer->setGridSpacingMm(settings.gridSpacingMm);
+        if (m_selected.isEmpty()) {
+            m_lastGuideSizeMm = settings.defaultBadgeSizeMm;
+            m_designer->updateGuides(m_lastGuideSizeMm);
+        }
         m_designer->setLightingEnabled(settings.lightingEnabled);
         m_designer->setLightAngle(settings.lightAngle);
         m_designer->setLightIntensity(settings.lightIntensity / 100.0);

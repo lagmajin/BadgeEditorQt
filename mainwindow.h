@@ -276,6 +276,7 @@ private:
     QCheckBox* m_chkGridVisible = nullptr;
     QCheckBox* m_chkSnapToGrid = nullptr;
     QDoubleSpinBox* m_spinGridSpacing = nullptr;
+    QComboBox* m_comboDefaultBadgeSize = nullptr;
     QRadioButton* m_radioCanvasGrid = nullptr;
     QRadioButton* m_radioCanvasWhite = nullptr;
     QRadioButton* m_radioCanvasTransparent = nullptr;
