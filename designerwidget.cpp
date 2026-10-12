@@ -716,26 +716,26 @@ void DesignerWidget::drawForeground(QPainter* painter, const QRectF& rect) {
         const bool dark = palette().color(QPalette::Window).lightness() < 128;
         const QColor title = dark ? QColor(241, 245, 252) : QColor(37, 48, 69);
         const QColor hint = dark ? QColor(177, 190, 208) : QColor(105, 117, 140);
-        const QRectF titleRect(rect.center().x() - 240.0, rect.center().y() - 31.0, 480.0, 30.0);
-        const QRectF hintRect(rect.center().x() - 270.0, rect.center().y() + 5.0, 540.0, 48.0);
+        const QRectF titleRect(center.x() - 112.0, center.y() - 31.0, 224.0, 30.0);
+        const QRectF hintRect(center.x() - 112.0, center.y() + 1.0, 224.0, 48.0);
 
         QFont titleFont = painter->font();
-        titleFont.setPointSizeF(titleFont.pointSizeF() + 2.0);
+        titleFont.setPointSizeF(std::max(9.0, titleFont.pointSizeF() + 1.0));
         titleFont.setBold(true);
         painter->setFont(titleFont);
         painter->setPen(title);
         painter->drawText(titleRect,
                           Qt::AlignCenter,
-                          QStringLiteral("ここにバッジを追加してください"));
+                          QStringLiteral("ここにバッジを追加"));
 
         QFont hintFont = painter->font();
-        hintFont.setPointSizeF(std::max(8.0, hintFont.pointSizeF() - 1.0));
+        hintFont.setPointSizeF(std::max(8.0, hintFont.pointSizeF() - 2.0));
         hintFont.setBold(false);
         painter->setFont(hintFont);
         painter->setPen(hint);
         painter->drawText(hintRect,
                           Qt::AlignCenter,
-                          QStringLiteral("画像をドロップするか、左の「画像」から追加できます"));
+                          QStringLiteral("画像をドロップするか、\n左の「画像」から追加できます"));
         painter->restore();
     }
 
