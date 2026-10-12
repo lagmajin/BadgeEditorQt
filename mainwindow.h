@@ -220,7 +220,6 @@ private:
     QAction* m_actMixedLayout = nullptr;
     QAction* m_actSendToLayout = nullptr;
     QAction* m_actClearLayout = nullptr;
-    QAction* m_actOpenDesignerPerspective = nullptr;
     QAction* m_actOpenLayoutPerspective = nullptr;
     QAction* m_actZoomIn = nullptr;
     QAction* m_actZoomOut = nullptr;

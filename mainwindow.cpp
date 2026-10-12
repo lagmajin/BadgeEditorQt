@@ -1154,6 +1154,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     m_actDesigner->setObjectName(QStringLiteral("designerModeAction"));
     m_actDesigner->setCheckable(true);
     m_actDesigner->setChecked(true);
+    m_actDesigner->setShortcut(QKeySequence("Ctrl+E"));
     auto* modeGroup = new QActionGroup(this);
     modeGroup->setExclusive(true);
     modeGroup->addAction(m_actDesigner);
@@ -1298,14 +1299,9 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
         sendButton->setObjectName(QStringLiteral("sendToLayoutButton"));
     }
     m_designerToolbar->addSeparator();
-    m_actOpenDesignerPerspective = m_designerToolbar->addAction("編集");
-    connect(m_actOpenDesignerPerspective, &QAction::triggered, this, [this]{ openDesignerPerspective(); });
-    m_actOpenDesignerPerspective->setShortcut(QKeySequence("Ctrl+E"));
-    setMaterialIcon(m_actOpenDesignerPerspective, QStringLiteral("edit"));
     m_selectionToolsSeparator = m_designerToolbar->insertSeparator(m_actDelete ? m_actDelete : m_actDuplicate);
     m_designerToolbar->insertSeparator(m_actMixedLayout);
     m_designerToolbar->insertSeparator(m_actSendToLayout);
-    m_designerToolbar->insertSeparator(m_actOpenDesignerPerspective);
 
     m_toolPalette = addToolBar(Qt::LeftToolBarArea, QStringLiteral("デザインツール"));
     m_toolPalette->setObjectName(QStringLiteral("toolPalette"));
@@ -3600,9 +3596,6 @@ void MainWindow::updateToolbarsForMode() {
     }
     if (m_actSendToLayout) {
         m_actSendToLayout->setEnabled(designer);
-    }
-    if (m_actOpenDesignerPerspective) {
-        m_actOpenDesignerPerspective->setVisible(designer);
     }
     if (m_actOpenLayoutPerspective) {
         m_actOpenLayoutPerspective->setVisible(!designer);
