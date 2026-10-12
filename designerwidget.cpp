@@ -681,8 +681,10 @@ void DesignerWidget::drawBackground(QPainter* painter, const QRectF& rect) {
     }
 
     const double mmToPx = Constants::kMmToPx;
-    const double stepPx = std::max(1.0, m_gridSpacingMm * mmToPx);
-    const double majorStepPx = stepPx * 2.0;
+    const double gridSpacingMm = std::max(0.5, m_gridSpacingMm);
+    const double stepPx = std::max(1.0, gridSpacingMm * mmToPx);
+    const double majorIntervalCount = std::max(1.0, std::ceil(10.0 / gridSpacingMm));
+    const double majorStepPx = stepPx * majorIntervalCount;
     const double screenStepPx = stepPx * std::abs(transform().m11());
     const bool simplifiedGrid = screenStepPx < 3.0;
 
