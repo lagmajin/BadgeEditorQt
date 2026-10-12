@@ -3730,12 +3730,18 @@ void MainWindow::updateSafetyGuideHud() {
         statusColor(colorLevel),
     });
 
-    auto setLabel = [](QLabel* label, const QString& title, const QString& detail, const QColor& color) {
+    auto setLabel = [](QLabel* label, const QString& title, const QString& detail, const QColor& color, bool stacked = false) {
         if (!label) {
             return;
         }
-        const QString fullText = QStringLiteral("%1\n%2").arg(title, detail);
-        label->setText(fullText);
+        const QString fullText = stacked
+            ? QStringLiteral("%1\n%2").arg(title, detail)
+            : QStringLiteral("%1  %2").arg(title, detail);
+        label->setText(stacked
+                           ? fullText
+                           : label->fontMetrics().elidedText(fullText,
+                                                             Qt::ElideRight,
+                                                             qMax(290, label->width() - 20)));
         label->setToolTip(fullText);
         QPalette pal = label->palette();
         pal.setColor(QPalette::Window, QColor(color.red(), color.green(), color.blue(), 36));
@@ -3760,9 +3766,9 @@ void MainWindow::updateSafetyGuideHud() {
     const QColor guideRed(0xEF, 0x44, 0x44);
     const QColor guideGreen(0x22, 0xC5, 0x5E);
     setLabel(m_safetyGuideDesign, QStringLiteral("塗り足し線"),
-             QStringLiteral("直径 %1 mm").arg(bleedDiameterMm, 0, 'f', 1), guideRed);
+             QStringLiteral("直径 %1 mm").arg(bleedDiameterMm, 0, 'f', 1), guideRed, true);
     setLabel(m_safetyGuideColor, QStringLiteral("安全圏"),
-             QStringLiteral("直径 %1 mm").arg(safeDiameterMm, 0, 'f', 1), guideGreen);
+             QStringLiteral("直径 %1 mm").arg(safeDiameterMm, 0, 'f', 1), guideGreen, true);
 }
 
 void MainWindow::dragEnterEvent(QDragEnterEvent* event) {
