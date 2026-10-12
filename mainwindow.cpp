@@ -27,6 +27,7 @@ import viewportbackend;
 #include <QSizePolicy>
 #include <QListWidget>
 #include <QApplication>
+#include <QScreen>
 #include <QClipboard>
 #include <QBrush>
 #include <QColor>
@@ -1023,7 +1024,14 @@ static void applyWinBackdrop(HWND hwnd, bool darkMode) {
 
 MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     setWindowTitle("Badge Editor Pro");
-    resize(1500, 900);
+    if (QScreen* screen = QApplication::primaryScreen()) {
+        const QRect available = screen->availableGeometry();
+        resize(std::min(1500, qRound(available.width() * 0.94)),
+               std::min(900, qRound(available.height() * 0.90)));
+        move(available.center() - rect().center());
+    } else {
+        resize(1500, 900);
+    }
     setAcceptDrops(true);
     m_undoStack = new QUndoStack(this);
     m_windowsIntegration = new WindowsIntegration(this);
