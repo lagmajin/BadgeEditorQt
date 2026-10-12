@@ -1319,6 +1319,20 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     toolPaletteHeading->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     toolPaletteHeading->setMinimumHeight(30);
     m_toolPalette->addWidget(toolPaletteHeading);
+    auto* selectAction = new QAction(m_toolPalette);
+    selectAction->setText(QStringLiteral("選択"));
+    selectAction->setCheckable(true);
+    selectAction->setChecked(true);
+    selectAction->setToolTip(QStringLiteral("キャンバス上のバッジを選択"));
+    setMaterialIcon(selectAction, QStringLiteral("select"));
+    auto* selectToolGroup = new QActionGroup(this);
+    selectToolGroup->setExclusive(true);
+    selectToolGroup->addAction(selectAction);
+    connect(selectAction, &QAction::triggered, this, [this] {
+        if (m_designer) {
+            m_designer->setDragMode(QGraphicsView::RubberBandDrag);
+        }
+    });
     auto* addTextAction = new QAction(m_toolPalette);
     addTextAction->setText(QStringLiteral("テキスト"));
     addTextAction->setToolTip(QStringLiteral("文字を入力してバッジを作成"));
@@ -1344,6 +1358,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
             onImageDropped(path);
         }
     });
+    m_toolPalette->addAction(selectAction);
     m_toolPalette->addAction(addTextAction);
     m_toolPalette->addAction(importImageAction);
     m_toolPalette->addAction(m_actAddBadge);
@@ -1355,7 +1370,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     if (auto* sendButton = m_toolPalette->widgetForAction(m_actSendToLayout)) {
         sendButton->setObjectName(QStringLiteral("sendToLayoutButton"));
     }
-    for (auto* action : {addTextAction, importImageAction, m_actAddBadge, m_actBatchAdd, m_actMixedLayout, m_actSendToLayout}) {
+    for (auto* action : {selectAction, addTextAction, importImageAction, m_actAddBadge, m_actBatchAdd, m_actMixedLayout, m_actSendToLayout}) {
         if (auto* button = qobject_cast<QToolButton*>(m_toolPalette->widgetForAction(action))) {
             button->setMinimumSize(172, 52);
         }
@@ -3403,6 +3418,7 @@ void MainWindow::applyTheme(bool dark) {
             QToolBar#toolPalette { background: #192430; border: 0; border-right: 1px solid #344358; spacing: 8px; }
             QToolBar#toolPalette QToolButton { min-width: 172px; min-height: 44px; color: #dbe5f3;
                 text-align: left; border: 1px solid transparent; border-radius: 8px; margin: 2px 5px; padding: 8px 9px; }
+            QToolBar#toolPalette QToolButton:checked { background: #315bb8; border-color: #6385e8; color: white; }
             QToolBar#toolPalette QToolButton:hover { background: #293a50; border-color: #405675; }
             QToolBar#toolPalette QLabel#toolPaletteHeading { color: #91a8c4; font-weight: 600; padding: 4px 9px; }
             QToolBar QToolButton:checked { background: #315bb8; border-color: #6385e8; color: white; }
@@ -3432,6 +3448,7 @@ void MainWindow::applyTheme(bool dark) {
             QToolBar#toolPalette { background: #202c3d; border: 0; border-right: 1px solid #344358; spacing: 8px; }
             QToolBar#toolPalette QToolButton { min-width: 172px; min-height: 44px; color: #dbe5f3;
                 text-align: left; border: 1px solid transparent; border-radius: 8px; margin: 2px 5px; padding: 8px 9px; }
+            QToolBar#toolPalette QToolButton:checked { background: #4059ed; border-color: #6477f2; color: white; }
             QToolBar#toolPalette QToolButton:hover { background: #2d3e55; border-color: #405675; }
             QToolBar#toolPalette QLabel#toolPaletteHeading { color: #91a8c4; font-weight: 600; padding: 4px 9px; }
             QToolBar QToolButton:checked { background: #e9edff; border-color: #b8c4ff; color: #354fc0; }
