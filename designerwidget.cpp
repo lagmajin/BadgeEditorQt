@@ -625,8 +625,9 @@ void DesignerWidget::drawBackground(QPainter* painter, const QRectF& rect) {
     const int tileSize = 16;
     const QColor windowColor = palette().color(QPalette::Window);
     const QColor baseColor = palette().color(QPalette::Base);
-    const QColor c1 = blend(windowColor, baseColor, 0.16);
-    const QColor c2 = blend(windowColor, baseColor, 0.26);
+    const bool dark = windowColor.lightness() < 128;
+    const QColor c1 = dark ? blend(windowColor, baseColor, 0.16) : QColor(248, 247, 243);
+    const QColor c2 = dark ? blend(windowColor, baseColor, 0.26) : QColor(245, 244, 240);
 
     int left = int(rect.left()) - ((int(rect.left()) % tileSize + tileSize) % tileSize);
     int top = int(rect.top()) - ((int(rect.top()) % tileSize + tileSize) % tileSize);
@@ -649,10 +650,14 @@ void DesignerWidget::drawBackground(QPainter* painter, const QRectF& rect) {
 
     painter->save();
     painter->setRenderHint(QPainter::Antialiasing, false);
-    const QColor majorGridBase = palette().color(QPalette::Mid);
-    const QColor minorGridBase = blend(palette().color(QPalette::Mid), palette().color(QPalette::Highlight), 0.10);
-    const QColor majorGridColor = QColor::fromRgb(majorGridBase.red(), majorGridBase.green(), majorGridBase.blue(), 150);
-    const QColor minorGridColor = QColor::fromRgb(minorGridBase.red(), minorGridBase.green(), minorGridBase.blue(), 86);
+    const QColor majorGridBase = dark ? palette().color(QPalette::Mid) : QColor(170, 179, 194);
+    const QColor minorGridBase = dark
+        ? blend(palette().color(QPalette::Mid), palette().color(QPalette::Highlight), 0.10)
+        : QColor(201, 205, 211);
+    const int majorAlpha = dark ? 150 : 105;
+    const int minorAlpha = dark ? 86 : 54;
+    const QColor majorGridColor = QColor::fromRgb(majorGridBase.red(), majorGridBase.green(), majorGridBase.blue(), majorAlpha);
+    const QColor minorGridColor = QColor::fromRgb(minorGridBase.red(), minorGridBase.green(), minorGridBase.blue(), minorAlpha);
 
     const double gridStep = simplifiedGrid ? majorStepPx : stepPx;
     const int gridLeft = int(std::floor(rect.left() / gridStep) * gridStep);
