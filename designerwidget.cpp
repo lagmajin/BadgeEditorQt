@@ -767,6 +767,71 @@ void DesignerWidget::drawForeground(QPainter* painter, const QRectF& rect) {
         painter->drawText(placed, Qt::AlignCenter, text);
         painter->restore();
     }
+
+    constexpr int kRulerWidth = 40;
+    constexpr int kRulerHeight = 26;
+    const bool dark = palette().color(QPalette::Window).lightness() < 128;
+    const QColor rulerBackground = dark ? QColor(32, 42, 54) : QColor(248, 249, 252);
+    const QColor rulerBorder = dark ? QColor(65, 82, 103) : QColor(211, 218, 230);
+    const QColor rulerText = dark ? QColor(173, 188, 208) : QColor(105, 117, 140);
+    const QColor rulerTick = dark ? QColor(111, 132, 159) : QColor(152, 165, 184);
+    const QRect viewportRect = viewport()->rect();
+    const QRect topRuler(kRulerWidth, 0, viewportRect.width() - kRulerWidth, kRulerHeight);
+    const QRect leftRuler(0, kRulerHeight, kRulerWidth, viewportRect.height() - kRulerHeight);
+    if (!topRuler.isEmpty() && !leftRuler.isEmpty()) {
+        painter->save();
+        painter->resetTransform();
+        painter->setRenderHint(QPainter::Antialiasing, false);
+        painter->fillRect(QRect(0, 0, kRulerWidth, kRulerHeight), rulerBackground);
+        painter->fillRect(topRuler, rulerBackground);
+        painter->fillRect(leftRuler, rulerBackground);
+        painter->setPen(QPen(rulerBorder, 1.0));
+        painter->drawLine(kRulerWidth, kRulerHeight - 1, viewportRect.right(), kRulerHeight - 1);
+        painter->drawLine(kRulerWidth - 1, 0, kRulerWidth - 1, viewportRect.bottom());
+
+        QFont rulerFont = painter->font();
+        rulerFont.setPointSize(8);
+        painter->setFont(rulerFont);
+        painter->setPen(rulerText);
+
+        const QRectF sceneBounds = m_scene->sceneRect();
+        const QPointF sceneOrigin = sceneBounds.center();
+        const QRectF visibleScene = mapToScene(viewportRect).boundingRect();
+        const double pixelsPerMm = std::abs(transform().m11()) * mmToPx;
+        double intervalMm = 10.0;
+        while (intervalMm * pixelsPerMm < 52.0 && intervalMm < 1000.0) {
+            intervalMm *= 2.0;
+        }
+        const double intervalScene = intervalMm * mmToPx;
+        const int firstX = static_cast<int>(std::ceil((visibleScene.left() - sceneOrigin.x()) / intervalScene));
+        const int lastX = static_cast<int>(std::floor((visibleScene.right() - sceneOrigin.x()) / intervalScene));
+        for (int tick = firstX; tick <= lastX; ++tick) {
+            const qreal x = mapFromScene(QPointF(sceneOrigin.x() + tick * intervalScene, sceneBounds.top())).x();
+            painter->setPen(QPen(rulerTick, 1.0));
+            painter->drawLine(QPointF(x, kRulerHeight - 6), QPointF(x, kRulerHeight));
+            painter->setPen(rulerText);
+            painter->drawText(QRectF(x - 21.0, 1.0, 42.0, kRulerHeight - 8.0),
+                              Qt::AlignHCenter | Qt::AlignVCenter,
+                              QString::number(tick * intervalMm, 'f', 0));
+        }
+
+        const int firstY = static_cast<int>(std::ceil((visibleScene.top() - sceneOrigin.y()) / intervalScene));
+        const int lastY = static_cast<int>(std::floor((visibleScene.bottom() - sceneOrigin.y()) / intervalScene));
+        for (int tick = firstY; tick <= lastY; ++tick) {
+            const qreal y = mapFromScene(QPointF(sceneBounds.left(), sceneOrigin.y() + tick * intervalScene)).y();
+            painter->setPen(QPen(rulerTick, 1.0));
+            painter->drawLine(QPointF(kRulerWidth - 6, y), QPointF(kRulerWidth, y));
+            painter->setPen(rulerText);
+            painter->drawText(QRectF(1.0, y - 9.0, kRulerWidth - 10.0, 18.0),
+                              Qt::AlignRight | Qt::AlignVCenter,
+                              QString::number(tick * intervalMm, 'f', 0));
+        }
+        painter->setPen(rulerText);
+        painter->drawText(QRect(1, 0, kRulerWidth - 3, kRulerHeight - 2),
+                          Qt::AlignCenter,
+                          QStringLiteral("mm"));
+        painter->restore();
+    }
 }
 
 void DesignerWidget::setBatchMode(bool on) { m_batchMode = on; viewport()->update(); }
