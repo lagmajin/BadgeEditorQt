@@ -2256,24 +2256,30 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     auto* paperDimensionsLabel = new QLabel;
     paperDimensionsLabel->setObjectName(QStringLiteral("paperDimensions"));
     paperDimensionsLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    auto* printableDimensionsLabel = new QLabel;
+    printableDimensionsLabel->setObjectName(QStringLiteral("paperDimensions"));
+    printableDimensionsLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
     m_spinPaperMargin = new QDoubleSpinBox;
     m_spinPaperMargin->setSuffix(" mm");
     m_spinPaperMargin->setRange(0.0, 100.0);
     m_spinPaperMargin->setValue(5.0);
+    m_spinPaperMargin->setToolTip(QStringLiteral("用紙の四辺に設定する余白"));
     m_spinPaperSpacing = new QDoubleSpinBox;
     m_spinPaperSpacing->setSuffix(" mm");
     m_spinPaperSpacing->setRange(0.0, 50.0);
     m_spinPaperSpacing->setValue(1.0);
+    m_spinPaperSpacing->setToolTip(QStringLiteral("面付け時に隣り合うバッジの間に設ける間隔"));
     m_chkCutFriendlyLayout = new QCheckBox("切りやすい整列配置");
     layoutForm->addRow("用紙:", m_comboPaperSize);
     layoutForm->addRow(m_chkLandscape);
-    layoutForm->addRow("仕上がり寸法:", paperDimensionsLabel);
+    layoutForm->addRow("用紙寸法:", paperDimensionsLabel);
     layoutForm->addRow("余白:", m_spinPaperMargin);
+    layoutForm->addRow("印刷可能範囲:", printableDimensionsLabel);
     layoutForm->addRow("間隔:", m_spinPaperSpacing);
     layoutForm->addRow(m_chkCutFriendlyLayout);
     inspLayout->addWidget(layoutGroup);
 
-    const auto updatePaperDimensions = [this, paperDimensionsLabel] {
+    const auto updatePaperDimensions = [this, paperDimensionsLabel, printableDimensionsLabel] {
         QSize dimensions = m_comboPaperSize->currentData().toSize();
         if (m_chkLandscape->isChecked()) {
             dimensions.transpose();
@@ -2281,6 +2287,11 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
         paperDimensionsLabel->setText(QStringLiteral("%1 × %2 mm")
                                           .arg(dimensions.width())
                                           .arg(dimensions.height()));
+        const double printableWidth = std::max(0.0, dimensions.width() - 2.0 * m_spinPaperMargin->value());
+        const double printableHeight = std::max(0.0, dimensions.height() - 2.0 * m_spinPaperMargin->value());
+        printableDimensionsLabel->setText(QStringLiteral("%1 × %2 mm")
+                                              .arg(printableWidth, 0, 'f', 1)
+                                              .arg(printableHeight, 0, 'f', 1));
         m_chkLandscape->setText(m_chkLandscape->isChecked()
                                     ? QStringLiteral("横向き")
                                     : QStringLiteral("縦向き"));
@@ -2294,7 +2305,10 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
         if (!m_isDesigner) requestLayoutRefresh("orientation changed");
     });
     updatePaperDimensions();
-    connect(m_spinPaperMargin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this]{ if (!m_isDesigner) requestLayoutRefresh("margin changed"); });
+    connect(m_spinPaperMargin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this, updatePaperDimensions]{
+        updatePaperDimensions();
+        if (!m_isDesigner) requestLayoutRefresh("margin changed");
+    });
     connect(m_spinPaperSpacing, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this]{ if (!m_isDesigner) requestLayoutRefresh("spacing changed"); });
     connect(m_chkCutFriendlyLayout, &QCheckBox::toggled, this, [this]{ if (!m_isDesigner) requestLayoutRefresh("cut friendly changed"); });
 
