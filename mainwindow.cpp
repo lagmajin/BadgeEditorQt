@@ -1601,6 +1601,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     inspLayout->addWidget(checklistGroup);
 
     auto* safetyGroup = new QGroupBox("ガイド寸法");
+    safetyGroup->setObjectName(QStringLiteral("safetyGuideGroup"));
     m_safetyGuideGroup = safetyGroup;
     auto* safetyLayout = new QVBoxLayout(safetyGroup);
     safetyLayout->setSpacing(4);
@@ -3816,6 +3817,9 @@ void MainWindow::applyTheme(bool dark) {
                 QWidget#editInspector QGroupBox#paperSettingsGroup { background: transparent;
                     border: 0; border-bottom: 1px solid #e3e7ef; border-radius: 0;
                     margin-top: 3px; padding: 8px 0 10px 0; }
+                QWidget#editInspector QGroupBox#safetyGuideGroup { background: transparent;
+                    border: 0; border-radius: 0; margin-top: 4px; padding: 2px 0 4px 0; }
+                QWidget#editInspector QGroupBox#safetyGuideGroup::title { left: 0; padding: 0 4px; }
                 QWidget#editInspector QGroupBox#checklistGroup { margin-top: 3px; padding: 5px; }
                 QWidget#editInspector QLabel#paperDimensions { color: #27324a; font-weight: 600; }
                 QWidget#editInspector QCheckBox#guideVisibilityToggle { background: #f7f8fb; color: #35415a;
