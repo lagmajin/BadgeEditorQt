@@ -1313,8 +1313,8 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     m_toolPalette->setFont(uiFont);
     configureToolbar(m_toolPalette, Qt::ToolButtonTextBesideIcon);
     m_toolPalette->setIconSize(QSize(24, 24));
-    m_toolPalette->setMinimumWidth(196);
-    m_toolPalette->setMaximumWidth(220);
+    m_toolPalette->setMinimumWidth(250);
+    m_toolPalette->setMaximumWidth(270);
     auto* toolPaletteHeading = new QLabel(QStringLiteral("ツール"), m_toolPalette);
     toolPaletteHeading->setObjectName(QStringLiteral("toolPaletteHeading"));
     toolPaletteHeading->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
@@ -1377,7 +1377,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     const auto addToolHint = [this](const QString& text) {
         auto* hint = new QLabel(text, m_toolPalette);
         hint->setObjectName(QStringLiteral("toolPaletteHint"));
-        hint->setMinimumWidth(182);
+        hint->setMinimumWidth(236);
         hint->setMinimumHeight(18);
         m_toolPalette->addWidget(hint);
     };
@@ -1390,7 +1390,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     m_toolPalette->addSeparator();
     for (auto* action : {selectAction, addTextAction, importImageAction}) {
         if (auto* button = qobject_cast<QToolButton*>(m_toolPalette->widgetForAction(action))) {
-            button->setMinimumSize(172, 52);
+            button->setMinimumSize(226, 52);
         }
     }
 
@@ -3700,7 +3700,7 @@ void MainWindow::applyTheme(bool dark) {
                 border-radius: 7px; padding: 7px 10px; }
             QToolBar QToolButton:hover { background: #303f53; border-color: #40536b; }
             QToolBar#toolPalette { background: #192430; border: 0; border-right: 1px solid #344358; spacing: 8px; }
-            QToolBar#toolPalette QToolButton { min-width: 172px; min-height: 44px; color: #dbe5f3;
+            QToolBar#toolPalette QToolButton { min-width: 226px; min-height: 44px; color: #dbe5f3;
                 text-align: left; border: 1px solid transparent; border-radius: 8px; margin: 2px 5px; padding: 8px 9px; }
             QToolBar#toolPalette QToolButton:checked { background: #293a50; border-color: #6385e8;
                 border-left: 3px solid #6385e8; color: white; }
@@ -3732,7 +3732,7 @@ void MainWindow::applyTheme(bool dark) {
                 border-radius: 7px; padding: 7px 10px; }
             QToolBar QToolButton:hover { background: #edf0f8; border-color: #d9deeb; }
             QToolBar#toolPalette { background: #202c3d; border: 0; border-right: 1px solid #344358; spacing: 8px; }
-            QToolBar#toolPalette QToolButton { min-width: 172px; min-height: 44px; color: #dbe5f3;
+            QToolBar#toolPalette QToolButton { min-width: 226px; min-height: 44px; color: #dbe5f3;
                 text-align: left; border: 1px solid transparent; border-radius: 8px; margin: 2px 5px; padding: 8px 9px; }
             QToolBar#toolPalette QToolButton:checked { background: #2d3e55; border-color: #6477f2;
                 border-left: 3px solid #6477f2; color: white; }
