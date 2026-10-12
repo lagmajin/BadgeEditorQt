@@ -1660,9 +1660,24 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     m_propBrightness = new QSlider(Qt::Horizontal); m_propBrightness->setRange(-100, 100);
     m_propContrast = new QSlider(Qt::Horizontal); m_propContrast->setRange(-100, 100);
     m_propSaturation = new QSlider(Qt::Horizontal); m_propSaturation->setRange(-100, 100);
-    colorForm->addRow("明るさ:", m_propBrightness);
-    colorForm->addRow("コントラスト:", m_propContrast);
-    colorForm->addRow("彩度:", m_propSaturation);
+    auto addAdjustmentRow = [colorGroup, colorForm](const QString& title, QSlider* slider) {
+        auto* row = new QWidget(colorGroup);
+        auto* rowLayout = new QHBoxLayout(row);
+        rowLayout->setContentsMargins(0, 0, 0, 0);
+        rowLayout->setSpacing(8);
+        auto* value = new QLabel(QStringLiteral("0"), row);
+        value->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+        value->setMinimumWidth(28);
+        QObject::connect(slider, &QSlider::valueChanged, value, [value](int current) {
+            value->setText(QString::number(current));
+        });
+        rowLayout->addWidget(slider, 1);
+        rowLayout->addWidget(value);
+        colorForm->addRow(title, row);
+    };
+    addAdjustmentRow(QStringLiteral("明るさ"), m_propBrightness);
+    addAdjustmentRow(QStringLiteral("コントラスト"), m_propContrast);
+    addAdjustmentRow(QStringLiteral("彩度"), m_propSaturation);
     auto* resetBtn = new QPushButton("リセット");
     connect(resetBtn, &QPushButton::clicked, this, [this]{ m_propBrightness->setValue(0); m_propContrast->setValue(0); m_propSaturation->setValue(0); onInspectorChanged(); });
     colorForm->addRow(resetBtn);
@@ -3511,10 +3526,10 @@ void MainWindow::applyTheme(bool dark) {
             ? QStringLiteral(R"(
                 QWidget#editInspector { background: #202a36; }
                 QWidget#editInspector QGroupBox { background: #263443; border: 1px solid #3b4b5d;
-                    border-radius: 8px; margin-top: 18px; padding: 9px; }
+                    border-radius: 8px; margin-top: 16px; padding: 8px; }
                 QWidget#editInspector QGroupBox#pageSettingsGroup { margin-top: 3px; padding: 5px; }
                 QWidget#editInspector QGroupBox::title { color: #e8eef5; font-weight: 600;
-                    subcontrol-origin: margin; left: 9px; padding: 0 4px; }
+                    subcontrol-origin: margin; left: 9px; padding: 0 5px; }
                 QWidget#editInspector QToolButton#inspectorSectionHeader { background: transparent; color: #e8eef5;
                     border: 0; border-radius: 5px; padding: 7px 5px; text-align: left; font-weight: 600; }
                 QWidget#editInspector QToolButton#inspectorSectionHeader:hover { background: #303f53; }
@@ -3528,10 +3543,10 @@ void MainWindow::applyTheme(bool dark) {
             : QStringLiteral(R"(
                 QWidget#editInspector { background: #f7f8fb; }
                 QWidget#editInspector QGroupBox { background: #ffffff; color: #27324a;
-                    border: 1px solid #dfe3ec; border-radius: 8px; margin-top: 18px; padding: 9px; }
+                    border: 1px solid #dfe3ec; border-radius: 8px; margin-top: 16px; padding: 8px; }
                 QWidget#editInspector QGroupBox#pageSettingsGroup { margin-top: 3px; padding: 5px; }
                 QWidget#editInspector QGroupBox::title { color: #27324a; font-weight: 600;
-                    subcontrol-origin: margin; left: 9px; padding: 0 4px; }
+                    subcontrol-origin: margin; left: 9px; padding: 0 5px; }
                 QWidget#editInspector QToolButton#inspectorSectionHeader { background: transparent; color: #27324a;
                     border: 0; border-radius: 5px; padding: 7px 5px; text-align: left; font-weight: 600; }
                 QWidget#editInspector QToolButton#inspectorSectionHeader:hover { background: #edf0f8; }
