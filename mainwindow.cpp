@@ -1149,7 +1149,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     configureToolbar(m_commonToolbar, Qt::ToolButtonTextBesideIcon);
     m_commonToolbar->setObjectName(QStringLiteral("workspaceToolbar"));
     m_commonToolbar->setMinimumHeight(64);
-    m_commonToolbar->setIconSize(QSize(20, 20));
+    m_commonToolbar->setIconSize(QSize(24, 24));
     m_actDesigner = m_commonToolbar->addAction("DESIGNER");
     m_actDesigner->setObjectName(QStringLiteral("designerModeAction"));
     m_actDesigner->setCheckable(true);
@@ -1170,10 +1170,11 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     if (auto* layoutButton = m_commonToolbar->widgetForAction(m_actLayout)) {
         layoutButton->setObjectName(QStringLiteral("layoutModeAction"));
     }
-    for (auto* action : {m_actDesigner, m_actLayout}) {
-        if (auto* button = qobject_cast<QToolButton*>(m_commonToolbar->widgetForAction(action))) {
-            button->setMinimumSize(146, 44);
-        }
+    if (auto* designerButton = qobject_cast<QToolButton*>(m_commonToolbar->widgetForAction(m_actDesigner))) {
+        designerButton->setMinimumSize(184, 50);
+    }
+    if (auto* layoutButton = qobject_cast<QToolButton*>(m_commonToolbar->widgetForAction(m_actLayout))) {
+        layoutButton->setMinimumSize(154, 50);
     }
     connect(m_actDesigner, &QAction::triggered, this, [this]{ onModeChanged(true); });
     connect(m_actLayout, &QAction::triggered, this, [this]{ onModeChanged(false); });
