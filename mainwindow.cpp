@@ -1347,8 +1347,8 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     m_toolPalette->addAction(addTextAction);
     m_toolPalette->addAction(importImageAction);
     m_toolPalette->addAction(m_actAddBadge);
-    m_toolPalette->addAction(m_actBatchAdd);
     m_toolPalette->addSeparator();
+    m_toolPalette->addAction(m_actBatchAdd);
     m_toolPalette->addAction(m_actMixedLayout);
     m_toolPalette->addSeparator();
     m_toolPalette->addAction(m_actSendToLayout);
