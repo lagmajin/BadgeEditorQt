@@ -1416,9 +1416,15 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     setMaterialIcon(m_actLayoutPagePrev, QStringLiteral("chevron_left"));
     m_actLayoutPagePrev->setShortcut(QKeySequence(Qt::Key_PageUp));
     m_layoutPageLabel = new QLabel(QStringLiteral("1 / 1"));
-    m_layoutPageLabel->setMinimumWidth(56);
+    m_layoutPageLabel->setObjectName(QStringLiteral("layoutPageCount"));
+    m_layoutPageLabel->setMinimumWidth(64);
+    QFont pageCountFont = m_layoutPageLabel->font();
+    pageCountFont.setPointSize(11);
+    pageCountFont.setWeight(QFont::DemiBold);
+    m_layoutPageLabel->setFont(pageCountFont);
     m_layoutPageLabel->setAlignment(Qt::AlignCenter);
     m_layoutToolbar->addWidget(m_layoutPageLabel);
+    m_layoutToolbar->addSeparator();
     m_layoutPageThumbList = new QListWidget;
     m_layoutPageThumbList->setObjectName(QStringLiteral("layoutPageStrip"));
     m_layoutPageThumbList->setViewMode(QListView::IconMode);
@@ -3784,6 +3790,7 @@ void MainWindow::applyTheme(bool dark) {
             QToolBar#workspaceToolbar QToolButton#layoutModeAction { padding: 8px 14px; font-weight: 600; }
             QComboBox#zoomValueCombo { color: #eef2fb; background: #192430;
                 border: 1px solid #3b4b5d; border-radius: 6px; padding: 5px 8px; }
+            QToolBar QLabel#layoutPageCount { color: #edf3f9; padding: 0 8px; }
             QToolBar QListWidget#layoutPageStrip { background: #192430; color: #edf3f9;
                 border: 1px solid #3b4b5d; border-radius: 5px; padding: 1px; }
             QToolBar QListWidget#layoutPageStrip::item { background: transparent; color: #edf3f9;
@@ -3816,6 +3823,7 @@ void MainWindow::applyTheme(bool dark) {
             QToolBar#workspaceToolbar QToolButton { padding: 8px 11px; }
             QComboBox#zoomValueCombo { color: #303a54; background: #ffffff;
                 border: 1px solid #dce1ed; border-radius: 6px; padding: 5px 8px; }
+            QToolBar QLabel#layoutPageCount { color: #303a54; padding: 0 8px; }
             QToolBar QListWidget#layoutPageStrip { background: #ffffff; color: #303a54;
                 border: 1px solid #dce1ed; border-radius: 5px; padding: 1px; }
             QToolBar QListWidget#layoutPageStrip::item { background: transparent; color: #303a54;
