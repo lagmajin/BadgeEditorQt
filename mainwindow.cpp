@@ -1374,9 +1374,19 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
             onImageDropped(path);
         }
     });
+    const auto addToolHint = [this](const QString& text) {
+        auto* hint = new QLabel(text, m_toolPalette);
+        hint->setObjectName(QStringLiteral("toolPaletteHint"));
+        hint->setMinimumWidth(182);
+        hint->setMinimumHeight(18);
+        m_toolPalette->addWidget(hint);
+    };
     m_toolPalette->addAction(selectAction);
+    addToolHint(QStringLiteral("オブジェクトを選択"));
     m_toolPalette->addAction(addTextAction);
+    addToolHint(QStringLiteral("文字を追加"));
     m_toolPalette->addAction(importImageAction);
+    addToolHint(QStringLiteral("画像からバッジを作成"));
     m_toolPalette->addSeparator();
     for (auto* action : {selectAction, addTextAction, importImageAction}) {
         if (auto* button = qobject_cast<QToolButton*>(m_toolPalette->widgetForAction(action))) {
@@ -3695,6 +3705,7 @@ void MainWindow::applyTheme(bool dark) {
             QToolBar#toolPalette QToolButton:checked { background: #315bb8; border-color: #6385e8; color: white; }
             QToolBar#toolPalette QToolButton:hover { background: #293a50; border-color: #405675; }
             QToolBar#toolPalette QLabel#toolPaletteHeading { color: #91a8c4; font-weight: 600; padding: 4px 9px; }
+            QToolBar#toolPalette QLabel#toolPaletteHint { color: #91a8c4; font-size: 9pt; padding: 0 8px 5px 55px; }
             QToolBar QToolButton:checked { background: #315bb8; border-color: #6385e8; color: white; }
             QToolBar QToolButton#designerModeAction:checked { background: #315bb8; }
             QToolBar QToolButton#layoutModeAction:checked { background: #315bb8; }
@@ -3725,6 +3736,7 @@ void MainWindow::applyTheme(bool dark) {
             QToolBar#toolPalette QToolButton:checked { background: #4059ed; border-color: #6477f2; color: white; }
             QToolBar#toolPalette QToolButton:hover { background: #2d3e55; border-color: #405675; }
             QToolBar#toolPalette QLabel#toolPaletteHeading { color: #91a8c4; font-weight: 600; padding: 4px 9px; }
+            QToolBar#toolPalette QLabel#toolPaletteHint { color: #91a8c4; font-size: 9pt; padding: 0 8px 5px 55px; }
             QToolBar QToolButton:checked { background: #e9edff; border-color: #b8c4ff; color: #354fc0; }
             QToolBar QToolButton#designerModeAction,
             QToolBar QToolButton#layoutModeAction { padding: 8px 14px; font-weight: 600; }
