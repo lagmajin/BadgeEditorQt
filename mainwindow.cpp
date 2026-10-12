@@ -3340,6 +3340,26 @@ void MainWindow::applyTheme(bool dark) {
     m_isDark = dark;
     QPalette pal = dark ? makeEditorDarkPalette() : QApplication::style()->standardPalette();
     QApplication::setPalette(pal);
+    const QString menuStyle = dark
+        ? QStringLiteral(R"(
+            QMenuBar { background: #202a36; color: #e9eff8; border-bottom: 1px solid #344358; padding: 2px 6px; }
+            QMenuBar::item { background: transparent; padding: 5px 9px; border-radius: 5px; }
+            QMenuBar::item:selected { background: #303f53; }
+            QMenu { background: #263443; color: #e9eff8; border: 1px solid #3b4b5d; padding: 4px; }
+            QMenu::item { padding: 6px 28px 6px 10px; border-radius: 4px; }
+            QMenu::item:selected { background: #315bb8; color: white; }
+            QMenu::separator { height: 1px; background: #3b4b5d; margin: 4px 8px; }
+        )")
+        : QStringLiteral(R"(
+            QMenuBar { background: #f8f9fc; color: #283249; border-bottom: 1px solid #dce1ed; padding: 2px 6px; }
+            QMenuBar::item { background: transparent; padding: 5px 9px; border-radius: 5px; }
+            QMenuBar::item:selected { background: #edf0f8; }
+            QMenu { background: #ffffff; color: #283249; border: 1px solid #dce1ed; padding: 4px; }
+            QMenu::item { padding: 6px 28px 6px 10px; border-radius: 4px; }
+            QMenu::item:selected { background: #e9edff; color: #354fc0; }
+            QMenu::separator { height: 1px; background: #dce1ed; margin: 4px 8px; }
+        )");
+    menuBar()->setStyleSheet(menuStyle);
     const QString toolbarStyle = dark
         ? QStringLiteral(R"(
             QToolBar { background: #202a36; border: 0; spacing: 5px; }
