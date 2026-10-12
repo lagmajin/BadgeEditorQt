@@ -183,6 +183,7 @@ private:
 
     // Toolbar
     QToolBar* m_commonToolbar = nullptr;
+    QToolBar* m_toolPalette = nullptr;
     QToolBar* m_designerToolbar = nullptr;
     QToolBar* m_layoutToolbar = nullptr;
     QAction* m_actDesigner;

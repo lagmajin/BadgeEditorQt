@@ -1263,6 +1263,48 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     m_actOpenDesignerPerspective->setShortcut(QKeySequence("Ctrl+E"));
     setMaterialIcon(m_actOpenDesignerPerspective, QStringLiteral("edit"));
 
+    for (auto* action : m_designerToolbar->actions()) {
+        if (action->isSeparator()) {
+            m_designerToolbar->removeAction(action);
+        }
+    }
+    for (auto* action : {m_actAddBadge, m_actBatchAdd, m_actMixedLayout, m_actSendToLayout}) {
+        m_designerToolbar->removeAction(action);
+    }
+    m_designerToolbar->insertSeparator(m_actDelete ? m_actDelete : m_actDuplicate);
+    if (m_actOpenDesignerPerspective) {
+        m_designerToolbar->insertSeparator(m_actOpenDesignerPerspective);
+    }
+
+    m_toolPalette = addToolBar(Qt::LeftToolBarArea, QStringLiteral("デザインツール"));
+    m_toolPalette->setObjectName(QStringLiteral("toolPalette"));
+    m_toolPalette->setAllowedAreas(Qt::LeftToolBarArea);
+    m_toolPalette->setFont(uiFont);
+    configureToolbar(m_toolPalette, Qt::ToolButtonTextUnderIcon);
+    m_toolPalette->setIconSize(QSize(22, 22));
+    m_toolPalette->setMinimumWidth(94);
+    m_toolPalette->setMaximumWidth(110);
+    m_actAddBadge->setText(QStringLiteral("画像"));
+    m_actAddBadge->setToolTip(QStringLiteral("バッジ画像を追加"));
+    m_actBatchAdd->setText(QStringLiteral("一括追加"));
+    m_actMixedLayout->setToolTip(QStringLiteral("複数バッジを面付け"));
+    m_actSendToLayout->setText(QStringLiteral("配置へ"));
+    m_actSendToLayout->setToolTip(QStringLiteral("バッジを配置確認へ送る"));
+    m_toolPalette->addAction(m_actAddBadge);
+    m_toolPalette->addAction(m_actBatchAdd);
+    m_toolPalette->addSeparator();
+    m_toolPalette->addAction(m_actMixedLayout);
+    m_toolPalette->addSeparator();
+    m_toolPalette->addAction(m_actSendToLayout);
+    if (auto* sendButton = m_toolPalette->widgetForAction(m_actSendToLayout)) {
+        sendButton->setObjectName(QStringLiteral("sendToLayoutButton"));
+    }
+    for (auto* action : {m_actAddBadge, m_actBatchAdd, m_actMixedLayout, m_actSendToLayout}) {
+        if (auto* button = qobject_cast<QToolButton*>(m_toolPalette->widgetForAction(action))) {
+            button->setMinimumHeight(62);
+        }
+    }
+
     m_layoutToolbar = addToolBar("Layout");
     m_layoutToolbar->setFont(uiFont);
     configureToolbar(m_layoutToolbar, Qt::ToolButtonTextBesideIcon);
@@ -2986,6 +3028,9 @@ void MainWindow::syncLayoutWorkspace(bool refreshDiagnostics) {
 
 void MainWindow::updateToolbarsForMode() {
     const bool designer = m_isDesigner;
+    if (m_toolPalette) {
+        m_toolPalette->setVisible(designer);
+    }
     if (m_designerToolbar) {
         m_designerToolbar->setVisible(designer);
     }
@@ -3157,6 +3202,10 @@ void MainWindow::applyTheme(bool dark) {
             QToolBar QToolButton { color: #e9eff8; border: 1px solid transparent;
                 border-radius: 7px; padding: 7px 10px; }
             QToolBar QToolButton:hover { background: #303f53; border-color: #40536b; }
+            QToolBar#toolPalette { background: #192430; border: 0; border-right: 1px solid #344358; spacing: 8px; }
+            QToolBar#toolPalette QToolButton { min-width: 72px; color: #dbe5f3;
+                border: 1px solid transparent; border-radius: 8px; margin: 2px 5px; padding: 8px 3px; }
+            QToolBar#toolPalette QToolButton:hover { background: #293a50; border-color: #405675; }
             QToolBar QToolButton:checked { background: #315bb8; border-color: #6385e8; color: white; }
             QToolBar QToolButton#designerModeAction:checked { background: #315bb8; }
             QToolBar QToolButton#layoutModeAction:checked { background: #315bb8; }
@@ -3181,6 +3230,10 @@ void MainWindow::applyTheme(bool dark) {
             QToolBar QToolButton { color: #283249; border: 1px solid transparent;
                 border-radius: 7px; padding: 7px 10px; }
             QToolBar QToolButton:hover { background: #edf0f8; border-color: #d9deeb; }
+            QToolBar#toolPalette { background: #f0f2f8; border: 0; border-right: 1px solid #dce1ed; spacing: 8px; }
+            QToolBar#toolPalette QToolButton { min-width: 72px; color: #394660;
+                border: 1px solid transparent; border-radius: 8px; margin: 2px 5px; padding: 8px 3px; }
+            QToolBar#toolPalette QToolButton:hover { background: #e5e9f4; border-color: #d3daeb; }
             QToolBar QToolButton:checked { background: #e9edff; border-color: #b8c4ff; color: #354fc0; }
             QToolBar QToolButton#designerModeAction,
             QToolBar QToolButton#layoutModeAction { padding: 8px 14px; font-weight: 600; }
@@ -3198,6 +3251,7 @@ void MainWindow::applyTheme(bool dark) {
                 border-color: #b8c4ff; color: #354fc0; }
         )");
     if (m_commonToolbar) m_commonToolbar->setStyleSheet(toolbarStyle);
+    if (m_toolPalette) m_toolPalette->setStyleSheet(toolbarStyle);
     if (m_designerToolbar) m_designerToolbar->setStyleSheet(toolbarStyle);
     if (m_layoutToolbar) m_layoutToolbar->setStyleSheet(toolbarStyle);
     if (m_inspector) {
