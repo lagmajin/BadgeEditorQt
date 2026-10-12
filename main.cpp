@@ -1,6 +1,7 @@
 #include <QApplication>
 #include <QCoreApplication>
 #include <QColor>
+#include <QDir>
 #include <QFont>
 #include <QIcon>
 #include <QPixmap>
@@ -18,7 +19,15 @@ int main(int, char**) {
 namespace {
 
 QIcon makeAppIcon() {
-    return QIcon(QStringLiteral("assets/appicon.png"));
+    const QString relativeIcon = QStringLiteral("assets/appicon.png");
+    QIcon icon(QDir(QCoreApplication::applicationDirPath()).filePath(relativeIcon));
+    if (!icon.isNull()) {
+        return icon;
+    }
+#ifdef BADGEEDITOR_SOURCE_DIR
+    icon = QIcon(QDir(QStringLiteral(BADGEEDITOR_SOURCE_DIR)).filePath(relativeIcon));
+#endif
+    return icon;
 }
 
 } // namespace
