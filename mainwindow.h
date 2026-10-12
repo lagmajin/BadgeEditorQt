@@ -214,7 +214,9 @@ private:
     QAction* m_actAlignTop = nullptr;
     QAction* m_actAlignVCenter = nullptr;
     QAction* m_actAlignBottom = nullptr;
+    QAction* m_selectionToolsSeparator = nullptr;
     QDoubleSpinBox* m_spinDuplicateOffset = nullptr;
+    QLabel* m_duplicateOffsetLabel = nullptr;
     QAction* m_actMixedLayout = nullptr;
     QAction* m_actSendToLayout = nullptr;
     QAction* m_actClearLayout = nullptr;

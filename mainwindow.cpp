@@ -1269,8 +1269,8 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
             button->setAccessibleName(action->text());
         }
     }
-    auto* duplicateOffsetLabel = new QLabel(QStringLiteral("複製ずれ"));
-    m_designerToolbar->addWidget(duplicateOffsetLabel);
+    m_duplicateOffsetLabel = new QLabel(QStringLiteral("複製ずれ"));
+    m_designerToolbar->addWidget(m_duplicateOffsetLabel);
     m_spinDuplicateOffset = new QDoubleSpinBox;
     m_spinDuplicateOffset->setRange(0.0, 50.0);
     m_spinDuplicateOffset->setDecimals(1);
@@ -1302,7 +1302,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     connect(m_actOpenDesignerPerspective, &QAction::triggered, this, [this]{ openDesignerPerspective(); });
     m_actOpenDesignerPerspective->setShortcut(QKeySequence("Ctrl+E"));
     setMaterialIcon(m_actOpenDesignerPerspective, QStringLiteral("edit"));
-    m_designerToolbar->insertSeparator(m_actDelete ? m_actDelete : m_actDuplicate);
+    m_selectionToolsSeparator = m_designerToolbar->insertSeparator(m_actDelete ? m_actDelete : m_actDuplicate);
     m_designerToolbar->insertSeparator(m_actMixedLayout);
     m_designerToolbar->insertSeparator(m_actSendToLayout);
     m_designerToolbar->insertSeparator(m_actOpenDesignerPerspective);
@@ -2794,6 +2794,7 @@ void MainWindow::onSelectionChanged() {
     }
 
     setInspectorControlsEnabled(true);
+    updateToolbarsForMode();
     m_updatingUI = true;
     BadgeItem& b = m_selected.first()->badge();
     m_propX->setValue(b.xMm); m_propY->setValue(b.yMm);
@@ -2845,6 +2846,7 @@ void MainWindow::onBadgeDeselected() {
     m_internalEventQueue.clear();
     m_internalEventFlushScheduled = false;
     setInspectorControlsEnabled(false);
+    updateToolbarsForMode();
     m_updatingUI = true;
     m_propX->setValue(0); m_propY->setValue(0);
     m_propW->setValue(m_appSettings.defaultBadgeSizeMm);
@@ -3528,6 +3530,8 @@ void MainWindow::syncLayoutWorkspace(bool refreshDiagnostics) {
 
 void MainWindow::updateToolbarsForMode() {
     const bool designer = m_isDesigner;
+    const bool hasSelection = designer && !m_selected.isEmpty();
+    const bool hasMultipleSelection = designer && m_selected.size() > 1;
     if (m_toolPalette) {
         m_toolPalette->setVisible(designer);
     }
@@ -3544,28 +3548,52 @@ void MainWindow::updateToolbarsForMode() {
         m_actBatchAdd->setEnabled(designer);
     }
     if (m_actDuplicate) {
-        m_actDuplicate->setEnabled(designer);
+        m_actDuplicate->setEnabled(hasSelection);
     }
     if (m_actDelete) {
-        m_actDelete->setEnabled(designer);
+        m_actDelete->setEnabled(hasSelection);
+    }
+    if (m_selectionToolsSeparator) {
+        m_selectionToolsSeparator->setVisible(hasSelection);
+    }
+    for (auto* action : {m_actDelete, m_actDuplicate}) {
+        if (action && m_designerToolbar) {
+            if (auto* button = m_designerToolbar->widgetForAction(action)) {
+                button->setVisible(hasSelection);
+            }
+        }
+    }
+    for (auto* action : {m_actAlignLeft, m_actAlignHCenter, m_actAlignRight,
+                         m_actAlignTop, m_actAlignVCenter, m_actAlignBottom}) {
+        if (action && m_designerToolbar) {
+            if (auto* button = m_designerToolbar->widgetForAction(action)) {
+                button->setVisible(hasMultipleSelection);
+            }
+        }
+    }
+    if (m_duplicateOffsetLabel) {
+        m_duplicateOffsetLabel->setVisible(hasSelection);
+    }
+    if (m_spinDuplicateOffset) {
+        m_spinDuplicateOffset->setVisible(hasSelection);
     }
     if (m_actAlignLeft) {
-        m_actAlignLeft->setEnabled(designer);
+        m_actAlignLeft->setEnabled(hasMultipleSelection);
     }
     if (m_actAlignHCenter) {
-        m_actAlignHCenter->setEnabled(designer);
+        m_actAlignHCenter->setEnabled(hasMultipleSelection);
     }
     if (m_actAlignRight) {
-        m_actAlignRight->setEnabled(designer);
+        m_actAlignRight->setEnabled(hasMultipleSelection);
     }
     if (m_actAlignTop) {
-        m_actAlignTop->setEnabled(designer);
+        m_actAlignTop->setEnabled(hasMultipleSelection);
     }
     if (m_actAlignVCenter) {
-        m_actAlignVCenter->setEnabled(designer);
+        m_actAlignVCenter->setEnabled(hasMultipleSelection);
     }
     if (m_actAlignBottom) {
-        m_actAlignBottom->setEnabled(designer);
+        m_actAlignBottom->setEnabled(hasMultipleSelection);
     }
     if (m_actMixedLayout) {
         m_actMixedLayout->setEnabled(designer);
