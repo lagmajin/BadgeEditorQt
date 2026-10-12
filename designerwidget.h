@@ -16,6 +16,7 @@
 #include <QKeyEvent>
 #include <QMouseEvent>
 #include <wobjectdefs.h>
+#include "canvasbackgroundmode.h"
 #include "badgeitem.h"
 #include "badgegraphicitem.h"
 #include "guideitem.h"
@@ -51,6 +52,7 @@ public:
     void setBleedVisible(bool b);
     void setVisibleVisible(bool b);
     void setGridVisible(bool b);
+    void setCanvasBackgroundMode(CanvasBackgroundMode mode);
     void setSnapToGrid(bool b);
     void setGridSpacingMm(double mm);
     bool gridVisible() const { return m_gridVisible; }
@@ -112,6 +114,7 @@ private:
     bool m_lightingEnabled = false;
     bool m_glitterEnabled = false;
     bool m_gridVisible = true;
+    CanvasBackgroundMode m_canvasBackgroundMode = CanvasBackgroundMode::PrintGuideGrid;
     bool m_snapToGrid = true;
     double m_gridSpacingMm = 1.0;
     QList<BadgeGraphicItem*> m_graphicItems;

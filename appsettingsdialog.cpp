@@ -85,6 +85,13 @@ AppSettingsDialog::AppSettingsDialog(const AppSettings& settings, QWidget* paren
     gridForm->addRow(m_gridVisible);
     gridForm->addRow(m_snapToGrid);
     gridForm->addRow("間隔:", m_gridSpacing);
+    m_canvasBackground = new QComboBox;
+    m_canvasBackground->addItem(QStringLiteral("グリッド（印刷ガイド）"), static_cast<int>(CanvasBackgroundMode::PrintGuideGrid));
+    m_canvasBackground->addItem(QStringLiteral("白"), static_cast<int>(CanvasBackgroundMode::White));
+    m_canvasBackground->addItem(QStringLiteral("透明（チェック柄）"), static_cast<int>(CanvasBackgroundMode::TransparentCheckerboard));
+    const int backgroundIndex = m_canvasBackground->findData(static_cast<int>(settings.canvasBackgroundMode));
+    m_canvasBackground->setCurrentIndex(backgroundIndex >= 0 ? backgroundIndex : 0);
+    gridForm->addRow(QStringLiteral("キャンバス背景:"), m_canvasBackground);
     root->addWidget(gridGroup);
 
     auto* previewGroup = new QGroupBox("プレビュー");
@@ -197,6 +204,9 @@ AppSettings AppSettingsDialog::settings() const {
     result.gridVisible = m_gridVisible ? m_gridVisible->isChecked() : true;
     result.snapToGrid = m_snapToGrid ? m_snapToGrid->isChecked() : true;
     result.gridSpacingMm = m_gridSpacing ? m_gridSpacing->value() : 1.0;
+    result.canvasBackgroundMode = m_canvasBackground
+        ? static_cast<CanvasBackgroundMode>(m_canvasBackground->currentData().toInt())
+        : CanvasBackgroundMode::PrintGuideGrid;
     result.lightingEnabled = m_lightingEnabled ? m_lightingEnabled->isChecked() : false;
     result.lightAngle = m_lightAngle ? m_lightAngle->value() : 315;
     result.lightIntensity = m_lightIntensity ? m_lightIntensity->value() : 45;

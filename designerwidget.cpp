@@ -384,6 +384,14 @@ void DesignerWidget::setGridVisible(bool b) {
     viewport()->update();
 }
 
+void DesignerWidget::setCanvasBackgroundMode(CanvasBackgroundMode mode) {
+    if (m_canvasBackgroundMode == mode) {
+        return;
+    }
+    m_canvasBackgroundMode = mode;
+    viewport()->update();
+}
+
 void DesignerWidget::setSnapToGrid(bool b) {
     m_snapToGrid = b;
     for (auto* gi : m_graphicItems) {
@@ -627,20 +635,23 @@ void DesignerWidget::drawBackground(QPainter* painter, const QRectF& rect) {
     const QColor baseColor = palette().color(QPalette::Base);
     const bool dark = windowColor.lightness() < 128;
     const QColor c1 = dark ? blend(windowColor, baseColor, 0.16) : QColor(248, 247, 243);
-    const QColor c2 = dark ? blend(windowColor, baseColor, 0.26) : QColor(245, 244, 240);
 
-    if (m_gridVisible) {
-        painter->fillRect(rect, c1);
-    } else {
+    if (m_canvasBackgroundMode == CanvasBackgroundMode::White) {
+        painter->fillRect(rect, Qt::white);
+    } else if (m_canvasBackgroundMode == CanvasBackgroundMode::TransparentCheckerboard) {
+        const QColor checkLight = dark ? QColor(55, 66, 80) : QColor(248, 249, 251);
+        const QColor checkDark = dark ? QColor(42, 52, 65) : QColor(228, 232, 238);
         int left = int(rect.left()) - ((int(rect.left()) % tileSize + tileSize) % tileSize);
         int top = int(rect.top()) - ((int(rect.top()) % tileSize + tileSize) % tileSize);
 
         for (int y = top; y < int(rect.bottom()); y += tileSize) {
             for (int x = left; x < int(rect.right()); x += tileSize) {
-                const QColor c = ((x / tileSize + y / tileSize) & 1) ? c2 : c1;
+                const QColor c = ((x / tileSize + y / tileSize) & 1) ? checkDark : checkLight;
                 painter->fillRect(QRect(x, y, tileSize, tileSize), c);
             }
         }
+    } else {
+        painter->fillRect(rect, c1);
     }
 
     if (!m_gridVisible) {

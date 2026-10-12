@@ -3,12 +3,14 @@
 
 #include <QDialog>
 #include <QShowEvent>
+#include "canvasbackgroundmode.h"
 
 struct AppSettings {
     bool darkTheme = true;
     bool gridVisible = true;
     bool snapToGrid = true;
     double gridSpacingMm = 1.0;
+    CanvasBackgroundMode canvasBackgroundMode = CanvasBackgroundMode::PrintGuideGrid;
     bool lightingEnabled = false;
     int lightAngle = 315;
     int lightIntensity = 45;
@@ -41,6 +43,7 @@ private:
     QCheckBox* m_gridVisible = nullptr;
     QCheckBox* m_snapToGrid = nullptr;
     QDoubleSpinBox* m_gridSpacing = nullptr;
+    QComboBox* m_canvasBackground = nullptr;
     QCheckBox* m_lightingEnabled = nullptr;
     QSpinBox* m_lightAngle = nullptr;
     QSpinBox* m_lightIntensity = nullptr;

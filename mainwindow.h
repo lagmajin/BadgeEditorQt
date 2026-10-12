@@ -38,6 +38,7 @@ class BadgeGraphicItem;
 class QListWidget;
 class QGroupBox;
 class QPushButton;
+class QRadioButton;
 class WindowsIntegration;
 namespace badge {
 struct DocumentData;
@@ -275,6 +276,9 @@ private:
     QCheckBox* m_chkGridVisible = nullptr;
     QCheckBox* m_chkSnapToGrid = nullptr;
     QDoubleSpinBox* m_spinGridSpacing = nullptr;
+    QRadioButton* m_radioCanvasGrid = nullptr;
+    QRadioButton* m_radioCanvasWhite = nullptr;
+    QRadioButton* m_radioCanvasTransparent = nullptr;
     QDoubleSpinBox* m_spinCutLineOffset = nullptr;
     QCheckBox* m_chkLighting;
     QCheckBox* m_chkGlitter;

@@ -64,6 +64,7 @@ import viewportbackend;
 #include <QDockWidget>
 #include <QTabWidget>
 #include <QSignalBlocker>
+#include <QRadioButton>
 #include <QAbstractItemModel>
 #include <QAbstractItemView>
 #include <QListWidgetItem>
@@ -1856,9 +1857,21 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     m_spinGridSpacing->setDecimals(1);
     m_spinGridSpacing->setSuffix(QStringLiteral(" mm"));
     m_spinGridSpacing->setValue(m_appSettings.gridSpacingMm);
+    auto* backgroundOptions = new QWidget(canvasGroup);
+    auto* backgroundLayout = new QVBoxLayout(backgroundOptions);
+    backgroundLayout->setContentsMargins(0, 2, 0, 2);
+    backgroundLayout->setSpacing(4);
+    m_radioCanvasGrid = new QRadioButton(QStringLiteral("グリッド（印刷ガイド）"), backgroundOptions);
+    m_radioCanvasWhite = new QRadioButton(QStringLiteral("白"), backgroundOptions);
+    m_radioCanvasTransparent = new QRadioButton(QStringLiteral("透明（チェック柄）"), backgroundOptions);
+    m_radioCanvasGrid->setChecked(true);
+    backgroundLayout->addWidget(m_radioCanvasGrid);
+    backgroundLayout->addWidget(m_radioCanvasWhite);
+    backgroundLayout->addWidget(m_radioCanvasTransparent);
     canvasForm->addRow(m_chkGridVisible);
     canvasForm->addRow(m_chkSnapToGrid);
     canvasForm->addRow(QStringLiteral("間隔:"), m_spinGridSpacing);
+    canvasForm->addRow(QStringLiteral("背景:"), backgroundOptions);
     inspLayout->addWidget(canvasGroup);
     connect(m_chkGridVisible, &QCheckBox::toggled, this, [this](bool on) {
         if (m_actGridVisible) {
@@ -1888,6 +1901,22 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
             m_designer->setGridSpacingMm(mm);
         }
         saveAppSettings();
+    });
+    const auto applyCanvasBackground = [this](CanvasBackgroundMode mode) {
+        m_appSettings.canvasBackgroundMode = mode;
+        if (m_designer) {
+            m_designer->setCanvasBackgroundMode(mode);
+        }
+        saveAppSettings();
+    };
+    connect(m_radioCanvasGrid, &QRadioButton::toggled, this, [applyCanvasBackground](bool checked) {
+        if (checked) applyCanvasBackground(CanvasBackgroundMode::PrintGuideGrid);
+    });
+    connect(m_radioCanvasWhite, &QRadioButton::toggled, this, [applyCanvasBackground](bool checked) {
+        if (checked) applyCanvasBackground(CanvasBackgroundMode::White);
+    });
+    connect(m_radioCanvasTransparent, &QRadioButton::toggled, this, [applyCanvasBackground](bool checked) {
+        if (checked) applyCanvasBackground(CanvasBackgroundMode::TransparentCheckerboard);
     });
 
     // Effects group
@@ -3417,12 +3446,21 @@ void MainWindow::applyAppSettings(const AppSettings& settings) {
         const QSignalBlocker blocker(m_spinGridSpacing);
         m_spinGridSpacing->setValue(settings.gridSpacingMm);
     }
+    if (m_radioCanvasGrid && m_radioCanvasWhite && m_radioCanvasTransparent) {
+        const QSignalBlocker gridBlocker(m_radioCanvasGrid);
+        const QSignalBlocker whiteBlocker(m_radioCanvasWhite);
+        const QSignalBlocker transparentBlocker(m_radioCanvasTransparent);
+        m_radioCanvasGrid->setChecked(settings.canvasBackgroundMode == CanvasBackgroundMode::PrintGuideGrid);
+        m_radioCanvasWhite->setChecked(settings.canvasBackgroundMode == CanvasBackgroundMode::White);
+        m_radioCanvasTransparent->setChecked(settings.canvasBackgroundMode == CanvasBackgroundMode::TransparentCheckerboard);
+    }
     if (m_spinDuplicateOffset) {
         const QSignalBlocker blocker(m_spinDuplicateOffset);
         m_spinDuplicateOffset->setValue(std::max(0.0, settings.duplicateOffsetMm));
     }
     if (m_designer) {
         m_designer->setGridVisible(settings.gridVisible);
+        m_designer->setCanvasBackgroundMode(settings.canvasBackgroundMode);
         m_designer->setSnapToGrid(settings.snapToGrid);
         m_designer->setGridSpacingMm(settings.gridSpacingMm);
         m_designer->setLightingEnabled(settings.lightingEnabled);

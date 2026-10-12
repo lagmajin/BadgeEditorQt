@@ -138,6 +138,7 @@ void MainWindow::saveAppSettings() {
     settings.setValue("app/gridVisible", m_appSettings.gridVisible);
     settings.setValue("app/snapToGrid", m_appSettings.snapToGrid);
     settings.setValue("app/gridSpacingMm", m_appSettings.gridSpacingMm);
+    settings.setValue("app/canvasBackgroundMode", static_cast<int>(m_appSettings.canvasBackgroundMode));
     settings.setValue("app/lightingEnabled", m_appSettings.lightingEnabled);
     settings.setValue("app/lightAngle", m_appSettings.lightAngle);
     settings.setValue("app/lightIntensity", m_appSettings.lightIntensity);
@@ -155,6 +156,15 @@ void MainWindow::loadAppSettings() {
     loaded.gridVisible = settings.value("app/gridVisible", loaded.gridVisible).toBool();
     loaded.snapToGrid = settings.value("app/snapToGrid", loaded.snapToGrid).toBool();
     loaded.gridSpacingMm = settings.value("app/gridSpacingMm", loaded.gridSpacingMm).toDouble();
+    if (settings.contains("app/canvasBackgroundMode")) {
+        const int canvasBackgroundMode = settings.value("app/canvasBackgroundMode").toInt();
+        if (canvasBackgroundMode >= static_cast<int>(CanvasBackgroundMode::PrintGuideGrid)
+            && canvasBackgroundMode <= static_cast<int>(CanvasBackgroundMode::TransparentCheckerboard)) {
+            loaded.canvasBackgroundMode = static_cast<CanvasBackgroundMode>(canvasBackgroundMode);
+        }
+    } else if (!loaded.gridVisible) {
+        loaded.canvasBackgroundMode = CanvasBackgroundMode::TransparentCheckerboard;
+    }
     loaded.lightingEnabled = settings.value("app/lightingEnabled", loaded.lightingEnabled).toBool();
     loaded.lightAngle = settings.value("app/lightAngle", loaded.lightAngle).toInt();
     loaded.lightIntensity = settings.value("app/lightIntensity", loaded.lightIntensity).toInt();
