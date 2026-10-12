@@ -629,13 +629,17 @@ void DesignerWidget::drawBackground(QPainter* painter, const QRectF& rect) {
     const QColor c1 = dark ? blend(windowColor, baseColor, 0.16) : QColor(248, 247, 243);
     const QColor c2 = dark ? blend(windowColor, baseColor, 0.26) : QColor(245, 244, 240);
 
-    int left = int(rect.left()) - ((int(rect.left()) % tileSize + tileSize) % tileSize);
-    int top = int(rect.top()) - ((int(rect.top()) % tileSize + tileSize) % tileSize);
+    if (m_gridVisible) {
+        painter->fillRect(rect, c1);
+    } else {
+        int left = int(rect.left()) - ((int(rect.left()) % tileSize + tileSize) % tileSize);
+        int top = int(rect.top()) - ((int(rect.top()) % tileSize + tileSize) % tileSize);
 
-    for (int y = top; y < int(rect.bottom()); y += tileSize) {
-        for (int x = left; x < int(rect.right()); x += tileSize) {
-            QColor c = ((x / tileSize + y / tileSize) & 1) ? c2 : c1;
-            painter->fillRect(QRect(x, y, tileSize, tileSize), c);
+        for (int y = top; y < int(rect.bottom()); y += tileSize) {
+            for (int x = left; x < int(rect.right()); x += tileSize) {
+                const QColor c = ((x / tileSize + y / tileSize) & 1) ? c2 : c1;
+                painter->fillRect(QRect(x, y, tileSize, tileSize), c);
+            }
         }
     }
 
