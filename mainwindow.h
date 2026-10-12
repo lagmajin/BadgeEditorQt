@@ -248,6 +248,7 @@ private:
     QSlider* m_sliderLayerOpacity = nullptr;
     QLabel* m_layerPreviewLabel = nullptr;
     QGroupBox* m_guideGroup = nullptr;
+    QGroupBox* m_canvasGroup = nullptr;
     QGroupBox* m_effectGroup = nullptr;
     QGroupBox* m_layoutGroup = nullptr;
     QLabel* m_checklistDesign = nullptr;
@@ -271,6 +272,9 @@ private:
     // Inspector - guides & effects
     QCheckBox* m_chkBleed;
     QCheckBox* m_chkVisible;
+    QCheckBox* m_chkGridVisible = nullptr;
+    QCheckBox* m_chkSnapToGrid = nullptr;
+    QDoubleSpinBox* m_spinGridSpacing = nullptr;
     QDoubleSpinBox* m_spinCutLineOffset = nullptr;
     QCheckBox* m_chkLighting;
     QCheckBox* m_chkGlitter;

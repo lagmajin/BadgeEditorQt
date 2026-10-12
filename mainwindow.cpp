@@ -1838,6 +1838,54 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     connect(m_chkVisible, &QCheckBox::toggled, this, [this](bool){ onGuideToggle(); });
     connect(m_spinCutLineOffset, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this](double){ onInspectorChanged(); });
 
+    auto* canvasGroup = new QGroupBox(QStringLiteral("キャンバス"));
+    m_canvasGroup = canvasGroup;
+    auto* canvasForm = new QFormLayout(canvasGroup);
+    canvasForm->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
+    m_chkGridVisible = new QCheckBox(QStringLiteral("グリッドを表示"));
+    m_chkGridVisible->setChecked(true);
+    m_chkSnapToGrid = new QCheckBox(QStringLiteral("グリッドにスナップ"));
+    m_chkSnapToGrid->setChecked(true);
+    m_spinGridSpacing = new QDoubleSpinBox;
+    m_spinGridSpacing->setRange(0.5, 50.0);
+    m_spinGridSpacing->setSingleStep(0.5);
+    m_spinGridSpacing->setDecimals(1);
+    m_spinGridSpacing->setSuffix(QStringLiteral(" mm"));
+    m_spinGridSpacing->setValue(m_appSettings.gridSpacingMm);
+    canvasForm->addRow(m_chkGridVisible);
+    canvasForm->addRow(m_chkSnapToGrid);
+    canvasForm->addRow(QStringLiteral("間隔:"), m_spinGridSpacing);
+    inspLayout->addWidget(canvasGroup);
+    connect(m_chkGridVisible, &QCheckBox::toggled, this, [this](bool on) {
+        if (m_actGridVisible) {
+            m_actGridVisible->setChecked(on);
+        }
+    });
+    connect(m_chkSnapToGrid, &QCheckBox::toggled, this, [this](bool on) {
+        if (m_actSnapToGrid) {
+            m_actSnapToGrid->setChecked(on);
+        }
+    });
+    connect(m_actGridVisible, &QAction::toggled, this, [this](bool on) {
+        if (m_chkGridVisible) {
+            const QSignalBlocker blocker(m_chkGridVisible);
+            m_chkGridVisible->setChecked(on);
+        }
+    });
+    connect(m_actSnapToGrid, &QAction::toggled, this, [this](bool on) {
+        if (m_chkSnapToGrid) {
+            const QSignalBlocker blocker(m_chkSnapToGrid);
+            m_chkSnapToGrid->setChecked(on);
+        }
+    });
+    connect(m_spinGridSpacing, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this](double mm) {
+        m_appSettings.gridSpacingMm = mm;
+        if (m_designer) {
+            m_designer->setGridSpacingMm(mm);
+        }
+        saveAppSettings();
+    });
+
     // Effects group
     auto* effectGroup = new QGroupBox("エフェクト");
     m_effectGroup = effectGroup;
@@ -3345,6 +3393,18 @@ void MainWindow::applyAppSettings(const AppSettings& settings) {
     if (m_actSnapToGrid) {
         const QSignalBlocker blocker(m_actSnapToGrid);
         m_actSnapToGrid->setChecked(settings.snapToGrid);
+    }
+    if (m_chkGridVisible) {
+        const QSignalBlocker blocker(m_chkGridVisible);
+        m_chkGridVisible->setChecked(settings.gridVisible);
+    }
+    if (m_chkSnapToGrid) {
+        const QSignalBlocker blocker(m_chkSnapToGrid);
+        m_chkSnapToGrid->setChecked(settings.snapToGrid);
+    }
+    if (m_spinGridSpacing) {
+        const QSignalBlocker blocker(m_spinGridSpacing);
+        m_spinGridSpacing->setValue(settings.gridSpacingMm);
     }
     if (m_spinDuplicateOffset) {
         const QSignalBlocker blocker(m_spinDuplicateOffset);

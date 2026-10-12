@@ -81,6 +81,7 @@ void MainWindow::updateInspectorMode() {
     if (m_colorGroup) m_colorGroup->setVisible(designer);
     if (m_layerGroup) m_layerGroup->setVisible(designer);
     if (m_guideGroup) m_guideGroup->setVisible(designer);
+    if (m_canvasGroup) m_canvasGroup->setVisible(designer);
     if (m_effectGroup) m_effectGroup->setVisible(designer);
     if (m_layoutGroup) m_layoutGroup->setVisible(!designer);
     if (!designer && m_designer) m_designer->setEyedropperActive(false);
