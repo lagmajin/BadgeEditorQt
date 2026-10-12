@@ -3795,8 +3795,8 @@ void MainWindow::applyTheme(bool dark) {
                 border: 1px solid #3b4b5d; border-radius: 5px; padding: 1px; }
             QToolBar QListWidget#layoutPageStrip::item { background: transparent; color: #edf3f9;
                 border: 1px solid transparent; border-radius: 3px; padding: 1px; }
-            QToolBar QListWidget#layoutPageStrip::item:selected { background: #334d68;
-                border-color: #4c95ef; color: white; }
+            QToolBar QListWidget#layoutPageStrip::item:selected { background: #334d68; border: 2px solid #4c95ef; border-radius: 5px;
+                color: white; }
         )")
         : QStringLiteral(R"(
             QToolBar { background: #f8f9fc; border: 0; spacing: 5px; }
@@ -3828,8 +3828,8 @@ void MainWindow::applyTheme(bool dark) {
                 border: 1px solid #dce1ed; border-radius: 5px; padding: 1px; }
             QToolBar QListWidget#layoutPageStrip::item { background: transparent; color: #303a54;
                 border: 1px solid transparent; border-radius: 3px; padding: 1px; }
-            QToolBar QListWidget#layoutPageStrip::item:selected { background: #e9edff;
-                border-color: #b8c4ff; color: #354fc0; }
+            QToolBar QListWidget#layoutPageStrip::item:selected { background: #e9edff; border: 2px solid #4258d0; border-radius: 5px;
+                color: #354fc0; }
         )");
     if (m_commonToolbar) m_commonToolbar->setStyleSheet(toolbarStyle);
     if (m_toolPalette) m_toolPalette->setStyleSheet(toolbarStyle);
