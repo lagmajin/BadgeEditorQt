@@ -2067,6 +2067,8 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     inspLayout->insertWidget(0, m_canvasGroup);
     inspLayout->removeWidget(m_guideGroup);
     inspLayout->insertWidget(1, m_guideGroup);
+    inspLayout->removeWidget(m_safetyGuideGroup);
+    inspLayout->insertWidget(2, m_safetyGuideGroup);
     inspLayout->addStretch();
     scroll->setWidget(m_inspector);
 
