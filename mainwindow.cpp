@@ -1209,7 +1209,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     m_zoomCombo->addItem(QStringLiteral("200%"), 2.00);
     m_zoomCombo->addItem(QStringLiteral("300%"), 3.00);
     m_zoomCombo->addItem(QStringLiteral("400%"), 4.00);
-    m_zoomCombo->setCurrentIndex(m_zoomCombo->findData(1.25));
+    m_zoomCombo->setCurrentIndex(m_zoomCombo->findData(1.0));
     connect(m_zoomCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int index) {
         if (index >= 0 && m_designer) {
             setDesignerZoom(m_zoomCombo->itemData(index).toDouble());

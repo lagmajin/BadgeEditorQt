@@ -118,7 +118,7 @@ DesignerWidget::DesignerWidget(QWidget* parent) : QGraphicsView(parent) {
     setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
     setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
     setBackgroundBrush(Qt::NoBrush);
-    scale(1.25, 1.25);
+    scale(1.0, 1.0);
     setFocusPolicy(Qt::StrongFocus);
 
     // Guide circles (drawn in drawForeground, not as scene items)
