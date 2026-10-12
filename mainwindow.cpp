@@ -1849,7 +1849,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     connect(m_chkVisible, &QCheckBox::toggled, this, [this](bool){ onGuideToggle(); });
     connect(m_spinCutLineOffset, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this](double){ onInspectorChanged(); });
 
-    auto* canvasGroup = new QGroupBox(QStringLiteral("キャンバス"));
+    auto* canvasGroup = new QGroupBox(QStringLiteral("ページ設定"));
     m_canvasGroup = canvasGroup;
     auto* canvasForm = new QFormLayout(canvasGroup);
     canvasForm->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
@@ -1889,7 +1889,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     canvasForm->addRow(m_chkSnapToGrid);
     canvasForm->addRow(QStringLiteral("間隔:"), m_spinGridSpacing);
     canvasForm->addRow(QStringLiteral("背景:"), backgroundOptions);
-    inspLayout->addWidget(canvasGroup);
+    inspLayout->insertWidget(0, canvasGroup);
     connect(m_chkGridVisible, &QCheckBox::toggled, this, [this](bool on) {
         if (m_actGridVisible) {
             m_actGridVisible->setChecked(on);
