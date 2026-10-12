@@ -1285,10 +1285,10 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     m_toolPalette->setObjectName(QStringLiteral("toolPalette"));
     m_toolPalette->setAllowedAreas(Qt::LeftToolBarArea);
     m_toolPalette->setFont(uiFont);
-    configureToolbar(m_toolPalette, Qt::ToolButtonTextUnderIcon);
-    m_toolPalette->setIconSize(QSize(22, 22));
-    m_toolPalette->setMinimumWidth(112);
-    m_toolPalette->setMaximumWidth(132);
+    configureToolbar(m_toolPalette, Qt::ToolButtonTextBesideIcon);
+    m_toolPalette->setIconSize(QSize(24, 24));
+    m_toolPalette->setMinimumWidth(196);
+    m_toolPalette->setMaximumWidth(220);
     auto* toolPaletteHeading = new QLabel(QStringLiteral("ツール"), m_toolPalette);
     toolPaletteHeading->setObjectName(QStringLiteral("toolPaletteHeading"));
     toolPaletteHeading->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
@@ -1326,7 +1326,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     }
     for (auto* action : {importImageAction, m_actAddBadge, m_actBatchAdd, m_actMixedLayout, m_actSendToLayout}) {
         if (auto* button = qobject_cast<QToolButton*>(m_toolPalette->widgetForAction(action))) {
-            button->setMinimumHeight(62);
+            button->setMinimumSize(172, 52);
         }
     }
 
@@ -3400,8 +3400,8 @@ void MainWindow::applyTheme(bool dark) {
                 border-radius: 7px; padding: 7px 10px; }
             QToolBar QToolButton:hover { background: #edf0f8; border-color: #d9deeb; }
             QToolBar#toolPalette { background: #202c3d; border: 0; border-right: 1px solid #344358; spacing: 8px; }
-            QToolBar#toolPalette QToolButton { min-width: 82px; color: #dbe5f3;
-                border: 1px solid transparent; border-radius: 8px; margin: 2px 5px; padding: 8px 3px; }
+            QToolBar#toolPalette QToolButton { min-width: 172px; min-height: 44px; color: #dbe5f3;
+                text-align: left; border: 1px solid transparent; border-radius: 8px; margin: 2px 5px; padding: 8px 9px; }
             QToolBar#toolPalette QToolButton:hover { background: #2d3e55; border-color: #405675; }
             QToolBar#toolPalette QLabel#toolPaletteHeading { color: #91a8c4; font-weight: 600; padding: 4px 9px; }
             QToolBar QToolButton:checked { background: #e9edff; border-color: #b8c4ff; color: #354fc0; }
