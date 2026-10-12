@@ -780,6 +780,58 @@ void DesignerWidget::drawForeground(QPainter* painter, const QRectF& rect) {
     }
 
     if (!m_graphicItems.isEmpty() && m_hasSelection) {
+        QList<BadgeGraphicItem*> selectedBadges;
+        QRectF selectionBounds;
+        for (auto* item : m_scene->selectedItems()) {
+            auto* badge = dynamic_cast<BadgeGraphicItem*>(item);
+            if (!badge) {
+                continue;
+            }
+            selectedBadges.push_back(badge);
+            selectionBounds = selectionBounds.isNull()
+                ? badge->sceneBoundingRect()
+                : selectionBounds.united(badge->sceneBoundingRect());
+        }
+        if (!selectedBadges.isEmpty()) {
+            const double mmToPx = Constants::kMmToPx;
+            const QString dimensions = selectedBadges.size() == 1
+                ? QStringLiteral("W: %1 mm\nH: %2 mm")
+                      .arg(selectedBadges.first()->badge().widthMm, 0, 'f', 1)
+                      .arg(selectedBadges.first()->badge().heightMm, 0, 'f', 1)
+                : QStringLiteral("選択範囲\nW: %1 mm  H: %2 mm")
+                      .arg(selectionBounds.width() / mmToPx, 0, 'f', 1)
+                      .arg(selectionBounds.height() / mmToPx, 0, 'f', 1);
+            const QPoint anchor = mapFromScene(selectionBounds.topRight()) + QPoint(10, -8);
+            painter->save();
+            painter->resetTransform();
+            QFont dimensionFont = painter->font();
+            dimensionFont.setPointSizeF(std::max(8.0, dimensionFont.pointSizeF() - 1.0));
+            dimensionFont.setBold(true);
+            painter->setFont(dimensionFont);
+            const QFontMetricsF metrics(dimensionFont);
+            QRectF box = metrics.boundingRect(QRectF(0.0, 0.0, 180.0, 80.0),
+                                               Qt::AlignLeft | Qt::AlignVCenter,
+                                               dimensions)
+                             .adjusted(-8.0, -5.0, 8.0, 5.0);
+            box.moveTopLeft(QPointF(anchor) + QPointF(0.0, -box.height()));
+            const QRect viewportRect = viewport()->rect().adjusted(42, 28, -8, -8);
+            if (box.right() > viewportRect.right()) {
+                box.moveRight(viewportRect.right());
+            }
+            if (box.top() < viewportRect.top()) {
+                box.moveTop(viewportRect.top());
+            }
+            const bool dark = palette().color(QPalette::Window).lightness() < 128;
+            painter->setPen(Qt::NoPen);
+            painter->setBrush(dark ? QColor(23, 34, 48, 238) : QColor(255, 255, 255, 245));
+            painter->drawRoundedRect(box, 6.0, 6.0);
+            painter->setPen(dark ? QColor(231, 239, 249) : QColor(38, 50, 74));
+            painter->drawText(box.adjusted(8.0, 5.0, -8.0, -5.0),
+                              Qt::AlignLeft | Qt::AlignVCenter,
+                              dimensions);
+            painter->restore();
+        }
+
         const auto modifiers = QApplication::keyboardModifiers();
         const bool altDown = modifiers & Qt::AltModifier;
         const bool shiftDown = modifiers & Qt::ShiftModifier;
