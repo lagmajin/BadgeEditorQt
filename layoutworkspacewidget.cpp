@@ -7,6 +7,7 @@
 #include <QGraphicsScene>
 #include <QGraphicsRectItem>
 #include <QGraphicsItem>
+#include <QResizeEvent>
 #include <QVBoxLayout>
 #include <QPainter>
 #include <QPainterPath>
@@ -600,7 +601,10 @@ LayoutWorkspaceWidget::LayoutWorkspaceWidget(QWidget* parent)
     m_scene = new QGraphicsScene(this);
     m_scene->setItemIndexMethod(QGraphicsScene::NoIndex);
     m_view = new QGraphicsView(m_scene, this);
-    m_view->setRenderHints(QPainter::Antialiasing);
+    m_view->setRenderHints(QPainter::Antialiasing | QPainter::SmoothPixmapTransform);
+    m_view->setAlignment(Qt::AlignCenter);
+    m_view->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    m_view->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     m_view->setBackgroundBrush(palette().brush(QPalette::Window));
     m_view->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(m_view, &QWidget::customContextMenuRequested, this, [this](const QPoint& pos) {
@@ -613,6 +617,7 @@ LayoutWorkspaceWidget::LayoutWorkspaceWidget(QWidget* parent)
 
     m_impl = new Impl;
     updateSceneRect();
+    fitPageToViewport();
 }
 
 LayoutWorkspaceWidget::~LayoutWorkspaceWidget() {
@@ -640,11 +645,28 @@ void LayoutWorkspaceWidget::setDocument(const badge::DocumentData& document) {
     m_impl->lastError.clear();
     m_thumbnailCache.clear();
     rebuildScene();
+    fitPageToViewport();
 }
 
 void LayoutWorkspaceWidget::refresh() {
     m_thumbnailCache.clear();
     rebuildScene();
+    fitPageToViewport();
+}
+
+void LayoutWorkspaceWidget::resizeEvent(QResizeEvent* event) {
+    QWidget::resizeEvent(event);
+    fitPageToViewport();
+}
+
+void LayoutWorkspaceWidget::fitPageToViewport() {
+    if (!m_view || !m_scene) {
+        return;
+    }
+    const QRectF sceneRect = m_scene->sceneRect();
+    if (sceneRect.isValid() && !sceneRect.isEmpty()) {
+        m_view->fitInView(sceneRect, Qt::KeepAspectRatio);
+    }
 }
 
 void LayoutWorkspaceWidget::setExperimentalGpuViewport(bool on) {
