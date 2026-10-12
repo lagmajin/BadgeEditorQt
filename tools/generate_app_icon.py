@@ -3,7 +3,7 @@ from __future__ import annotations
 import math
 from pathlib import Path
 
-from PIL import Image, ImageDraw, ImageFilter, ImageOps
+from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageOps
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -79,6 +79,15 @@ def build_icon(size: int) -> Image.Image:
         )
         icon = Image.new('RGBA', (size, size), (0, 0, 0, 0))
         icon.alpha_composite(source, ((size - source.width) // 2, (size - source.height) // 2))
+        rounded_mask = Image.new('L', (size, size), 0)
+        mask_draw = ImageDraw.Draw(rounded_mask)
+        inset = size * 0.05
+        mask_draw.rounded_rectangle(
+            (inset, inset, size - inset, size - inset),
+            radius=int(size * 0.15),
+            fill=255,
+        )
+        icon.putalpha(ImageChops.multiply(icon.getchannel('A'), rounded_mask))
         return icon
 
     img = Image.new('RGBA', (size, size), rgba('#0b0c10'))
