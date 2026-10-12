@@ -154,7 +154,7 @@ QPalette makeEditorDarkPalette() {
     const QColor button(0x2A, 0x38, 0x48);
     const QColor text(0xF1, 0xF1, 0xF1);
     const QColor border(0x3B, 0x4B, 0x5D);
-    const QColor highlight(0x32, 0x82, 0xE8);
+    const QColor highlight(0x31, 0x5B, 0xB8);
     const QColor highlightText(0xFF, 0xFF, 0xFF);
 
     QPalette pal;
@@ -3339,6 +3339,10 @@ void MainWindow::onShowTransferDebug() {
 void MainWindow::applyTheme(bool dark) {
     m_isDark = dark;
     QPalette pal = dark ? makeEditorDarkPalette() : QApplication::style()->standardPalette();
+    if (!dark) {
+        pal.setColor(QPalette::Highlight, QColor(0x40, 0x59, 0xED));
+        pal.setColor(QPalette::HighlightedText, Qt::white);
+    }
     QApplication::setPalette(pal);
     const QString menuStyle = dark
         ? QStringLiteral(R"(
