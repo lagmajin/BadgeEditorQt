@@ -1731,12 +1731,24 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     m_comboLayerBlendMode->addItems({"Normal", "Multiply", "Screen", "Overlay", "Soft Light", "Add"});
     layerLayout->addWidget(m_comboLayerBlendMode);
     auto* layerBtnRow = new QHBoxLayout;
-    auto* btnAddLayer = new QPushButton("＋");
-    auto* btnDelLayer = new QPushButton("－");
-    auto* btnUpLayer = new QPushButton("▲");
-    auto* btnDownLayer = new QPushButton("▼");
-    btnAddLayer->setFixedWidth(30); btnDelLayer->setFixedWidth(30);
-    btnUpLayer->setFixedWidth(30); btnDownLayer->setFixedWidth(30);
+    auto* btnAddLayer = new QPushButton;
+    auto* btnDelLayer = new QPushButton;
+    auto* btnUpLayer = new QPushButton;
+    auto* btnDownLayer = new QPushButton;
+    btnAddLayer->setIcon(loadMaterialIcon(QStringLiteral("image")));
+    btnDelLayer->setIcon(loadMaterialIcon(QStringLiteral("delete")));
+    btnUpLayer->setIcon(style()->standardIcon(QStyle::SP_ArrowUp));
+    btnDownLayer->setIcon(style()->standardIcon(QStyle::SP_ArrowDown));
+    for (const auto& buttonInfo : {
+             qMakePair(btnAddLayer, QStringLiteral("画像レイヤーを追加")),
+             qMakePair(btnDelLayer, QStringLiteral("選択レイヤーを削除")),
+             qMakePair(btnUpLayer, QStringLiteral("選択レイヤーを上へ移動")),
+             qMakePair(btnDownLayer, QStringLiteral("選択レイヤーを下へ移動"))}) {
+        buttonInfo.first->setFixedSize(32, 30);
+        buttonInfo.first->setIconSize(QSize(16, 16));
+        buttonInfo.first->setToolTip(buttonInfo.second);
+        buttonInfo.first->setAccessibleName(buttonInfo.second);
+    }
     layerBtnRow->addWidget(btnAddLayer);
     layerBtnRow->addWidget(btnDelLayer);
     layerBtnRow->addWidget(btnUpLayer);
