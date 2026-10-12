@@ -1339,12 +1339,27 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     addTextAction->setToolTip(QStringLiteral("文字を入力してバッジを作成"));
     setMaterialIcon(addTextAction, QStringLiteral("text_fields"));
     connect(addTextAction, &QAction::triggered, this, &MainWindow::onAddTextBadge);
-    m_actAddBadge->setText(QStringLiteral("新規"));
-    m_actAddBadge->setToolTip(QStringLiteral("空のバッジを作成"));
+    m_actAddBadge->setText(QStringLiteral("追加"));
+    m_actAddBadge->setToolTip(QStringLiteral("空のバッジを追加"));
     m_actBatchAdd->setText(QStringLiteral("一括追加"));
+    m_actBatchAdd->setToolTip(QStringLiteral("画像をまとめてバッジとして追加"));
     m_actMixedLayout->setToolTip(QStringLiteral("複数バッジを面付け"));
     m_actSendToLayout->setText(QStringLiteral("配置へ"));
     m_actSendToLayout->setToolTip(QStringLiteral("バッジを配置確認へ送る"));
+    for (auto* action : {m_actDelete, m_actDuplicate, m_actMixedLayout}) {
+        if (!action) {
+            continue;
+        }
+        if (auto* button = qobject_cast<QToolButton*>(m_designerToolbar->widgetForAction(action))) {
+            button->setToolButtonStyle(Qt::ToolButtonIconOnly);
+            const QString shortcut = action->shortcut().toString(QKeySequence::NativeText);
+            const QString description = shortcut.isEmpty()
+                ? action->text()
+                : QStringLiteral("%1 (%2)").arg(action->text(), shortcut);
+            button->setToolTip(description);
+            button->setAccessibleName(action->text());
+        }
+    }
     auto* importImageAction = new QAction(m_toolPalette);
     importImageAction->setText(QStringLiteral("画像"));
     importImageAction->setToolTip(QStringLiteral("画像ファイルからバッジを作成"));
