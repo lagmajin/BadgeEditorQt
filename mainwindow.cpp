@@ -1575,6 +1575,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
         checklistContents->setVisible(expanded);
         checklistHeader->setArrowType(expanded ? Qt::DownArrow : Qt::RightArrow);
     });
+    checklistHeader->setChecked(false);
     m_checklistDesign = new QLabel;
     m_checklistLayout = new QLabel;
     m_checklistColor = new QLabel;
