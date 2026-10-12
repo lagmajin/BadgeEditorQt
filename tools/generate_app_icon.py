@@ -71,7 +71,12 @@ def build_icon(size: int) -> Image.Image:
     generated_path = ASSETS / 'appicon-source.png'
     if generated_path.exists():
         source = Image.open(generated_path).convert('RGBA')
-        source.thumbnail((int(size * 0.90), int(size * 0.90)), Image.Resampling.LANCZOS)
+        target_size = int(size * 0.90)
+        scale = min(target_size / source.width, target_size / source.height)
+        source = source.resize(
+            (max(1, int(round(source.width * scale))), max(1, int(round(source.height * scale)))),
+            Image.Resampling.LANCZOS,
+        )
         icon = Image.new('RGBA', (size, size), (0, 0, 0, 0))
         icon.alpha_composite(source, ((size - source.width) // 2, (size - source.height) // 2))
         return icon
