@@ -3205,17 +3205,29 @@ void MainWindow::applyTheme(bool dark) {
             ? QStringLiteral(R"(
                 QWidget#editInspector { background: #202a36; }
                 QWidget#editInspector QGroupBox { background: #263443; border: 1px solid #3b4b5d;
-                    border-radius: 5px; margin-top: 18px; padding: 7px; }
-                QWidget#editInspector QGroupBox::title { color: #e8eef5;
+                    border-radius: 8px; margin-top: 18px; padding: 9px; }
+                QWidget#editInspector QGroupBox::title { color: #e8eef5; font-weight: 600;
                     subcontrol-origin: margin; left: 9px; padding: 0 4px; }
                 QWidget#editInspector QDoubleSpinBox, QWidget#editInspector QLineEdit,
-                QWidget#editInspector QComboBox { background: #1a2632; color: #f1f5fa;
-                    border: 1px solid #42556a; border-radius: 4px; min-height: 23px; }
-                QWidget#editInspector QPushButton { background: #33455a; color: #f1f5fa;
-                    border: 1px solid #4a6078; border-radius: 4px; padding: 4px 7px; }
+                QWidget#editInspector QComboBox { background: #192532; color: #f1f5fa;
+                    border: 1px solid #42556a; border-radius: 6px; min-height: 26px; padding: 2px 7px; }
+                QWidget#editInspector QPushButton { background: #344963; color: #f1f5fa;
+                    border: 1px solid #4a6078; border-radius: 6px; padding: 6px 9px; }
                 QWidget#editInspector QPushButton:hover { background: #405a75; }
             )")
-            : QString());
+            : QStringLiteral(R"(
+                QWidget#editInspector { background: #f7f8fb; }
+                QWidget#editInspector QGroupBox { background: #ffffff; color: #27324a;
+                    border: 1px solid #dfe3ec; border-radius: 8px; margin-top: 18px; padding: 9px; }
+                QWidget#editInspector QGroupBox::title { color: #27324a; font-weight: 600;
+                    subcontrol-origin: margin; left: 9px; padding: 0 4px; }
+                QWidget#editInspector QDoubleSpinBox, QWidget#editInspector QLineEdit,
+                QWidget#editInspector QComboBox { background: #ffffff; color: #27324a;
+                    border: 1px solid #d6dce8; border-radius: 6px; min-height: 26px; padding: 2px 7px; }
+                QWidget#editInspector QPushButton { background: #eef1fa; color: #3547a0;
+                    border: 1px solid #d5dbef; border-radius: 6px; padding: 6px 9px; }
+                QWidget#editInspector QPushButton:hover { background: #e3e9fb; border-color: #bcc8f0; }
+            )")
     }
     if (m_dockStyleManager) {
         m_dockStyleManager->applyTheme(QApplication::palette());
