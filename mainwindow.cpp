@@ -3985,7 +3985,7 @@ void MainWindow::updateSafetyGuideHud() {
     const int designCount = m_designer->graphicItems().size();
     entries.append({
         QStringLiteral("① デザイン"),
-        designCount > 0 ? QStringLiteral("%1件 / 作業中").arg(designCount) : QStringLiteral("未作成"),
+        designCount > 0 ? QStringLiteral("%1件").arg(designCount) : QStringLiteral("未作成"),
         statusColor(designCount > 0 ? StatusLevel::Good : StatusLevel::Neutral),
     });
 
@@ -3993,13 +3993,13 @@ void MainWindow::updateSafetyGuideHud() {
     const bool packedLayout = m_layoutPreviewMode == LayoutPreviewMode::PackedMixedPages;
     const QString layoutDetail = m_layoutOverflowSummary.isEmpty()
         ? (layoutReady
-               ? QStringLiteral("%1 %2/%3 / %4ページ")
+               ? QStringLiteral("%1 · %2/%3 · %4ページ")
                      .arg(packedLayout ? QStringLiteral("詰め込み済み") : QStringLiteral("確認済み"),
                           QString::number(m_layoutPlacedCount),
                           QString::number(std::max(0, m_layoutSourceCount)),
                           QString::number(std::max(1, m_layoutPageCount)))
                : QStringLiteral("未確認"))
-        : QStringLiteral("%1 (%2/%3 / %4ページ)")
+        : QStringLiteral("%1 · %2/%3 · %4ページ")
               .arg(m_layoutOverflowSummary,
                    QString::number(m_layoutPlacedCount),
                    QString::number(std::max(0, m_layoutSourceCount)),
@@ -4042,7 +4042,7 @@ void MainWindow::updateSafetyGuideHud() {
         : StatusLevel::Neutral;
     const QString colorDetail = !hasImages
         ? QStringLiteral("画像なし")
-        : (hasMissingLinks ? QStringLiteral("リンク不良") : (hasLoadedColorSpace ? QStringLiteral("読み込み済み") : QStringLiteral("色空間未確認")));
+        : (hasMissingLinks ? QStringLiteral("リンク不良") : (hasLoadedColorSpace ? QStringLiteral("確認済み") : QStringLiteral("未確認")));
     entries.append({
         QStringLiteral("③ カラースペース"),
         colorDetail,
