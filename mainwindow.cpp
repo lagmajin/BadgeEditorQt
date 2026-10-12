@@ -2128,6 +2128,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     m_radioCanvasTransparent->setToolTip(QStringLiteral("透明部分をチェック柄で表示します"));
     const auto makeCanvasSubheading = [canvasGroup](const QString& text) {
         auto* heading = new QLabel(text, canvasGroup);
+        heading->setObjectName(QStringLiteral("canvasSubheading"));
         QFont font = heading->font();
         font.setWeight(QFont::DemiBold);
         heading->setFont(font);
@@ -3845,6 +3846,7 @@ void MainWindow::applyTheme(bool dark) {
                 QWidget#editInspector QGroupBox#selectionPlaceholder::title { left: 0; padding: 0 4px; }
                 QWidget#editInspector QLabel#selectionPlaceholderText { color: #aab8c8; padding: 2px 4px; }
                 QWidget#editInspector QLabel#paperDimensions { color: #e8eef5; font-weight: 600; }
+                QWidget#editInspector QLabel#canvasSubheading { color: #cdd8e5; border-bottom: 1px solid #344358; padding-bottom: 3px; }
                 QWidget#editInspector QCheckBox#guideVisibilityToggle { background: #202f40; color: #dbe5f3;
                     border: 1px solid #3b4b5d; border-radius: 6px; padding: 4px 6px; spacing: 5px; }
                 QWidget#editInspector QCheckBox#guideVisibilityToggle:checked { background: #314b70; border-color: #6385e8; }
@@ -3890,6 +3892,7 @@ void MainWindow::applyTheme(bool dark) {
                 QWidget#editInspector QGroupBox#selectionPlaceholder::title { left: 0; padding: 0 4px; }
                 QWidget#editInspector QLabel#selectionPlaceholderText { color: #78849a; padding: 2px 4px; }
                 QWidget#editInspector QLabel#paperDimensions { color: #27324a; font-weight: 600; }
+                QWidget#editInspector QLabel#canvasSubheading { color: #35415a; border-bottom: 1px solid #e3e7ef; padding-bottom: 3px; }
                 QWidget#editInspector QCheckBox#guideVisibilityToggle { background: #f7f8fb; color: #35415a;
                     border: 1px solid #d6dce8; border-radius: 6px; padding: 4px 6px; spacing: 5px; }
                 QWidget#editInspector QCheckBox#guideVisibilityToggle:checked { background: #e9edff; border-color: #4258d0; }
