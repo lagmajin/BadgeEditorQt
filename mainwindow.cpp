@@ -1626,6 +1626,9 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     m_propClipCircle->setChecked(true);
     propForm->addRow(m_propClipCircle);
     auto* imgBtn = new QPushButton("画像を変更...");
+    imgBtn->setIcon(loadMaterialIcon(QStringLiteral("image")));
+    imgBtn->setIconSize(QSize(18, 18));
+    imgBtn->setToolTip(QStringLiteral("選択中のバッジ画像を変更します"));
     connect(imgBtn, &QPushButton::clicked, this, [this]{ onSetImage(); });
     propForm->addRow(imgBtn);
     m_propColorSpace = new QLineEdit;
@@ -1669,6 +1672,9 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     addAdjustmentRow(QStringLiteral("コントラスト"), m_propContrast);
     addAdjustmentRow(QStringLiteral("彩度"), m_propSaturation);
     auto* resetBtn = new QPushButton("リセット");
+    resetBtn->setIcon(loadMaterialIcon(QStringLiteral("refresh")));
+    resetBtn->setIconSize(QSize(16, 16));
+    resetBtn->setToolTip(QStringLiteral("明るさ・コントラスト・彩度を初期値に戻します"));
     connect(resetBtn, &QPushButton::clicked, this, [this]{ m_propBrightness->setValue(0); m_propContrast->setValue(0); m_propSaturation->setValue(0); onInspectorChanged(); });
     colorForm->addRow(resetBtn);
     auto* pickRow = new QWidget(colorGroup);
