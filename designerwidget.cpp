@@ -739,26 +739,34 @@ void DesignerWidget::drawForeground(QPainter* painter, const QRectF& rect) {
         const bool dark = palette().color(QPalette::Window).lightness() < 128;
         const QColor title = dark ? QColor(241, 245, 252) : QColor(37, 48, 69);
         const QColor hint = dark ? QColor(177, 190, 208) : QColor(105, 117, 140);
-        const QRectF titleRect(center.x() - 112.0, center.y() - 31.0, 224.0, 30.0);
-        const QRectF hintRect(center.x() - 112.0, center.y() + 1.0, 224.0, 48.0);
+        const double contentWidth = visiblePx * 0.78;
+        const double contentHeight = visiblePx * 0.64;
+        const QRectF titleRect(center.x() - contentWidth / 2.0,
+                               center.y() - contentHeight * 0.49,
+                               contentWidth,
+                               contentHeight * 0.42);
+        const QRectF hintRect(center.x() - contentWidth / 2.0,
+                              center.y() - contentHeight * 0.01,
+                              contentWidth,
+                              contentHeight * 0.52);
 
         QFont titleFont = painter->font();
-        titleFont.setPointSizeF(std::max(9.0, titleFont.pointSizeF() + 1.0));
+        titleFont.setPointSizeF(std::clamp(visiblePx / 18.0, 8.0, 13.0));
         titleFont.setBold(true);
         painter->setFont(titleFont);
         painter->setPen(title);
         painter->drawText(titleRect,
-                          Qt::AlignCenter,
+                          Qt::AlignCenter | Qt::TextWordWrap,
                           QStringLiteral("ここにバッジを追加"));
 
         QFont hintFont = painter->font();
-        hintFont.setPointSizeF(std::max(8.0, hintFont.pointSizeF() - 2.0));
+        hintFont.setPointSizeF(std::clamp(visiblePx / 22.0, 7.0, 10.0));
         hintFont.setBold(false);
         painter->setFont(hintFont);
         painter->setPen(hint);
         painter->drawText(hintRect,
-                          Qt::AlignCenter,
-                          QStringLiteral("画像をドロップするか、\n左の「画像」から追加できます"));
+                          Qt::AlignCenter | Qt::TextWordWrap,
+                          QStringLiteral("画像をドロップ\nまたは左の「画像」から"));
         painter->restore();
     }
 
