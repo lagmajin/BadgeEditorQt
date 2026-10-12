@@ -1,6 +1,7 @@
 #include "mainwindow.h"
 #include "appsettingsdialog.h"
 #include "badgegraphicitem.h"
+#include "badge_text_rendering.h"
 #include "batchlayoutdialog.h"
 #include "exportdialog.h"
 #include "imageprocessor.h"
@@ -718,12 +719,7 @@ QPixmap renderLayerPreviewPixmap(const BadgeItem& badge, int layerIndex, const Q
 
     painter.setOpacity(1.0);
     if (!previewBadge.displayText.isEmpty()) {
-        QFont font("Arial", 10);
-        painter.setFont(font);
-        painter.setPen(Qt::white);
-        painter.drawText(contentRect.adjusted(1, 1, 1, 1), Qt::AlignCenter, previewBadge.displayText);
-        painter.setPen(Qt::black);
-        painter.drawText(contentRect, Qt::AlignCenter, previewBadge.displayText);
+        badge::rendering::drawBadgeDisplayText(&painter, contentRect, previewBadge.displayText);
     }
 
     const LayerItem& selectedLayer = previewBadge.layers[layerIndex];
@@ -780,12 +776,7 @@ void paintTransferBadgeContent(QPainter& painter, const BadgeItem& badge) {
 
     painter.setOpacity(1.0);
     if (!badge.displayText.isEmpty()) {
-        QFont font("Arial", 10);
-        painter.setFont(font);
-        painter.setPen(Qt::white);
-        painter.drawText(contentRect.adjusted(1, 1, 1, 1), Qt::AlignCenter, badge.displayText);
-        painter.setPen(Qt::black);
-        painter.drawText(contentRect, Qt::AlignCenter, badge.displayText);
+        badge::rendering::drawBadgeDisplayText(&painter, contentRect, badge.displayText);
     }
 }
 
