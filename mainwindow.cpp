@@ -3852,10 +3852,6 @@ void MainWindow::applyTheme(bool dark) {
                 QWidget#editInspector QGroupBox#pageSettingsGroup { margin-top: 3px; padding: 5px; }
                 QWidget#editInspector QGroupBox#checklistGroup { margin-top: 3px; padding: 5px; }
                 QWidget#editInspector QGroupBox#paperSettingsGroup { margin-top: 3px; padding: 5px; }
-                QWidget#editInspector QGroupBox#selectionPlaceholder { background: transparent;
-                    border: 0; border-bottom: 1px solid #344358; border-radius: 0; margin-top: 3px; padding: 4px 0 10px 0; }
-                QWidget#editInspector QGroupBox#selectionPlaceholder::title { left: 0; padding: 0 4px; }
-                QWidget#editInspector QLabel#selectionPlaceholderText { color: #aab8c8; padding: 2px 4px; }
                 QWidget#editInspector QLabel#paperDimensions { color: #e8eef5; font-weight: 600; }
                 QWidget#editInspector QLabel#canvasSubheading { color: #cdd8e5; border-bottom: 1px solid #344358; padding-bottom: 3px; }
                 QWidget#editInspector QCheckBox#guideVisibilityToggle { background: #202f40; color: #dbe5f3;
@@ -3898,10 +3894,6 @@ void MainWindow::applyTheme(bool dark) {
                 QWidget#editInspector QGroupBox#checklistGroup { background: transparent;
                     border: 0; border-bottom: 1px solid #e3e7ef; border-radius: 0;
                     margin-top: 3px; padding: 2px 0 4px 0; }
-                QWidget#editInspector QGroupBox#selectionPlaceholder { background: transparent;
-                    border: 0; border-bottom: 1px solid #e3e7ef; border-radius: 0; margin-top: 3px; padding: 4px 0 10px 0; }
-                QWidget#editInspector QGroupBox#selectionPlaceholder::title { left: 0; padding: 0 4px; }
-                QWidget#editInspector QLabel#selectionPlaceholderText { color: #78849a; padding: 2px 4px; }
                 QWidget#editInspector QLabel#paperDimensions { color: #27324a; font-weight: 600; }
                 QWidget#editInspector QLabel#canvasSubheading { color: #35415a; border-bottom: 1px solid #e3e7ef; padding-bottom: 3px; }
                 QWidget#editInspector QCheckBox#guideVisibilityToggle { background: #f7f8fb; color: #35415a;
