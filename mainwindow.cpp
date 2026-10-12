@@ -1157,10 +1157,6 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     m_commonToolbar->setObjectName(QStringLiteral("workspaceToolbar"));
     m_commonToolbar->setMinimumHeight(54);
     m_commonToolbar->setIconSize(QSize(20, 20));
-    m_commonToolbar->addAction(actNew);
-    m_commonToolbar->addAction(actOpen);
-    m_commonToolbar->addAction(actSave);
-    m_commonToolbar->addSeparator();
     m_actDesigner = m_commonToolbar->addAction("DESIGNER");
     m_actDesigner->setObjectName(QStringLiteral("designerModeAction"));
     m_actDesigner->setCheckable(true);
@@ -3312,6 +3308,9 @@ void MainWindow::applyTheme(bool dark) {
             QToolBar QToolButton:checked { background: #e9edff; border-color: #b8c4ff; color: #354fc0; }
             QToolBar QToolButton#designerModeAction,
             QToolBar QToolButton#layoutModeAction { padding: 8px 14px; font-weight: 600; }
+            QToolBar#workspaceToolbar QToolButton#designerModeAction:checked,
+            QToolBar#workspaceToolbar QToolButton#layoutModeAction:checked {
+                background: #4059ed; border-color: #4059ed; color: white; }
             QToolBar QToolButton#sendToLayoutButton { background: #4258d0;
                 border-color: #4258d0; color: white; font-weight: 600; }
             QToolBar QToolButton#sendToLayoutButton:hover { background: #3549bc; }
