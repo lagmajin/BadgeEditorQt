@@ -1284,12 +1284,27 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     m_toolPalette->setIconSize(QSize(22, 22));
     m_toolPalette->setMinimumWidth(94);
     m_toolPalette->setMaximumWidth(110);
-    m_actAddBadge->setText(QStringLiteral("画像"));
-    m_actAddBadge->setToolTip(QStringLiteral("バッジ画像を追加"));
+    m_actAddBadge->setText(QStringLiteral("新規"));
+    m_actAddBadge->setToolTip(QStringLiteral("空のバッジを作成"));
     m_actBatchAdd->setText(QStringLiteral("一括追加"));
     m_actMixedLayout->setToolTip(QStringLiteral("複数バッジを面付け"));
     m_actSendToLayout->setText(QStringLiteral("配置へ"));
     m_actSendToLayout->setToolTip(QStringLiteral("バッジを配置確認へ送る"));
+    auto* importImageAction = new QAction(m_toolPalette);
+    importImageAction->setText(QStringLiteral("画像"));
+    importImageAction->setToolTip(QStringLiteral("画像ファイルからバッジを作成"));
+    setMaterialIcon(importImageAction, QStringLiteral("image"));
+    connect(importImageAction, &QAction::triggered, this, [this] {
+        const QString path = QFileDialog::getOpenFileName(
+            this,
+            QStringLiteral("バッジ画像を追加"),
+            QString(),
+            QStringLiteral("画像ファイル (*.png *.jpg *.jpeg *.bmp *.gif *.webp *.tiff *.tif *.svg *.ico)"));
+        if (!path.isEmpty()) {
+            onImageDropped(path);
+        }
+    });
+    m_toolPalette->addAction(importImageAction);
     m_toolPalette->addAction(m_actAddBadge);
     m_toolPalette->addAction(m_actBatchAdd);
     m_toolPalette->addSeparator();
@@ -1299,7 +1314,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     if (auto* sendButton = m_toolPalette->widgetForAction(m_actSendToLayout)) {
         sendButton->setObjectName(QStringLiteral("sendToLayoutButton"));
     }
-    for (auto* action : {m_actAddBadge, m_actBatchAdd, m_actMixedLayout, m_actSendToLayout}) {
+    for (auto* action : {importImageAction, m_actAddBadge, m_actBatchAdd, m_actMixedLayout, m_actSendToLayout}) {
         if (auto* button = qobject_cast<QToolButton*>(m_toolPalette->widgetForAction(action))) {
             button->setMinimumHeight(62);
         }

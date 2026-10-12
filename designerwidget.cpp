@@ -737,7 +737,7 @@ void DesignerWidget::drawForeground(QPainter* painter, const QRectF& rect) {
         painter->setPen(hint);
         painter->drawText(cardRect.adjusted(12.0, 35.0, -12.0, -8.0),
                           Qt::AlignCenter,
-                          QStringLiteral("画像をドロップするか、上の「追加」から読み込めます"));
+                          QStringLiteral("画像をドロップするか、左の「画像」から読み込めます"));
         painter->restore();
     }
 
