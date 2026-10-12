@@ -506,7 +506,7 @@ void populateSceneForDocument(QGraphicsScene* scene,
     scene->addRect(0, 0,
                    document.paper.widthMm * mmToPx,
                    document.paper.heightMm * mmToPx,
-                   QPen(Qt::black), QBrush(Qt::white));
+                   QPen(QColor(184, 192, 205), 1.0), QBrush(Qt::white));
 
     QPen safePen(Qt::red, 1, Qt::DashLine);
     safePen.setDashPattern({5, 5});
