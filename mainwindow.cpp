@@ -2100,14 +2100,39 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     m_radioCanvasGrid->setToolTip(QStringLiteral("印刷ガイドに合わせたグリッドを表示します"));
     m_radioCanvasWhite->setToolTip(QStringLiteral("白い背景でバッジの見た目を確認します"));
     m_radioCanvasTransparent->setToolTip(QStringLiteral("透明部分をチェック柄で表示します"));
+    const auto makeGuideSwatch = [](const QColor& color, Qt::PenStyle style) {
+        QPixmap swatch(34, 14);
+        swatch.fill(Qt::transparent);
+        QPainter painter(&swatch);
+        painter.setRenderHint(QPainter::Antialiasing);
+        painter.setPen(QPen(color, 2.0, style));
+        painter.drawLine(2, 7, 32, 7);
+        painter.end();
+        return QIcon(swatch);
+    };
+    m_chkBleed->setText(QStringLiteral("塗り足し"));
+    m_chkVisible->setText(QStringLiteral("安全圏"));
+    m_chkBleed->setObjectName(QStringLiteral("guideVisibilityToggle"));
+    m_chkVisible->setObjectName(QStringLiteral("guideVisibilityToggle"));
+    m_chkBleed->setIcon(makeGuideSwatch(QColor(239, 68, 68), Qt::DashLine));
+    m_chkVisible->setIcon(makeGuideSwatch(QColor(34, 197, 94), Qt::SolidLine));
+    m_chkBleed->setIconSize(QSize(30, 12));
+    m_chkVisible->setIconSize(QSize(30, 12));
+    m_chkBleed->setToolTip(QStringLiteral("塗り足し線（赤い破線）の表示を切り替えます"));
+    m_chkVisible->setToolTip(QStringLiteral("安全圏（緑の実線）の表示を切り替えます"));
+    auto* guideVisibilityOptions = new QWidget(canvasGroup);
+    auto* guideVisibilityLayout = new QHBoxLayout(guideVisibilityOptions);
+    guideVisibilityLayout->setContentsMargins(0, 0, 0, 0);
+    guideVisibilityLayout->setSpacing(6);
+    guideVisibilityLayout->addWidget(m_chkBleed);
+    guideVisibilityLayout->addWidget(m_chkVisible);
     m_radioCanvasGrid->setChecked(true);
     backgroundLayout->addWidget(m_radioCanvasGrid);
     backgroundLayout->addWidget(m_radioCanvasWhite);
     backgroundLayout->addWidget(m_radioCanvasTransparent);
     canvasForm->addRow(QStringLiteral("バッジサイズ:"), m_comboDefaultBadgeSize);
     canvasForm->insertRow(1, m_safetyGuideGroup);
-    canvasForm->addRow(m_chkBleed);
-    canvasForm->addRow(m_chkVisible);
+    canvasForm->addRow(QStringLiteral("ガイド表示:"), guideVisibilityOptions);
     canvasForm->addRow(m_chkGridVisible);
     canvasForm->addRow(QStringLiteral("間隔:"), m_spinGridSpacing);
     canvasForm->addRow(m_chkRulersVisible);
@@ -3731,6 +3756,10 @@ void MainWindow::applyTheme(bool dark) {
                 QWidget#editInspector QGroupBox#checklistGroup { margin-top: 3px; padding: 5px; }
                 QWidget#editInspector QGroupBox#paperSettingsGroup { margin-top: 3px; padding: 5px; }
                 QWidget#editInspector QLabel#paperDimensions { color: #e8eef5; font-weight: 600; }
+                QWidget#editInspector QCheckBox#guideVisibilityToggle { background: #202f40; color: #dbe5f3;
+                    border: 1px solid #3b4b5d; border-radius: 6px; padding: 4px 6px; spacing: 5px; }
+                QWidget#editInspector QCheckBox#guideVisibilityToggle:checked { background: #314b70; border-color: #6385e8; }
+                QWidget#editInspector QCheckBox#guideVisibilityToggle:hover { border-color: #6385e8; }
                 QWidget#editInspector QRadioButton#canvasBackgroundOption { background: #202f40; color: #dbe5f3;
                     border: 1px solid #3b4b5d; border-radius: 6px; padding: 5px 8px; spacing: 8px; }
                 QWidget#editInspector QRadioButton#canvasBackgroundOption:hover { border-color: #6385e8; }
@@ -3761,6 +3790,10 @@ void MainWindow::applyTheme(bool dark) {
                 QWidget#editInspector QGroupBox#checklistGroup { margin-top: 3px; padding: 5px; }
                 QWidget#editInspector QGroupBox#paperSettingsGroup { margin-top: 3px; padding: 5px; }
                 QWidget#editInspector QLabel#paperDimensions { color: #27324a; font-weight: 600; }
+                QWidget#editInspector QCheckBox#guideVisibilityToggle { background: #f7f8fb; color: #35415a;
+                    border: 1px solid #d6dce8; border-radius: 6px; padding: 4px 6px; spacing: 5px; }
+                QWidget#editInspector QCheckBox#guideVisibilityToggle:checked { background: #e9edff; border-color: #4258d0; }
+                QWidget#editInspector QCheckBox#guideVisibilityToggle:hover { border-color: #aab8de; }
                 QWidget#editInspector QRadioButton#canvasBackgroundOption { background: #f7f8fb; color: #35415a;
                     border: 1px solid #d6dce8; border-radius: 6px; padding: 5px 8px; spacing: 8px; }
                 QWidget#editInspector QRadioButton#canvasBackgroundOption:hover { border-color: #aab8de; }
