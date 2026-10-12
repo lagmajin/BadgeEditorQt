@@ -1996,6 +1996,10 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     connect(m_spinPaperSpacing, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this]{ if (!m_isDesigner) requestLayoutRefresh("spacing changed"); });
     connect(m_chkCutFriendlyLayout, &QCheckBox::toggled, this, [this]{ if (!m_isDesigner) requestLayoutRefresh("cut friendly changed"); });
 
+    inspLayout->removeWidget(m_canvasGroup);
+    inspLayout->insertWidget(0, m_canvasGroup);
+    inspLayout->removeWidget(m_guideGroup);
+    inspLayout->insertWidget(1, m_guideGroup);
     inspLayout->addStretch();
     scroll->setWidget(m_inspector);
 
