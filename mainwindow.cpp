@@ -1361,16 +1361,8 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     m_toolPalette->addAction(selectAction);
     m_toolPalette->addAction(addTextAction);
     m_toolPalette->addAction(importImageAction);
-    m_toolPalette->addAction(m_actAddBadge);
     m_toolPalette->addSeparator();
-    m_toolPalette->addAction(m_actBatchAdd);
-    m_toolPalette->addAction(m_actMixedLayout);
-    m_toolPalette->addSeparator();
-    m_toolPalette->addAction(m_actSendToLayout);
-    if (auto* sendButton = m_toolPalette->widgetForAction(m_actSendToLayout)) {
-        sendButton->setObjectName(QStringLiteral("sendToLayoutButton"));
-    }
-    for (auto* action : {selectAction, addTextAction, importImageAction, m_actAddBadge, m_actBatchAdd, m_actMixedLayout, m_actSendToLayout}) {
+    for (auto* action : {selectAction, addTextAction, importImageAction}) {
         if (auto* button = qobject_cast<QToolButton*>(m_toolPalette->widgetForAction(action))) {
             button->setMinimumSize(172, 52);
         }
