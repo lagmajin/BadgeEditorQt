@@ -1873,19 +1873,17 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     });
 
     // Guide group
-    auto* guideGroup = new QGroupBox("ガイド表示");
+    auto* guideGroup = new QGroupBox("ガイド調整");
     m_guideGroup = guideGroup;
     auto* guideLayout = new QVBoxLayout(guideGroup);
-    m_chkBleed = new QCheckBox("巻き込みエリア (塗り足し)"); m_chkBleed->setChecked(true);
-    m_chkVisible = new QCheckBox("可視エリア (安全圏)"); m_chkVisible->setChecked(true);
+    m_chkBleed = new QCheckBox("塗り足し線を表示"); m_chkBleed->setChecked(true);
+    m_chkVisible = new QCheckBox("セーフエリアを表示"); m_chkVisible->setChecked(true);
     m_spinCutLineOffset = new QDoubleSpinBox;
     m_spinCutLineOffset->setRange(-3.9, 20.0);
     m_spinCutLineOffset->setDecimals(1);
     m_spinCutLineOffset->setSingleStep(0.1);
     m_spinCutLineOffset->setSuffix(" mm");
     m_spinCutLineOffset->setToolTip("基準のカットラインは仕上がり面の外側 4.0 mm です。");
-    guideLayout->addWidget(m_chkBleed);
-    guideLayout->addWidget(m_chkVisible);
     auto* cutLineForm = new QFormLayout;
     cutLineForm->setContentsMargins(0, 0, 0, 0);
     cutLineForm->addRow("カット線オフセット:", m_spinCutLineOffset);
@@ -1934,10 +1932,12 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     backgroundLayout->addWidget(m_radioCanvasTransparent);
     canvasForm->addRow(QStringLiteral("バッジサイズ:"), m_comboDefaultBadgeSize);
     canvasForm->insertRow(1, m_safetyGuideGroup);
+    canvasForm->addRow(m_chkBleed);
+    canvasForm->addRow(m_chkVisible);
     canvasForm->addRow(m_chkGridVisible);
+    canvasForm->addRow(QStringLiteral("間隔:"), m_spinGridSpacing);
     canvasForm->addRow(m_chkRulersVisible);
     canvasForm->addRow(m_chkSnapToGrid);
-    canvasForm->addRow(QStringLiteral("間隔:"), m_spinGridSpacing);
     canvasForm->addRow(QStringLiteral("背景:"), backgroundOptions);
     inspLayout->insertWidget(0, canvasGroup);
     connect(m_chkGridVisible, &QCheckBox::toggled, this, [this](bool on) {
