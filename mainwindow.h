@@ -140,6 +140,8 @@ private:
     void flushInternalEvents();
     void updateSafetyGuideHud();
     void updateTitle();
+    void setDesignerZoom(double factor);
+    void updateZoomControl(double factor);
     void loadDockState();
     void saveDockState();
     void loadAppSettings();
@@ -189,7 +191,7 @@ private:
     QToolBar* m_layoutToolbar = nullptr;
     QAction* m_actDesigner;
     QAction* m_actLayout;
-    QLabel* m_zoomLabel;
+    QComboBox* m_zoomCombo = nullptr;
     QAction* m_actTheme;
     QAction* m_actAppSettings = nullptr;
     QAction* m_actTransferDebug = nullptr;
@@ -339,7 +341,6 @@ private:
     QString m_currentFile;
     QUndoStack* m_undoStack;
     QByteArray m_defaultDockState;
-    double m_zoomScale = 1.0;
     bool m_isDark = false;
     AppSettings m_appSettings;
     bool m_updatingUI = false;

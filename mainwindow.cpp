@@ -1106,8 +1106,8 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     setMaterialIcon(m_actAlignBottom, QStringLiteral("vertical_align_bottom"));
 
     auto* viewMenu = menuBar()->addMenu("表示(&V)");
-    auto* actViewZoomIn = viewMenu->addAction("ズームイン", this, [this]{ m_zoomScale *= 1.2; m_zoomLabel->setText(QString::number(m_zoomScale*100,'f',0)+"%"); });
-    auto* actViewZoomOut = viewMenu->addAction("ズームアウト", this, [this]{ m_zoomScale /= 1.2; m_zoomLabel->setText(QString::number(m_zoomScale*100,'f',0)+"%"); });
+    auto* actViewZoomIn = viewMenu->addAction("ズームイン", this, [this]{ if (m_designer) setDesignerZoom(m_designer->zoomFactor() * 1.2); });
+    auto* actViewZoomOut = viewMenu->addAction("ズームアウト", this, [this]{ if (m_designer) setDesignerZoom(m_designer->zoomFactor() / 1.2); });
     viewMenu->addSeparator();
     m_actTheme = viewMenu->addAction("テーマ切替", this, &MainWindow::onToggleTheme);
     m_actAppSettings = viewMenu->addAction("アプリ設定...", this, &MainWindow::onAppSettings, QKeySequence("Ctrl+,"));
@@ -1181,24 +1181,48 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     setMaterialIcon(m_actTheme, QStringLiteral("dark_mode"));
     setMaterialIcon(m_actAppSettings, QStringLiteral("settings"));
     m_commonToolbar->addSeparator();
-    m_actZoomIn = m_commonToolbar->addAction("ズームイン", this, [this]{ m_zoomScale *= 1.2; m_zoomLabel->setText(QString::number(m_zoomScale*100,'f',0)+"%"); });
+    m_actZoomIn = m_commonToolbar->addAction("ズームイン", this, [this]{ if (m_designer) setDesignerZoom(m_designer->zoomFactor() * 1.2); });
     setMaterialIcon(m_actZoomIn, QStringLiteral("zoom_in"));
     if (auto* zoomInButton = qobject_cast<QToolButton*>(m_commonToolbar->widgetForAction(m_actZoomIn))) {
         zoomInButton->setToolButtonStyle(Qt::ToolButtonIconOnly);
         zoomInButton->setToolTip(QStringLiteral("ズームイン"));
     }
-    m_actZoomOut = m_commonToolbar->addAction("ズームアウト", this, [this]{ m_zoomScale /= 1.2; m_zoomLabel->setText(QString::number(m_zoomScale*100,'f',0)+"%"); });
+    m_actZoomOut = m_commonToolbar->addAction("ズームアウト", this, [this]{ if (m_designer) setDesignerZoom(m_designer->zoomFactor() / 1.2); });
     setMaterialIcon(m_actZoomOut, QStringLiteral("zoom_out"));
     if (auto* zoomOutButton = qobject_cast<QToolButton*>(m_commonToolbar->widgetForAction(m_actZoomOut))) {
         zoomOutButton->setToolButtonStyle(Qt::ToolButtonIconOnly);
         zoomOutButton->setToolTip(QStringLiteral("ズームアウト"));
     }
     m_commonToolbar->addSeparator();
-    m_zoomLabel = new QLabel("100%");
-    m_zoomLabel->setObjectName(QStringLiteral("zoomValueLabel"));
-    m_zoomLabel->setMinimumWidth(54);
-    m_zoomLabel->setAlignment(Qt::AlignCenter);
-    m_commonToolbar->addWidget(m_zoomLabel);
+    m_zoomCombo = new QComboBox;
+    m_zoomCombo->setObjectName(QStringLiteral("zoomValueCombo"));
+    m_zoomCombo->setEditable(true);
+    m_zoomCombo->setMinimumWidth(78);
+    m_zoomCombo->setMaximumWidth(96);
+    m_zoomCombo->addItem(QStringLiteral("25%"), 0.25);
+    m_zoomCombo->addItem(QStringLiteral("50%"), 0.50);
+    m_zoomCombo->addItem(QStringLiteral("75%"), 0.75);
+    m_zoomCombo->addItem(QStringLiteral("100%"), 1.00);
+    m_zoomCombo->addItem(QStringLiteral("125%"), 1.25);
+    m_zoomCombo->addItem(QStringLiteral("150%"), 1.50);
+    m_zoomCombo->addItem(QStringLiteral("200%"), 2.00);
+    m_zoomCombo->addItem(QStringLiteral("300%"), 3.00);
+    m_zoomCombo->addItem(QStringLiteral("400%"), 4.00);
+    m_zoomCombo->setCurrentIndex(m_zoomCombo->findData(1.25));
+    connect(m_zoomCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int index) {
+        if (index >= 0 && m_designer) {
+            setDesignerZoom(m_zoomCombo->itemData(index).toDouble());
+        }
+    });
+    connect(m_zoomCombo->lineEdit(), &QLineEdit::editingFinished, this, [this] {
+        if (!m_zoomCombo || !m_designer) return;
+        QString text = m_zoomCombo->currentText().trimmed();
+        text.remove('%');
+        bool ok = false;
+        const double percent = text.toDouble(&ok);
+        if (ok && percent > 0.0) setDesignerZoom(percent / 100.0);
+    });
+    m_commonToolbar->addWidget(m_zoomCombo);
 
     m_designerToolbar = addToolBar("Designer");
     m_designerToolbar->setFont(uiFont);
@@ -1426,6 +1450,8 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
 
     // Designer
     m_designer = new DesignerWidget;
+    connect(m_designer, &DesignerWidget::zoomChanged, this, &MainWindow::updateZoomControl);
+    updateZoomControl(m_designer->zoomFactor());
     connect(m_designer, &DesignerWidget::badgeSelected, this, [this](BadgeGraphicItem* item){ onBadgeSelected(item); });
     connect(m_designer, &DesignerWidget::selectionChanged, this, [this]{ onSelectionChanged(); });
     connect(m_designer, &DesignerWidget::badgeDeselected, this, [this]{ onBadgeDeselected(); });
@@ -3385,7 +3411,7 @@ void MainWindow::applyTheme(bool dark) {
             QToolBar#workspaceToolbar QToolButton:hover { background: #303f53; }
             QToolBar#workspaceToolbar QToolButton#designerModeAction,
             QToolBar#workspaceToolbar QToolButton#layoutModeAction { padding: 8px 14px; font-weight: 600; }
-            QLabel#zoomValueLabel { color: #eef2fb; background: #192430;
+            QComboBox#zoomValueCombo { color: #eef2fb; background: #192430;
                 border: 1px solid #3b4b5d; border-radius: 6px; padding: 5px 8px; }
             QToolBar QListWidget#layoutPageStrip { background: #192430; color: #edf3f9;
                 border: 1px solid #3b4b5d; border-radius: 5px; padding: 1px; }
@@ -3414,7 +3440,7 @@ void MainWindow::applyTheme(bool dark) {
                 border-color: #4258d0; color: white; font-weight: 600; }
             QToolBar QToolButton#sendToLayoutButton:hover { background: #3549bc; }
             QToolBar#workspaceToolbar QToolButton { padding: 8px 11px; }
-            QLabel#zoomValueLabel { color: #303a54; background: #ffffff;
+            QComboBox#zoomValueCombo { color: #303a54; background: #ffffff;
                 border: 1px solid #dce1ed; border-radius: 6px; padding: 5px 8px; }
             QToolBar QListWidget#layoutPageStrip { background: #ffffff; color: #303a54;
                 border: 1px solid #dce1ed; border-radius: 5px; padding: 1px; }
@@ -3593,6 +3619,21 @@ void MainWindow::refreshBadges() {
 void MainWindow::updateTitle() {
     QString name = m_currentFile.isEmpty() ? "新規プロジェクト" : QFileInfo(m_currentFile).fileName();
     setWindowTitle(name + " - Badge Editor Pro");
+}
+
+void MainWindow::setDesignerZoom(double factor) {
+    if (m_designer) {
+        m_designer->setZoomFactor(factor);
+    }
+}
+
+void MainWindow::updateZoomControl(double factor) {
+    if (!m_zoomCombo) {
+        return;
+    }
+    const QSignalBlocker blocker(m_zoomCombo);
+    const QString text = QString::number(factor * 100.0, 'f', 0) + QLatin1Char('%');
+    m_zoomCombo->setCurrentText(text);
 }
 
 void MainWindow::updateSafetyGuideHud() {

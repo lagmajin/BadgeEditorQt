@@ -551,10 +551,22 @@ QPainterPath DesignerWidget::createSnowflake(double size) {
 
 void DesignerWidget::updateBackground(const QBrush& brush) { m_scene->setBackgroundBrush(brush); }
 
+void DesignerWidget::setZoomFactor(double factor) {
+    constexpr double minZoom = 0.1;
+    constexpr double maxZoom = 8.0;
+    factor = std::clamp(factor, minZoom, maxZoom);
+    const double current = zoomFactor();
+    if (current <= 0.0 || qFuzzyCompare(current, factor)) {
+        return;
+    }
+    scale(factor / current, factor / current);
+    emit zoomChanged(factor);
+}
+
 void DesignerWidget::wheelEvent(QWheelEvent* event) {
     if (event->modifiers() & Qt::ControlModifier) {
         double factor = event->angleDelta().y() > 0 ? 1.15 : 1.0 / 1.15;
-        scale(factor, factor);
+        setZoomFactor(zoomFactor() * factor);
         event->accept();
     } else {
         QGraphicsView::wheelEvent(event);

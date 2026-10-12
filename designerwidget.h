@@ -75,6 +75,8 @@ public:
     void setBatchMode(bool on);
     void setExperimentalGpuViewport(bool on);
     void setSafetyGuideEntries(const QList<SafetyGuideEntry>& entries);
+    double zoomFactor() const { return transform().m11(); }
+    void setZoomFactor(double factor);
 
 Q_SIGNALS:
     void badgeSelected(BadgeGraphicItem* item) W_SIGNAL(badgeSelected, item);
@@ -87,6 +89,7 @@ Q_SIGNALS:
     void nudgeRequested(double dxMm, double dyMm) W_SIGNAL(nudgeRequested, dxMm, dyMm);
     void eyedropperModeChanged(bool active) W_SIGNAL(eyedropperModeChanged, active);
     void eyedropperColorPicked(const QColor& color) W_SIGNAL(eyedropperColorPicked, color);
+    void zoomChanged(double factor) W_SIGNAL(zoomChanged, factor);
 
 protected:
     void wheelEvent(QWheelEvent* event) override;
