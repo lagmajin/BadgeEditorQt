@@ -245,6 +245,7 @@ private:
     QLabel* m_pickedColorSwatch = nullptr;
     QListWidget* m_layerList = nullptr;
     QGroupBox* m_propGroup = nullptr;
+    QGroupBox* m_selectionPlaceholder = nullptr;
     QGroupBox* m_checklistGroup = nullptr;
     QGroupBox* m_safetyGuideGroup = nullptr;
     QGroupBox* m_colorGroup = nullptr;

@@ -78,6 +78,7 @@ void MainWindow::updateLayerFillUi() {
 void MainWindow::updateInspectorMode() {
     const bool designer = m_isDesigner;
     const bool hasSelection = designer && !m_selected.isEmpty();
+    if (m_selectionPlaceholder) m_selectionPlaceholder->setVisible(designer && !hasSelection);
     if (m_propGroup) m_propGroup->setVisible(hasSelection);
     if (m_colorGroup) m_colorGroup->setVisible(hasSelection);
     if (m_layerGroup) m_layerGroup->setVisible(hasSelection);

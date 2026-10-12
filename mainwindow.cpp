@@ -1626,6 +1626,17 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
         safetyLayout->addWidget(label);
     }
 
+    auto* selectionPlaceholder = new QGroupBox(QStringLiteral("オブジェクト設定"));
+    selectionPlaceholder->setObjectName(QStringLiteral("selectionPlaceholder"));
+    m_selectionPlaceholder = selectionPlaceholder;
+    auto* selectionPlaceholderLayout = new QVBoxLayout(selectionPlaceholder);
+    selectionPlaceholderLayout->setContentsMargins(0, 0, 0, 0);
+    auto* selectionPlaceholderText = new QLabel(QStringLiteral("キャンバス上のオブジェクトを選択すると、編集項目が表示されます。"), selectionPlaceholder);
+    selectionPlaceholderText->setObjectName(QStringLiteral("selectionPlaceholderText"));
+    selectionPlaceholderText->setWordWrap(true);
+    selectionPlaceholderLayout->addWidget(selectionPlaceholderText);
+    inspLayout->addWidget(selectionPlaceholder);
+
     // Properties group
     auto* propGroup = new QGroupBox("オブジェクト情報");
     m_propGroup = propGroup;
@@ -3062,6 +3073,9 @@ void MainWindow::onInspectorChanged() {
 
 void MainWindow::setInspectorControlsEnabled(bool on) {
     const bool showSelectionControls = on && m_isDesigner;
+    if (m_selectionPlaceholder) {
+        m_selectionPlaceholder->setVisible(m_isDesigner && !on);
+    }
     if (m_propGroup) {
         m_propGroup->setEnabled(on);
         m_propGroup->setVisible(showSelectionControls);
@@ -3832,6 +3846,10 @@ void MainWindow::applyTheme(bool dark) {
                 QWidget#editInspector QGroupBox#pageSettingsGroup { margin-top: 3px; padding: 5px; }
                 QWidget#editInspector QGroupBox#checklistGroup { margin-top: 3px; padding: 5px; }
                 QWidget#editInspector QGroupBox#paperSettingsGroup { margin-top: 3px; padding: 5px; }
+                QWidget#editInspector QGroupBox#selectionPlaceholder { background: transparent;
+                    border: 0; border-bottom: 1px solid #344358; border-radius: 0; margin-top: 3px; padding: 4px 0 10px 0; }
+                QWidget#editInspector QGroupBox#selectionPlaceholder::title { left: 0; padding: 0 4px; }
+                QWidget#editInspector QLabel#selectionPlaceholderText { color: #aab8c8; padding: 2px 4px; }
                 QWidget#editInspector QLabel#paperDimensions { color: #e8eef5; font-weight: 600; }
                 QWidget#editInspector QCheckBox#guideVisibilityToggle { background: #202f40; color: #dbe5f3;
                     border: 1px solid #3b4b5d; border-radius: 6px; padding: 4px 6px; spacing: 5px; }
@@ -3873,6 +3891,10 @@ void MainWindow::applyTheme(bool dark) {
                 QWidget#editInspector QGroupBox#checklistGroup { background: transparent;
                     border: 0; border-bottom: 1px solid #e3e7ef; border-radius: 0;
                     margin-top: 3px; padding: 2px 0 4px 0; }
+                QWidget#editInspector QGroupBox#selectionPlaceholder { background: transparent;
+                    border: 0; border-bottom: 1px solid #e3e7ef; border-radius: 0; margin-top: 3px; padding: 4px 0 10px 0; }
+                QWidget#editInspector QGroupBox#selectionPlaceholder::title { left: 0; padding: 0 4px; }
+                QWidget#editInspector QLabel#selectionPlaceholderText { color: #78849a; padding: 2px 4px; }
                 QWidget#editInspector QLabel#paperDimensions { color: #27324a; font-weight: 600; }
                 QWidget#editInspector QCheckBox#guideVisibilityToggle { background: #f7f8fb; color: #35415a;
                     border: 1px solid #d6dce8; border-radius: 6px; padding: 4px 6px; spacing: 5px; }
