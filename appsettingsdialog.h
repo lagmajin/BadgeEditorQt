@@ -8,6 +8,7 @@
 struct AppSettings {
     bool darkTheme = false;
     bool gridVisible = true;
+    bool rulersVisible = true;
     bool snapToGrid = true;
     double gridSpacingMm = 5.0;
     CanvasBackgroundMode canvasBackgroundMode = CanvasBackgroundMode::PrintGuideGrid;
@@ -42,6 +43,7 @@ private:
 
     QComboBox* m_themeCombo = nullptr;
     QCheckBox* m_gridVisible = nullptr;
+    QCheckBox* m_rulersVisible = nullptr;
     QCheckBox* m_snapToGrid = nullptr;
     QDoubleSpinBox* m_gridSpacing = nullptr;
     QComboBox* m_canvasBackground = nullptr;

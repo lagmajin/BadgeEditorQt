@@ -384,6 +384,14 @@ void DesignerWidget::setGridVisible(bool b) {
     viewport()->update();
 }
 
+void DesignerWidget::setRulersVisible(bool b) {
+    if (m_rulersVisible == b) {
+        return;
+    }
+    m_rulersVisible = b;
+    viewport()->update();
+}
+
 void DesignerWidget::setCanvasBackgroundMode(CanvasBackgroundMode mode) {
     if (m_canvasBackgroundMode == mode) {
         return;
@@ -796,6 +804,10 @@ void DesignerWidget::drawForeground(QPainter* painter, const QRectF& rect) {
         painter->setPen(fg);
         painter->drawText(placed, Qt::AlignCenter, text);
         painter->restore();
+    }
+
+    if (!m_rulersVisible) {
+        return;
     }
 
     constexpr int kRulerWidth = 40;

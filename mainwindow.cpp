@@ -1901,6 +1901,8 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     canvasForm->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
     m_chkGridVisible = new QCheckBox(QStringLiteral("グリッドを表示"));
     m_chkGridVisible->setChecked(true);
+    m_chkRulersVisible = new QCheckBox(QStringLiteral("定規を表示"));
+    m_chkRulersVisible->setChecked(true);
     m_chkSnapToGrid = new QCheckBox(QStringLiteral("グリッドにスナップ"));
     m_chkSnapToGrid->setChecked(true);
     m_spinGridSpacing = new QDoubleSpinBox;
@@ -1933,6 +1935,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     canvasForm->addRow(QStringLiteral("バッジサイズ:"), m_comboDefaultBadgeSize);
     canvasForm->insertRow(1, m_safetyGuideGroup);
     canvasForm->addRow(m_chkGridVisible);
+    canvasForm->addRow(m_chkRulersVisible);
     canvasForm->addRow(m_chkSnapToGrid);
     canvasForm->addRow(QStringLiteral("間隔:"), m_spinGridSpacing);
     canvasForm->addRow(QStringLiteral("背景:"), backgroundOptions);
@@ -1941,6 +1944,13 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
         if (m_actGridVisible) {
             m_actGridVisible->setChecked(on);
         }
+    });
+    connect(m_chkRulersVisible, &QCheckBox::toggled, this, [this](bool on) {
+        m_appSettings.rulersVisible = on;
+        if (m_designer) {
+            m_designer->setRulersVisible(on);
+        }
+        saveAppSettings();
     });
     connect(m_chkSnapToGrid, &QCheckBox::toggled, this, [this](bool on) {
         if (m_actSnapToGrid) {
@@ -3555,6 +3565,10 @@ void MainWindow::applyAppSettings(const AppSettings& settings) {
         const QSignalBlocker blocker(m_chkGridVisible);
         m_chkGridVisible->setChecked(settings.gridVisible);
     }
+    if (m_chkRulersVisible) {
+        const QSignalBlocker blocker(m_chkRulersVisible);
+        m_chkRulersVisible->setChecked(settings.rulersVisible);
+    }
     if (m_chkSnapToGrid) {
         const QSignalBlocker blocker(m_chkSnapToGrid);
         m_chkSnapToGrid->setChecked(settings.snapToGrid);
@@ -3593,6 +3607,7 @@ void MainWindow::applyAppSettings(const AppSettings& settings) {
     }
     if (m_designer) {
         m_designer->setGridVisible(settings.gridVisible);
+        m_designer->setRulersVisible(settings.rulersVisible);
         m_designer->setCanvasBackgroundMode(settings.canvasBackgroundMode);
         m_designer->setSnapToGrid(settings.snapToGrid);
         m_designer->setGridSpacingMm(settings.gridSpacingMm);

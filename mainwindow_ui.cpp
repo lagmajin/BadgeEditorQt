@@ -136,6 +136,7 @@ void MainWindow::saveAppSettings() {
     QSettings settings;
     settings.setValue("app/darkTheme", m_appSettings.darkTheme);
     settings.setValue("app/gridVisible", m_appSettings.gridVisible);
+    settings.setValue("app/rulersVisible", m_appSettings.rulersVisible);
     settings.setValue("app/snapToGrid", m_appSettings.snapToGrid);
     settings.setValue("app/gridSpacingMm", m_appSettings.gridSpacingMm);
     settings.setValue("app/defaultBadgeSizeMm", m_appSettings.defaultBadgeSizeMm);
@@ -155,6 +156,7 @@ void MainWindow::loadAppSettings() {
     AppSettings loaded;
     loaded.darkTheme = settings.value("app/darkTheme", loaded.darkTheme).toBool();
     loaded.gridVisible = settings.value("app/gridVisible", loaded.gridVisible).toBool();
+    loaded.rulersVisible = settings.value("app/rulersVisible", loaded.rulersVisible).toBool();
     loaded.snapToGrid = settings.value("app/snapToGrid", loaded.snapToGrid).toBool();
     loaded.gridSpacingMm = settings.value("app/gridSpacingMm", loaded.gridSpacingMm).toDouble();
     loaded.defaultBadgeSizeMm = settings.value("app/defaultBadgeSizeMm", loaded.defaultBadgeSizeMm).toDouble();

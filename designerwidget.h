@@ -52,6 +52,7 @@ public:
     void setBleedVisible(bool b);
     void setVisibleVisible(bool b);
     void setGridVisible(bool b);
+    void setRulersVisible(bool b);
     void setCanvasBackgroundMode(CanvasBackgroundMode mode);
     void setSnapToGrid(bool b);
     void setGridSpacingMm(double mm);
@@ -117,6 +118,7 @@ private:
     bool m_lightingEnabled = false;
     bool m_glitterEnabled = false;
     bool m_gridVisible = true;
+    bool m_rulersVisible = true;
     CanvasBackgroundMode m_canvasBackgroundMode = CanvasBackgroundMode::PrintGuideGrid;
     bool m_snapToGrid = true;
     double m_gridSpacingMm = 1.0;

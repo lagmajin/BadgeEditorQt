@@ -74,6 +74,8 @@ AppSettingsDialog::AppSettingsDialog(const AppSettings& settings, QWidget* paren
     auto* gridForm = new QFormLayout(gridGroup);
     m_gridVisible = new QCheckBox("表示する");
     m_gridVisible->setChecked(settings.gridVisible);
+    m_rulersVisible = new QCheckBox("定規を表示する");
+    m_rulersVisible->setChecked(settings.rulersVisible);
     m_snapToGrid = new QCheckBox("スナップする");
     m_snapToGrid->setChecked(settings.snapToGrid);
     m_gridSpacing = new QDoubleSpinBox;
@@ -83,6 +85,7 @@ AppSettingsDialog::AppSettingsDialog(const AppSettings& settings, QWidget* paren
     m_gridSpacing->setDecimals(1);
     m_gridSpacing->setValue(settings.gridSpacingMm);
     gridForm->addRow(m_gridVisible);
+    gridForm->addRow(m_rulersVisible);
     gridForm->addRow(m_snapToGrid);
     gridForm->addRow("間隔:", m_gridSpacing);
     m_defaultBadgeSize = new QComboBox;
@@ -213,6 +216,7 @@ AppSettings AppSettingsDialog::settings() const {
     AppSettings result;
     result.darkTheme = m_themeCombo ? (m_themeCombo->currentIndex() == 0) : false;
     result.gridVisible = m_gridVisible ? m_gridVisible->isChecked() : true;
+    result.rulersVisible = m_rulersVisible ? m_rulersVisible->isChecked() : true;
     result.snapToGrid = m_snapToGrid ? m_snapToGrid->isChecked() : true;
     result.gridSpacingMm = m_gridSpacing ? m_gridSpacing->value() : 5.0;
     result.defaultBadgeSizeMm = m_defaultBadgeSize ? m_defaultBadgeSize->currentData().toDouble() : 57.0;

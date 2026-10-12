@@ -276,6 +276,7 @@ private:
     QCheckBox* m_chkBleed;
     QCheckBox* m_chkVisible;
     QCheckBox* m_chkGridVisible = nullptr;
+    QCheckBox* m_chkRulersVisible = nullptr;
     QCheckBox* m_chkSnapToGrid = nullptr;
     QDoubleSpinBox* m_spinGridSpacing = nullptr;
     QComboBox* m_comboDefaultBadgeSize = nullptr;
