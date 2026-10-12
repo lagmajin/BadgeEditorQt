@@ -699,6 +699,20 @@ void DesignerWidget::drawBackground(QPainter* painter, const QRectF& rect) {
     const QColor majorGridColor = QColor::fromRgb(majorGridBase.red(), majorGridBase.green(), majorGridBase.blue(), majorAlpha);
     const QColor minorGridColor = QColor::fromRgb(minorGridBase.red(), minorGridBase.green(), minorGridBase.blue(), minorAlpha);
 
+    const double screenFineStepPx = mmToPx * std::abs(transform().m11());
+    if (printGuideGrid && gridSpacingMm > 1.0 && screenFineStepPx >= 3.0) {
+        const QColor fineGridColor(201, 205, 211, 24);
+        const double fineLeft = std::floor(rect.left() / mmToPx) * mmToPx;
+        const double fineTop = std::floor(rect.top() / mmToPx) * mmToPx;
+        painter->setPen(QPen(fineGridColor, 0.5));
+        for (double x = fineLeft; x <= rect.right(); x += mmToPx) {
+            painter->drawLine(QPointF(x, rect.top()), QPointF(x, rect.bottom()));
+        }
+        for (double y = fineTop; y <= rect.bottom(); y += mmToPx) {
+            painter->drawLine(QPointF(rect.left(), y), QPointF(rect.right(), y));
+        }
+    }
+
     const double gridStep = simplifiedGrid ? majorStepPx : stepPx;
     const int gridLeft = int(std::floor(rect.left() / gridStep) * gridStep);
     const int gridTop = int(std::floor(rect.top() / gridStep) * gridStep);
