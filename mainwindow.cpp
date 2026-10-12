@@ -1259,6 +1259,17 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     if (m_actAlignBottom) {
         m_designerToolbar->addAction(m_actAlignBottom);
     }
+    for (auto* action : {m_actAlignLeft, m_actAlignHCenter, m_actAlignRight,
+                         m_actAlignTop, m_actAlignVCenter, m_actAlignBottom}) {
+        if (!action) {
+            continue;
+        }
+        if (auto* button = qobject_cast<QToolButton*>(m_designerToolbar->widgetForAction(action))) {
+            button->setToolButtonStyle(Qt::ToolButtonIconOnly);
+            button->setToolTip(action->text() + QStringLiteral(" (%1)").arg(action->shortcut().toString(QKeySequence::NativeText)));
+            button->setAccessibleName(action->text());
+        }
+    }
     auto* duplicateOffsetLabel = new QLabel(QStringLiteral("複製ずれ"));
     m_designerToolbar->addWidget(duplicateOffsetLabel);
     m_spinDuplicateOffset = new QDoubleSpinBox;
