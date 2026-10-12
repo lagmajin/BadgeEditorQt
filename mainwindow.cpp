@@ -2243,17 +2243,19 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
         layoutHeader->setArrowType(expanded ? Qt::DownArrow : Qt::RightArrow);
     });
     m_comboPaperSize = new QComboBox;
-    m_comboPaperSize->addItems({
-        "A3 (297 x 420 mm)",
-        "A4 (210 x 297 mm)",
-        "A5 (148 x 210 mm)",
-        "B4 (257 x 364 mm)",
-        "B5 (182 x 257 mm)",
-        "Letter (216 x 279 mm)",
-        "Legal (216 x 356 mm)"
-    });
+    m_comboPaperSize->addItem("A3 (297 x 420 mm)", QSize(297, 420));
+    m_comboPaperSize->addItem("A4 (210 x 297 mm)", QSize(210, 297));
+    m_comboPaperSize->addItem("A5 (148 x 210 mm)", QSize(148, 210));
+    m_comboPaperSize->addItem("B4 (257 x 364 mm)", QSize(257, 364));
+    m_comboPaperSize->addItem("B5 (182 x 257 mm)", QSize(182, 257));
+    m_comboPaperSize->addItem("Letter (216 x 279 mm)", QSize(216, 279));
+    m_comboPaperSize->addItem("Legal (216 x 356 mm)", QSize(216, 356));
     m_comboPaperSize->setCurrentIndex(1);
     m_chkLandscape = new QCheckBox("横向き");
+    m_chkLandscape->setToolTip(QStringLiteral("用紙の向きを切り替えます"));
+    auto* paperDimensionsLabel = new QLabel;
+    paperDimensionsLabel->setObjectName(QStringLiteral("paperDimensions"));
+    paperDimensionsLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
     m_spinPaperMargin = new QDoubleSpinBox;
     m_spinPaperMargin->setSuffix(" mm");
     m_spinPaperMargin->setRange(0.0, 100.0);
@@ -2265,13 +2267,33 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     m_chkCutFriendlyLayout = new QCheckBox("切りやすい整列配置");
     layoutForm->addRow("用紙:", m_comboPaperSize);
     layoutForm->addRow(m_chkLandscape);
+    layoutForm->addRow("仕上がり寸法:", paperDimensionsLabel);
     layoutForm->addRow("余白:", m_spinPaperMargin);
     layoutForm->addRow("間隔:", m_spinPaperSpacing);
     layoutForm->addRow(m_chkCutFriendlyLayout);
     inspLayout->addWidget(layoutGroup);
 
-    connect(m_comboPaperSize, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this]{ if (!m_isDesigner) requestLayoutRefresh("paper size changed"); });
-    connect(m_chkLandscape, &QCheckBox::toggled, this, [this]{ if (!m_isDesigner) requestLayoutRefresh("orientation changed"); });
+    const auto updatePaperDimensions = [this, paperDimensionsLabel] {
+        QSize dimensions = m_comboPaperSize->currentData().toSize();
+        if (m_chkLandscape->isChecked()) {
+            dimensions.transpose();
+        }
+        paperDimensionsLabel->setText(QStringLiteral("%1 × %2 mm")
+                                          .arg(dimensions.width())
+                                          .arg(dimensions.height()));
+        m_chkLandscape->setText(m_chkLandscape->isChecked()
+                                    ? QStringLiteral("横向き")
+                                    : QStringLiteral("縦向き"));
+    };
+    connect(m_comboPaperSize, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this, updatePaperDimensions]{
+        updatePaperDimensions();
+        if (!m_isDesigner) requestLayoutRefresh("paper size changed");
+    });
+    connect(m_chkLandscape, &QCheckBox::toggled, this, [this, updatePaperDimensions]{
+        updatePaperDimensions();
+        if (!m_isDesigner) requestLayoutRefresh("orientation changed");
+    });
+    updatePaperDimensions();
     connect(m_spinPaperMargin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this]{ if (!m_isDesigner) requestLayoutRefresh("margin changed"); });
     connect(m_spinPaperSpacing, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this]{ if (!m_isDesigner) requestLayoutRefresh("spacing changed"); });
     connect(m_chkCutFriendlyLayout, &QCheckBox::toggled, this, [this]{ if (!m_isDesigner) requestLayoutRefresh("cut friendly changed"); });
@@ -3652,6 +3674,7 @@ void MainWindow::applyTheme(bool dark) {
                 QWidget#editInspector QGroupBox#pageSettingsGroup { margin-top: 3px; padding: 5px; }
                 QWidget#editInspector QGroupBox#checklistGroup { margin-top: 3px; padding: 5px; }
                 QWidget#editInspector QGroupBox#paperSettingsGroup { margin-top: 3px; padding: 5px; }
+                QWidget#editInspector QLabel#paperDimensions { color: #e8eef5; font-weight: 600; }
                 QWidget#editInspector QGroupBox::title { color: #e8eef5; font-weight: 600;
                     subcontrol-origin: margin; left: 9px; padding: 0 5px; }
                 QWidget#editInspector QToolButton#inspectorSectionHeader { background: transparent; color: #e8eef5;
@@ -3677,6 +3700,7 @@ void MainWindow::applyTheme(bool dark) {
                 QWidget#editInspector QGroupBox#pageSettingsGroup { margin-top: 3px; padding: 5px; }
                 QWidget#editInspector QGroupBox#checklistGroup { margin-top: 3px; padding: 5px; }
                 QWidget#editInspector QGroupBox#paperSettingsGroup { margin-top: 3px; padding: 5px; }
+                QWidget#editInspector QLabel#paperDimensions { color: #27324a; font-weight: 600; }
                 QWidget#editInspector QGroupBox::title { color: #27324a; font-weight: 600;
                     subcontrol-origin: margin; left: 9px; padding: 0 5px; }
                 QWidget#editInspector QToolButton#inspectorSectionHeader { background: transparent; color: #27324a;
