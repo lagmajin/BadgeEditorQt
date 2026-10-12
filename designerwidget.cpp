@@ -673,7 +673,8 @@ void DesignerWidget::drawBackground(QPainter* painter, const QRectF& rect) {
     const double mmToPx = Constants::kMmToPx;
     const double stepPx = std::max(1.0, m_gridSpacingMm * mmToPx);
     const double majorStepPx = stepPx * 5.0;
-    const bool simplifiedGrid = stepPx < 6.0;
+    const double screenStepPx = stepPx * std::abs(transform().m11());
+    const bool simplifiedGrid = screenStepPx < 3.0;
 
     painter->save();
     painter->setRenderHint(QPainter::Antialiasing, false);
