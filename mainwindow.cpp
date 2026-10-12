@@ -1234,7 +1234,6 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     m_actBatchAdd = m_designerToolbar->addAction("一括");
     connect(m_actBatchAdd, &QAction::triggered, this, [this]{ onBatchAdd(); });
     setMaterialIcon(m_actBatchAdd, QStringLiteral("library_add"));
-    m_designerToolbar->addSeparator();
     if (m_actDelete) {
         m_designerToolbar->addAction(m_actDelete);
     }
@@ -1303,19 +1302,10 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     connect(m_actOpenDesignerPerspective, &QAction::triggered, this, [this]{ openDesignerPerspective(); });
     m_actOpenDesignerPerspective->setShortcut(QKeySequence("Ctrl+E"));
     setMaterialIcon(m_actOpenDesignerPerspective, QStringLiteral("edit"));
-
-    for (auto* action : m_designerToolbar->actions()) {
-        if (action->isSeparator()) {
-            m_designerToolbar->removeAction(action);
-        }
-    }
-    for (auto* action : {m_actAddBadge, m_actBatchAdd, m_actMixedLayout, m_actSendToLayout}) {
-        m_designerToolbar->removeAction(action);
-    }
     m_designerToolbar->insertSeparator(m_actDelete ? m_actDelete : m_actDuplicate);
-    if (m_actOpenDesignerPerspective) {
-        m_designerToolbar->insertSeparator(m_actOpenDesignerPerspective);
-    }
+    m_designerToolbar->insertSeparator(m_actMixedLayout);
+    m_designerToolbar->insertSeparator(m_actSendToLayout);
+    m_designerToolbar->insertSeparator(m_actOpenDesignerPerspective);
 
     m_toolPalette = addToolBar(Qt::LeftToolBarArea, QStringLiteral("デザインツール"));
     m_toolPalette->setObjectName(QStringLiteral("toolPalette"));
