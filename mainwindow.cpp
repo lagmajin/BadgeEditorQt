@@ -1641,16 +1641,18 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     addSafetyGuideEntry(m_safetyGuideDesign, QColor(0xEF, 0x44, 0x44), Qt::DashLine);
     addSafetyGuideEntry(m_safetyGuideColor, QColor(0x22, 0xC5, 0x5E), Qt::SolidLine);
 
-    auto* selectionPlaceholder = new QGroupBox(QStringLiteral("オブジェクト設定"));
-    selectionPlaceholder->setObjectName(QStringLiteral("selectionPlaceholder"));
+    auto* selectionPlaceholder = new QGroupBox(QStringLiteral("オブジェクト設定"), m_toolPalette);
+    selectionPlaceholder->setObjectName(QStringLiteral("toolSelectionPlaceholder"));
+    selectionPlaceholder->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+    selectionPlaceholder->setMinimumWidth(252);
     m_selectionPlaceholder = selectionPlaceholder;
     auto* selectionPlaceholderLayout = new QVBoxLayout(selectionPlaceholder);
     selectionPlaceholderLayout->setContentsMargins(0, 0, 0, 0);
     auto* selectionPlaceholderText = new QLabel(QStringLiteral("キャンバス上のオブジェクトを選択すると、編集項目が表示されます。"), selectionPlaceholder);
-    selectionPlaceholderText->setObjectName(QStringLiteral("selectionPlaceholderText"));
+    selectionPlaceholderText->setObjectName(QStringLiteral("toolSelectionPlaceholderText"));
     selectionPlaceholderText->setWordWrap(true);
     selectionPlaceholderLayout->addWidget(selectionPlaceholderText);
-    inspLayout->addWidget(selectionPlaceholder);
+    m_toolPalette->addWidget(selectionPlaceholder);
 
     // Properties group
     auto* propGroup = new QGroupBox("オブジェクト情報");
@@ -3778,6 +3780,9 @@ void MainWindow::applyTheme(bool dark) {
             QToolBar#toolPalette QToolButton:hover { background: #293a50; border-color: #405675; }
             QToolBar#toolPalette QLabel#toolPaletteHeading { color: #7F9BFF; font-weight: 600; padding: 4px 9px; border-bottom: 2px solid #4059ed; }
             QToolBar#toolPalette QLabel#toolPaletteHint { color: #91a8c4; font-size: 10pt; padding: 0 8px 5px 55px; }
+            QToolBar#toolPalette QGroupBox#toolSelectionPlaceholder { background: transparent; color: #dbe5f3; border: 0; border-top: 1px solid #344358; border-radius: 0; margin: 8px 5px 0 5px; padding: 8px 9px 4px 9px; }
+            QToolBar#toolPalette QGroupBox#toolSelectionPlaceholder::title { color: #dbe5f3; font-weight: 600; subcontrol-origin: margin; left: 4px; padding: 0 5px; }
+            QToolBar#toolPalette QLabel#toolSelectionPlaceholderText { color: #91a8c4; padding: 4px 4px; }
             QToolBar QToolButton:checked { background: #315bb8; border-color: #6385e8; color: white; }
             QToolBar QToolButton#designerModeAction:checked { background: #315bb8; }
             QToolBar QToolButton#layoutModeAction:checked { background: #315bb8; }
@@ -3811,6 +3816,9 @@ void MainWindow::applyTheme(bool dark) {
             QToolBar#toolPalette QToolButton:hover { background: #2d3e55; border-color: #405675; }
             QToolBar#toolPalette QLabel#toolPaletteHeading { color: #7F9BFF; font-weight: 600; padding: 4px 9px; border-bottom: 2px solid #4059ed; }
             QToolBar#toolPalette QLabel#toolPaletteHint { color: #91a8c4; font-size: 10pt; padding: 0 8px 5px 55px; }
+            QToolBar#toolPalette QGroupBox#toolSelectionPlaceholder { background: transparent; color: #dbe5f3; border: 0; border-top: 1px solid #344358; border-radius: 0; margin: 8px 5px 0 5px; padding: 8px 9px 4px 9px; }
+            QToolBar#toolPalette QGroupBox#toolSelectionPlaceholder::title { color: #dbe5f3; font-weight: 600; subcontrol-origin: margin; left: 4px; padding: 0 5px; }
+            QToolBar#toolPalette QLabel#toolSelectionPlaceholderText { color: #91a8c4; padding: 4px 4px; }
             QToolBar QToolButton:checked { background: #e9edff; border-color: #b8c4ff; color: #354fc0; }
             QToolBar QToolButton#designerModeAction,
             QToolBar QToolButton#layoutModeAction { padding: 8px 14px; font-weight: 600; }
