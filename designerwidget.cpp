@@ -714,23 +714,17 @@ void DesignerWidget::drawForeground(QPainter* painter, const QRectF& rect) {
     if (m_graphicItems.isEmpty()) {
         painter->save();
         const bool dark = palette().color(QPalette::Window).lightness() < 128;
-        const QColor card = dark ? QColor(28, 38, 52, 238) : QColor(255, 255, 255, 242);
-        const QColor border = dark ? QColor(75, 95, 122) : QColor(215, 222, 235);
         const QColor title = dark ? QColor(241, 245, 252) : QColor(37, 48, 69);
         const QColor hint = dark ? QColor(177, 190, 208) : QColor(105, 117, 140);
-        const QRectF cardRect(rect.center().x() - 245.0, rect.center().y() + 116.0, 490.0, 72.0);
-
-        painter->setRenderHint(QPainter::Antialiasing, true);
-        painter->setPen(QPen(border, 1.0));
-        painter->setBrush(card);
-        painter->drawRoundedRect(cardRect, 12.0, 12.0);
+        const QRectF titleRect(rect.center().x() - 240.0, rect.center().y() - 31.0, 480.0, 30.0);
+        const QRectF hintRect(rect.center().x() - 270.0, rect.center().y() + 5.0, 540.0, 48.0);
 
         QFont titleFont = painter->font();
-        titleFont.setPointSizeF(titleFont.pointSizeF() + 1.0);
+        titleFont.setPointSizeF(titleFont.pointSizeF() + 2.0);
         titleFont.setBold(true);
         painter->setFont(titleFont);
         painter->setPen(title);
-        painter->drawText(cardRect.adjusted(16.0, 10.0, -16.0, -34.0),
+        painter->drawText(titleRect,
                           Qt::AlignCenter,
                           QStringLiteral("ここにバッジを追加してください"));
 
@@ -739,9 +733,9 @@ void DesignerWidget::drawForeground(QPainter* painter, const QRectF& rect) {
         hintFont.setBold(false);
         painter->setFont(hintFont);
         painter->setPen(hint);
-        painter->drawText(cardRect.adjusted(12.0, 35.0, -12.0, -8.0),
+        painter->drawText(hintRect,
                           Qt::AlignCenter,
-                          QStringLiteral("画像をドロップするか、左の「画像」から読み込めます"));
+                          QStringLiteral("画像をドロップするか、左の「画像」から追加できます"));
         painter->restore();
     }
 
