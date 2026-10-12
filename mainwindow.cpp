@@ -3661,8 +3661,8 @@ void MainWindow::updateSafetyGuideHud() {
     const double finishMm = activeGuideSizeMm();
     const double bleedDiameterMm = finishMm + 3.0;
     const double safeDiameterMm = std::max(0.0, finishMm - 4.0);
-    const QColor guideRed(0xEC, 0x79, 0x79);
-    const QColor guideGreen(0x69, 0xD6, 0x8D);
+    const QColor guideRed(0xEF, 0x44, 0x44);
+    const QColor guideGreen(0x22, 0xC5, 0x5E);
     const QColor guideNeutral(0xCF, 0xD9, 0xE5);
     setLabel(m_safetyGuideDesign, QStringLiteral("巻き込み線"),
              QStringLiteral("直径 %1 mm").arg(bleedDiameterMm, 0, 'f', 1), guideRed);
