@@ -2102,8 +2102,8 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     m_radioCanvasTransparent = new QRadioButton(QStringLiteral("透明（チェック柄）"), backgroundOptions);
     for (auto* option : {m_radioCanvasGrid, m_radioCanvasWhite, m_radioCanvasTransparent}) {
         option->setObjectName(QStringLiteral("canvasBackgroundOption"));
-        option->setIconSize(QSize(32, 21));
-        option->setMinimumHeight(34);
+        option->setIconSize(QSize(28, 18));
+        option->setMinimumHeight(30);
     }
     m_radioCanvasGrid->setIcon(makeBackgroundSwatch(CanvasBackgroundMode::PrintGuideGrid));
     m_radioCanvasWhite->setIcon(makeBackgroundSwatch(CanvasBackgroundMode::White));
@@ -2111,6 +2111,14 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     m_radioCanvasGrid->setToolTip(QStringLiteral("印刷ガイドに合わせたグリッドを表示します"));
     m_radioCanvasWhite->setToolTip(QStringLiteral("白い背景でバッジの見た目を確認します"));
     m_radioCanvasTransparent->setToolTip(QStringLiteral("透明部分をチェック柄で表示します"));
+    const auto makeCanvasSubheading = [canvasGroup](const QString& text) {
+        auto* heading = new QLabel(text, canvasGroup);
+        QFont font = heading->font();
+        font.setWeight(QFont::DemiBold);
+        heading->setFont(font);
+        heading->setContentsMargins(0, 6, 0, 1);
+        return heading;
+    };
     const auto makeGuideSwatch = [](const QColor& color, Qt::PenStyle style) {
         QPixmap swatch(34, 14);
         swatch.fill(Qt::transparent);
@@ -2144,11 +2152,13 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     canvasForm->addRow(QStringLiteral("バッジサイズ:"), m_comboDefaultBadgeSize);
     canvasForm->insertRow(1, m_safetyGuideGroup);
     canvasForm->addRow(QStringLiteral("ガイド表示:"), guideVisibilityOptions);
+    canvasForm->addRow(makeCanvasSubheading(QStringLiteral("グリッド")));
     canvasForm->addRow(m_chkGridVisible);
     canvasForm->addRow(QStringLiteral("間隔:"), m_spinGridSpacing);
     canvasForm->addRow(m_chkRulersVisible);
     canvasForm->addRow(m_chkSnapToGrid);
-    canvasForm->addRow(QStringLiteral("背景:"), backgroundOptions);
+    canvasForm->addRow(makeCanvasSubheading(QStringLiteral("キャンバス背景")));
+    canvasForm->addRow(backgroundOptions);
     inspLayout->insertWidget(0, canvasGroup);
     connect(m_chkGridVisible, &QCheckBox::toggled, this, [this](bool on) {
         if (m_actGridVisible) {
@@ -3777,7 +3787,7 @@ void MainWindow::applyTheme(bool dark) {
                 QWidget#editInspector QCheckBox#guideVisibilityToggle:checked { background: #314b70; border-color: #6385e8; }
                 QWidget#editInspector QCheckBox#guideVisibilityToggle:hover { border-color: #6385e8; }
                 QWidget#editInspector QRadioButton#canvasBackgroundOption { background: #202f40; color: #dbe5f3;
-                    border: 1px solid #3b4b5d; border-radius: 6px; padding: 5px 8px; spacing: 8px; }
+                    border: 1px solid #3b4b5d; border-radius: 6px; padding: 4px 6px; spacing: 6px; }
                 QWidget#editInspector QRadioButton#canvasBackgroundOption:hover { border-color: #6385e8; }
                 QWidget#editInspector QRadioButton#canvasBackgroundOption:checked { background: #314b70; border-color: #6385e8; color: white; }
                 QWidget#editInspector QGroupBox::title { color: #e8eef5; font-weight: 600;
@@ -3813,7 +3823,7 @@ void MainWindow::applyTheme(bool dark) {
                 QWidget#editInspector QCheckBox#guideVisibilityToggle:checked { background: #e9edff; border-color: #4258d0; }
                 QWidget#editInspector QCheckBox#guideVisibilityToggle:hover { border-color: #aab8de; }
                 QWidget#editInspector QRadioButton#canvasBackgroundOption { background: #f7f8fb; color: #35415a;
-                    border: 1px solid #d6dce8; border-radius: 6px; padding: 5px 8px; spacing: 8px; }
+                    border: 1px solid #d6dce8; border-radius: 6px; padding: 4px 6px; spacing: 6px; }
                 QWidget#editInspector QRadioButton#canvasBackgroundOption:hover { border-color: #aab8de; }
                 QWidget#editInspector QRadioButton#canvasBackgroundOption:checked { background: #e9edff; border-color: #4258d0; color: #3547a0; }
                 QWidget#editInspector QGroupBox::title { color: #27324a; font-weight: 600;
