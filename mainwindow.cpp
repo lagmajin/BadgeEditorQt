@@ -3050,12 +3050,28 @@ void MainWindow::onInspectorChanged() {
 }
 
 void MainWindow::setInspectorControlsEnabled(bool on) {
-    if (m_propGroup) m_propGroup->setEnabled(on);
+    const bool showSelectionControls = on && m_isDesigner;
+    if (m_propGroup) {
+        m_propGroup->setEnabled(on);
+        m_propGroup->setVisible(showSelectionControls);
+    }
     if (m_checklistGroup) m_checklistGroup->setEnabled(true);
-    if (m_colorGroup) m_colorGroup->setEnabled(on);
-    if (m_layerGroup) m_layerGroup->setEnabled(on);
-    if (m_guideGroup) m_guideGroup->setEnabled(on);
-    if (m_effectGroup) m_effectGroup->setEnabled(on);
+    if (m_colorGroup) {
+        m_colorGroup->setEnabled(on);
+        m_colorGroup->setVisible(showSelectionControls);
+    }
+    if (m_layerGroup) {
+        m_layerGroup->setEnabled(on);
+        m_layerGroup->setVisible(showSelectionControls);
+    }
+    if (m_guideGroup) {
+        m_guideGroup->setEnabled(on);
+        m_guideGroup->setVisible(showSelectionControls);
+    }
+    if (m_effectGroup) {
+        m_effectGroup->setEnabled(on);
+        m_effectGroup->setVisible(showSelectionControls);
+    }
 }
 
 QList<QList<BadgeItem>> MainWindow::currentLayoutPages() const {
