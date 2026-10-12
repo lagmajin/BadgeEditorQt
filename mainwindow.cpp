@@ -17,6 +17,7 @@ import viewportbackend;
 #include <QMenuBar>
 #include <QMenu>
 #include <QAction>
+#include <QActionGroup>
 #include <QFileDialog>
 #include <QMessageBox>
 #include <QVBoxLayout>
@@ -1156,12 +1157,15 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     m_commonToolbar->setFont(uiFont);
     configureToolbar(m_commonToolbar, Qt::ToolButtonTextBesideIcon);
     m_commonToolbar->setObjectName(QStringLiteral("workspaceToolbar"));
-    m_commonToolbar->setMinimumHeight(54);
+    m_commonToolbar->setMinimumHeight(64);
     m_commonToolbar->setIconSize(QSize(20, 20));
     m_actDesigner = m_commonToolbar->addAction("DESIGNER");
     m_actDesigner->setObjectName(QStringLiteral("designerModeAction"));
     m_actDesigner->setCheckable(true);
     m_actDesigner->setChecked(true);
+    auto* modeGroup = new QActionGroup(this);
+    modeGroup->setExclusive(true);
+    modeGroup->addAction(m_actDesigner);
     setMaterialIcon(m_actDesigner, QStringLiteral("edit"));
     if (auto* designerButton = m_commonToolbar->widgetForAction(m_actDesigner)) {
         designerButton->setObjectName(QStringLiteral("designerModeAction"));
@@ -1169,9 +1173,15 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     m_actLayout = m_commonToolbar->addAction("LAYOUT");
     m_actLayout->setObjectName(QStringLiteral("layoutModeAction"));
     m_actLayout->setCheckable(true);
+    modeGroup->addAction(m_actLayout);
     setMaterialIcon(m_actLayout, QStringLiteral("grid_view"));
     if (auto* layoutButton = m_commonToolbar->widgetForAction(m_actLayout)) {
         layoutButton->setObjectName(QStringLiteral("layoutModeAction"));
+    }
+    for (auto* action : {m_actDesigner, m_actLayout}) {
+        if (auto* button = qobject_cast<QToolButton*>(m_commonToolbar->widgetForAction(action))) {
+            button->setMinimumSize(146, 44);
+        }
     }
     connect(m_actDesigner, &QAction::triggered, this, [this]{ onModeChanged(true); });
     connect(m_actLayout, &QAction::triggered, this, [this]{ onModeChanged(false); });
