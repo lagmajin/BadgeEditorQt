@@ -1145,15 +1145,20 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     m_commonToolbar = addToolBar("共通");
     m_commonToolbar->setFont(uiFont);
     configureToolbar(m_commonToolbar, Qt::ToolButtonTextBesideIcon);
+    m_commonToolbar->setObjectName(QStringLiteral("workspaceToolbar"));
+    m_commonToolbar->setMinimumHeight(54);
+    m_commonToolbar->setIconSize(QSize(20, 20));
     m_commonToolbar->addAction(actNew);
     m_commonToolbar->addAction(actOpen);
     m_commonToolbar->addAction(actSave);
     m_commonToolbar->addSeparator();
     m_actDesigner = m_commonToolbar->addAction("DESIGNER");
+    m_actDesigner->setObjectName(QStringLiteral("designerModeAction"));
     m_actDesigner->setCheckable(true);
     m_actDesigner->setChecked(true);
     setMaterialIcon(m_actDesigner, QStringLiteral("edit"));
     m_actLayout = m_commonToolbar->addAction("LAYOUT");
+    m_actLayout->setObjectName(QStringLiteral("layoutModeAction"));
     m_actLayout->setCheckable(true);
     setMaterialIcon(m_actLayout, QStringLiteral("grid_view"));
     connect(m_actDesigner, &QAction::triggered, this, [this]{ onModeChanged(true); });
@@ -1170,6 +1175,9 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     setMaterialIcon(m_actZoomOut, QStringLiteral("zoom_out"));
     m_commonToolbar->addSeparator();
     m_zoomLabel = new QLabel("100%");
+    m_zoomLabel->setObjectName(QStringLiteral("zoomValueLabel"));
+    m_zoomLabel->setMinimumWidth(54);
+    m_zoomLabel->setAlignment(Qt::AlignCenter);
     m_commonToolbar->addWidget(m_zoomLabel);
 
     m_designerToolbar = addToolBar("Designer");
@@ -3131,13 +3139,21 @@ void MainWindow::applyTheme(bool dark) {
     const QString toolbarStyle = dark
         ? QStringLiteral(R"(
             QToolBar { background: #202a36; border: 0; spacing: 5px; }
-            QToolBar QToolButton { color: #edf3f9; border: 1px solid transparent;
-                border-radius: 5px; padding: 6px 8px; }
-            QToolBar QToolButton:hover { background: #33485f; }
-            QToolBar QToolButton:checked { background: #2e78d2; border-color: #4c95ef; color: white; }
-            QToolBar QToolButton#sendToLayoutButton { background: #2e78d2;
-                border-color: #4c95ef; color: white; font-weight: 600; }
-            QToolBar QToolButton#sendToLayoutButton:hover { background: #438dea; }
+            QToolBar QToolButton { color: #e9eff8; border: 1px solid transparent;
+                border-radius: 7px; padding: 7px 10px; }
+            QToolBar QToolButton:hover { background: #303f53; border-color: #40536b; }
+            QToolBar QToolButton:checked { background: #315bb8; border-color: #6385e8; color: white; }
+            QToolBar QToolButton#designerModeAction:checked { background: #315bb8; }
+            QToolBar QToolButton#layoutModeAction:checked { background: #315bb8; }
+            QToolBar QToolButton#sendToLayoutButton { background: #315bb8;
+                border-color: #6385e8; color: white; font-weight: 600; }
+            QToolBar QToolButton#sendToLayoutButton:hover { background: #426fd0; }
+            QToolBar#workspaceToolbar QToolButton { padding: 8px 11px; }
+            QToolBar#workspaceToolbar QToolButton:hover { background: #303f53; }
+            QToolBar#workspaceToolbar QToolButton#designerModeAction,
+            QToolBar#workspaceToolbar QToolButton#layoutModeAction { padding: 8px 14px; font-weight: 600; }
+            QLabel#zoomValueLabel { color: #eef2fb; background: #192430;
+                border: 1px solid #3b4b5d; border-radius: 6px; padding: 5px 8px; }
             QToolBar QListWidget#layoutPageStrip { background: #192430; color: #edf3f9;
                 border: 1px solid #3b4b5d; border-radius: 5px; padding: 1px; }
             QToolBar QListWidget#layoutPageStrip::item { background: transparent; color: #edf3f9;
@@ -3145,7 +3161,27 @@ void MainWindow::applyTheme(bool dark) {
             QToolBar QListWidget#layoutPageStrip::item:selected { background: #334d68;
                 border-color: #4c95ef; color: white; }
         )")
-        : QString();
+        : QStringLiteral(R"(
+            QToolBar { background: #f8f9fc; border: 0; spacing: 5px; }
+            QToolBar QToolButton { color: #283249; border: 1px solid transparent;
+                border-radius: 7px; padding: 7px 10px; }
+            QToolBar QToolButton:hover { background: #edf0f8; border-color: #d9deeb; }
+            QToolBar QToolButton:checked { background: #e9edff; border-color: #b8c4ff; color: #354fc0; }
+            QToolBar QToolButton#designerModeAction,
+            QToolBar QToolButton#layoutModeAction { padding: 8px 14px; font-weight: 600; }
+            QToolBar QToolButton#sendToLayoutButton { background: #4258d0;
+                border-color: #4258d0; color: white; font-weight: 600; }
+            QToolBar QToolButton#sendToLayoutButton:hover { background: #3549bc; }
+            QToolBar#workspaceToolbar QToolButton { padding: 8px 11px; }
+            QLabel#zoomValueLabel { color: #303a54; background: #ffffff;
+                border: 1px solid #dce1ed; border-radius: 6px; padding: 5px 8px; }
+            QToolBar QListWidget#layoutPageStrip { background: #ffffff; color: #303a54;
+                border: 1px solid #dce1ed; border-radius: 5px; padding: 1px; }
+            QToolBar QListWidget#layoutPageStrip::item { background: transparent; color: #303a54;
+                border: 1px solid transparent; border-radius: 3px; padding: 1px; }
+            QToolBar QListWidget#layoutPageStrip::item:selected { background: #e9edff;
+                border-color: #b8c4ff; color: #354fc0; }
+        )");
     if (m_commonToolbar) m_commonToolbar->setStyleSheet(toolbarStyle);
     if (m_designerToolbar) m_designerToolbar->setStyleSheet(toolbarStyle);
     if (m_layoutToolbar) m_layoutToolbar->setStyleSheet(toolbarStyle);
