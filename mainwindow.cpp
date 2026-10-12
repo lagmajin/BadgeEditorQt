@@ -1419,13 +1419,6 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     m_layoutPageLabel->setMinimumWidth(56);
     m_layoutPageLabel->setAlignment(Qt::AlignCenter);
     m_layoutToolbar->addWidget(m_layoutPageLabel);
-    m_layoutPageCombo = new QComboBox;
-    m_layoutPageCombo->setMinimumWidth(104);
-    m_layoutPageCombo->setSizeAdjustPolicy(QComboBox::AdjustToContents);
-    connect(m_layoutPageCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int index) {
-        onLayoutPageSelected(index);
-    });
-    m_layoutToolbar->addWidget(m_layoutPageCombo);
     m_layoutPageThumbList = new QListWidget;
     m_layoutPageThumbList->setObjectName(QStringLiteral("layoutPageStrip"));
     m_layoutPageThumbList->setViewMode(QListView::IconMode);
@@ -3152,23 +3145,6 @@ void MainWindow::updateLayoutPageUi() {
     if (m_actLayoutPageNext) {
         m_actLayoutPageNext->setEnabled(packedLayout && pageIndex + 1 < pageCount);
     }
-    if (m_layoutPageCombo) {
-        const QSignalBlocker blocker(m_layoutPageCombo);
-        m_layoutPageCombo->clear();
-        if (packedLayout) {
-            for (int i = 0; i < pageCount; ++i) {
-                m_layoutPageCombo->addItem(QStringLiteral("%1 / %2")
-                                               .arg(layoutPageTitle(i),
-                                                    QString::number(pageCount)));
-            }
-            m_layoutPageCombo->setCurrentIndex(pageIndex);
-            m_layoutPageCombo->setEnabled(true);
-        } else {
-            m_layoutPageCombo->addItem(layoutPageTitle(0));
-            m_layoutPageCombo->setCurrentIndex(0);
-            m_layoutPageCombo->setEnabled(false);
-        }
-    }
     if (m_layoutPageThumbList) {
         const QSignalBlocker blocker(m_layoutPageThumbList);
         m_layoutPageThumbList->clear();
@@ -3655,9 +3631,6 @@ void MainWindow::updateToolbarsForMode() {
     }
     if (m_layoutPageLabel) {
         m_layoutPageLabel->setVisible(!designer);
-    }
-    if (m_layoutPageCombo) {
-        m_layoutPageCombo->setVisible(!designer);
     }
     if (m_layoutPageThumbList) {
         m_layoutPageThumbList->setVisible(!designer);

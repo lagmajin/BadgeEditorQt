@@ -226,7 +226,6 @@ private:
     QAction* m_actLayoutPagePrev = nullptr;
     QAction* m_actLayoutPageNext = nullptr;
     QLabel* m_layoutPageLabel = nullptr;
-    QComboBox* m_layoutPageCombo = nullptr;
     QListWidget* m_layoutPageThumbList = nullptr;
 
     // Inspector - properties
