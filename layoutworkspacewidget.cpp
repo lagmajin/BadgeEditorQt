@@ -575,6 +575,7 @@ void renderDocumentPage(const badge::DocumentData& document,
                         QPainter* painter,
                         const QRectF& target,
                         bool includeGuides,
+                        double rasterDpi,
                         QHash<QString, QPixmap>* sharedCache = nullptr) {
     if (!painter) {
         return;
@@ -582,7 +583,8 @@ void renderDocumentPage(const badge::DocumentData& document,
     QGraphicsScene scene;
     QHash<QString, QPixmap> localCache;
     auto& cache = sharedCache ? *sharedCache : localCache;
-    populateSceneForDocument(&scene, document, cache, includeGuides);
+    populateSceneForDocument(&scene, document, cache, includeGuides, rasterDpi);
+    setSceneItemsVisible(sceneItemsByTag(&scene, QString::fromLatin1(kSafeGuideTag)), false);
     if (!includeGuides) {
         setSceneItemsVisible(sceneItemsByTag(&scene, QString::fromLatin1(kSafeGuideTag)), false);
         setSceneItemsVisible(sceneItemsByTag(&scene, QString::fromLatin1(kEmptyHintTag)), false);
@@ -853,7 +855,7 @@ bool LayoutWorkspaceWidget::exportPdf(const QString& filePath, int dpi, QPdfWrit
     QPainter painter(&writer);
     painter.setRenderHints(QPainter::Antialiasing | QPainter::SmoothPixmapTransform, true);
     const QRectF target(QPointF(0, 0), QSizeF(writer.width(), writer.height()));
-    renderDocumentScene(m_scene, m_impl->document, &painter, Constants::kDisplayDpi, target);
+    renderDocumentPage(m_impl->document, &painter, target, includeGuides, dpi);
     drawPdfLayoutSummary(&painter, target, m_impl->document);
     painter.end();
     setSceneItemsVisible(safeGuides, true);
@@ -912,7 +914,7 @@ bool LayoutWorkspaceWidget::exportPdf(const QList<QList<BadgeItem>>& pages,
         doc.badges = badge::qt::toCoreBadges(pages[i]);
         const QRectF target(QPointF(0, 0), QSizeF(writer.width(), writer.height()));
         QGraphicsScene scene;
-        populateSceneForDocument(&scene, doc, renderCache, includeGuides);
+        populateSceneForDocument(&scene, doc, renderCache, includeGuides, dpi);
         const auto safeGuides = sceneItemsByTag(&scene, QString::fromLatin1(kSafeGuideTag));
         const auto emptyHints = sceneItemsByTag(&scene, QString::fromLatin1(kEmptyHintTag));
         const auto bleedGuides = sceneItemsByTag(&scene, QString::fromLatin1(kBleedGuideTag));
@@ -976,7 +978,7 @@ bool LayoutWorkspaceWidget::print(QPrinter* printer, bool includeGuides) const {
     const QRect fullRect = printer->pageLayout().fullRectPixels(printer->resolution());
     painter.fillRect(fullRect, Qt::white);
     const QRectF target(QPointF(0, 0), QSizeF(fullRect.size()));
-    renderDocumentScene(m_scene, m_impl->document, &painter, Constants::kDisplayDpi, target);
+    renderDocumentPage(m_impl->document, &painter, target, includeGuides, printer->resolution());
     painter.end();
 
     setSceneItemsVisible(safeGuides, true);
@@ -1011,7 +1013,7 @@ bool LayoutWorkspaceWidget::print(QPrinter* printer,
         doc.badges = badge::qt::toCoreBadges(pages[i]);
         painter.fillRect(fullRect, Qt::white);
         QGraphicsScene scene;
-        populateSceneForDocument(&scene, doc, renderCache, includeGuides);
+        populateSceneForDocument(&scene, doc, renderCache, includeGuides, printer->resolution());
         const auto safeGuides = sceneItemsByTag(&scene, QString::fromLatin1(kSafeGuideTag));
         const auto emptyHints = sceneItemsByTag(&scene, QString::fromLatin1(kEmptyHintTag));
         const auto bleedGuides = sceneItemsByTag(&scene, QString::fromLatin1(kBleedGuideTag));

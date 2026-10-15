@@ -18,7 +18,7 @@ QRectF fitRectInside(const QRectF& target, const QSizeF& sourceSize) {
 }
 
 QRectF badgeContentRectPx(const BadgeItem& badge) {
-    const double margin = badge.isSelected ? 3.0 : 2.0;
+    constexpr double margin = 2.0;
     return QRectF(margin, margin, badge.widthMm * Constants::kMmToPx, badge.heightMm * Constants::kMmToPx);
 }
 

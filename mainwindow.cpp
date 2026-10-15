@@ -785,14 +785,20 @@ QImage renderTransferCropImage(DesignerWidget& designer, BadgeGraphicItem& item,
     Q_UNUSED(designer);
     const double pxPerMm = Constants::kMmToPx;
     const double transferDiameterMm = std::max(0.1, guideSizeMm);
-    const int transferDiameterPx = std::max(1, int(std::round(transferDiameterMm * pxPerMm)));
-    const QRectF transferRectScene(guideCenterScene.x() - transferDiameterPx * 0.5,
-                                   guideCenterScene.y() - transferDiameterPx * 0.5,
-                                   transferDiameterPx,
-                                   transferDiameterPx);
+    // Keep scene geometry at display DPI; rasterize separately at print quality.
+    constexpr double transferDpi = 1200.0;
+    const double sceneDiameter = transferDiameterMm * pxPerMm;
+    const int transferDiameterPx = std::max(1, int(std::ceil(transferDiameterMm * transferDpi / Constants::kMmPerInch)));
+    const QRectF transferRectScene(guideCenterScene.x() - sceneDiameter * 0.5,
+                                   guideCenterScene.y() - sceneDiameter * 0.5,
+                                   sceneDiameter,
+                                   sceneDiameter);
 
     QImage image(QSize(transferDiameterPx, transferDiameterPx), QImage::Format_ARGB32_Premultiplied);
     image.fill(Qt::transparent);
+    const int dotsPerMeter = int(std::round(transferDpi * 1000.0 / Constants::kMmPerInch));
+    image.setDotsPerMeterX(dotsPerMeter);
+    image.setDotsPerMeterY(dotsPerMeter);
 
     QPainter painter(&image);
     painter.setRenderHint(QPainter::Antialiasing, true);
@@ -801,10 +807,12 @@ QImage renderTransferCropImage(DesignerWidget& designer, BadgeGraphicItem& item,
     QPainterPath clip;
     clip.addEllipse(QRectF(0.0, 0.0, transferDiameterPx, transferDiameterPx));
     painter.setClipPath(clip);
-    QTransform world;
-    world.translate(-transferRectScene.left(), -transferRectScene.top());
-    world *= item.sceneTransform();
-    painter.setWorldTransform(world);
+    const double rasterScale = transferDiameterPx / sceneDiameter;
+    const QTransform sceneToRaster(rasterScale, 0.0, 0.0, rasterScale,
+                                   -transferRectScene.left() * rasterScale,
+                                   -transferRectScene.top() * rasterScale);
+    // Qt composes row-vector transforms: local -> scene -> crop pixels.
+    painter.setWorldTransform(item.sceneTransform() * sceneToRaster);
     paintTransferBadgeContent(painter, item.badge());
     painter.end();
     return image;
@@ -1318,7 +1326,8 @@ MainWindow::MainWindow(QWidget* parent)
     m_designerToolbar->insertSeparator(m_actMixedLayout);
     m_designerToolbar->insertSeparator(m_actSendToLayout);
 
-    m_toolPalette = addToolBar(Qt::LeftToolBarArea, QStringLiteral("デザインツール"));
+    m_toolPalette = new QToolBar(QStringLiteral("デザインツール"), this);
+    addToolBar(Qt::LeftToolBarArea, m_toolPalette);
     m_toolPalette->setObjectName(QStringLiteral("toolPalette"));
     m_toolPalette->setAllowedAreas(Qt::LeftToolBarArea);
     m_toolPalette->setFont(uiFont);
@@ -3932,7 +3941,7 @@ void MainWindow::applyTheme(bool dark) {
                 QWidget#editInspector QPushButton { background: #eef1fa; color: #3547a0;
                     border: 1px solid #d5dbef; border-radius: 6px; padding: 6px 9px; }
                 QWidget#editInspector QPushButton:hover { background: #e3e9fb; border-color: #bcc8f0; }
-            )")
+            )"));
     }
     if (m_dockStyleManager) {
         m_dockStyleManager->applyTheme(QApplication::palette());

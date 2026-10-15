@@ -431,7 +431,7 @@ QRectF BadgeGraphicItem::contentRectPx() const {
     const double mmToPx = Constants::kMmToPx;
     const double pw = m_badge.widthMm * mmToPx;
     const double ph = m_badge.heightMm * mmToPx;
-    const double margin = m_badge.isSelected ? 3.0 : 2.0;
+    constexpr double margin = 2.0;
     return QRectF(margin, margin, pw, ph);
 }
 
@@ -599,7 +599,7 @@ void BadgeGraphicItem::rebuildPreviewCache(const QSize& pixelSize) {
     painter.translate(-r.topLeft());
 
     bool drewAnything = false;
-    const QRectF localRect(QPointF(0.0, 0.0), r.size());
+    const QRectF localRect = r;
     if (shouldClipDesignerPreview()) {
         QPainterPath path;
         path.addEllipse(localRect);
