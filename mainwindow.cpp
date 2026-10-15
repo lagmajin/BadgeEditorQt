@@ -1391,8 +1391,8 @@ MainWindow::MainWindow(QWidget* parent)
     m_actBatchAdd->setText(QStringLiteral("一括追加"));
     m_actBatchAdd->setToolTip(QStringLiteral("画像をまとめてバッジとして追加"));
     m_actMixedLayout->setToolTip(QStringLiteral("複数バッジを面付け"));
-    m_actSendToLayout->setText(QStringLiteral("配置へ"));
-    m_actSendToLayout->setToolTip(QStringLiteral("バッジを配置確認へ送る"));
+    m_actSendToLayout->setText(QStringLiteral("印刷配置を作成"));
+    m_actSendToLayout->setToolTip(QStringLiteral("Designer上のバッジから印刷用の配置を作成し、配置確認を開きます。1個なら用紙内に繰り返し配置し、複数なら自動で面付けします。"));
     for (auto* action : {m_actDelete, m_actDuplicate, m_actMixedLayout}) {
         if (!action) {
             continue;
@@ -3746,6 +3746,7 @@ void MainWindow::onSendToLayout() {
         m_layoutOverflowSummary.clear();
         requestDiagnosticsRefresh("transfer target empty");
         appendLog(QStringLiteral("中央ガイドの安全域内に送れるバッジがありません"));
+        statusBar()->showMessage(QStringLiteral("配置を作成できません: 中央ガイドの安全域内にバッジがありません"), 6000);
         return;
     }
     if (guideBadges.size() <= 1) {
@@ -3761,6 +3762,7 @@ void MainWindow::onSendToLayout() {
     flushInternalEvents();
     m_skipNextLayoutSync = true;
     openLayoutPerspective();
+    statusBar()->showMessage(QStringLiteral("印刷配置を作成しました（元デザイン %1 件）").arg(guideBadges.size()), 5000);
 }
 
 void MainWindow::onShowTransferDebug() {
