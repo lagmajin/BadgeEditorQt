@@ -1,4 +1,5 @@
 #include "badgegraphicitem.h"
+#include "badge_text_rendering.h"
 #include "imageprocessor.h"
 #include "constants.h"
 #include <QPainterPath>
@@ -684,13 +685,7 @@ void BadgeGraphicItem::renderCore(QPainter* painter, const QRectF& r, bool simpl
     painter->drawImage(r, m_previewCache);
 
     if (!simplifiedPreview && !m_badge.displayText.isEmpty()) {
-        painter->setOpacity(1.0);
-        QFont font("Arial", 10);
-        painter->setFont(font);
-        painter->setPen(Qt::white);
-        painter->drawText(r.adjusted(1,1,1,1), Qt::AlignCenter, m_badge.displayText);
-        painter->setPen(Qt::black);
-        painter->drawText(r, Qt::AlignCenter, m_badge.displayText);
+        badge::rendering::drawBadgeDisplayText(painter, r, m_badge.displayText);
     }
     painter->restore();
 }

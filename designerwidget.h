@@ -16,6 +16,7 @@
 #include <QKeyEvent>
 #include <QMouseEvent>
 #include <wobjectdefs.h>
+#include "canvasbackgroundmode.h"
 #include "badgeitem.h"
 #include "badgegraphicitem.h"
 #include "guideitem.h"
@@ -51,6 +52,8 @@ public:
     void setBleedVisible(bool b);
     void setVisibleVisible(bool b);
     void setGridVisible(bool b);
+    void setRulersVisible(bool b);
+    void setCanvasBackgroundMode(CanvasBackgroundMode mode);
     void setSnapToGrid(bool b);
     void setGridSpacingMm(double mm);
     bool gridVisible() const { return m_gridVisible; }
@@ -73,6 +76,8 @@ public:
     void setBatchMode(bool on);
     void setExperimentalGpuViewport(bool on);
     void setSafetyGuideEntries(const QList<SafetyGuideEntry>& entries);
+    double zoomFactor() const { return transform().m11(); }
+    void setZoomFactor(double factor);
 
 Q_SIGNALS:
     void badgeSelected(BadgeGraphicItem* item) W_SIGNAL(badgeSelected, item);
@@ -85,6 +90,7 @@ Q_SIGNALS:
     void nudgeRequested(double dxMm, double dyMm) W_SIGNAL(nudgeRequested, dxMm, dyMm);
     void eyedropperModeChanged(bool active) W_SIGNAL(eyedropperModeChanged, active);
     void eyedropperColorPicked(const QColor& color) W_SIGNAL(eyedropperColorPicked, color);
+    void zoomChanged(double factor) W_SIGNAL(zoomChanged, factor);
 
 protected:
     void wheelEvent(QWheelEvent* event) override;
@@ -112,6 +118,8 @@ private:
     bool m_lightingEnabled = false;
     bool m_glitterEnabled = false;
     bool m_gridVisible = true;
+    bool m_rulersVisible = true;
+    CanvasBackgroundMode m_canvasBackgroundMode = CanvasBackgroundMode::PrintGuideGrid;
     bool m_snapToGrid = true;
     double m_gridSpacingMm = 1.0;
     QList<BadgeGraphicItem*> m_graphicItems;

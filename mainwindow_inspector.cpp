@@ -77,11 +77,14 @@ void MainWindow::updateLayerFillUi() {
 
 void MainWindow::updateInspectorMode() {
     const bool designer = m_isDesigner;
-    if (m_propGroup) m_propGroup->setVisible(designer);
-    if (m_colorGroup) m_colorGroup->setVisible(designer);
-    if (m_layerGroup) m_layerGroup->setVisible(designer);
-    if (m_guideGroup) m_guideGroup->setVisible(designer);
-    if (m_effectGroup) m_effectGroup->setVisible(designer);
+    const bool hasSelection = designer && !m_selected.isEmpty();
+    if (m_selectionPlaceholder) m_selectionPlaceholder->setVisible(designer && !hasSelection);
+    if (m_propGroup) m_propGroup->setVisible(hasSelection);
+    if (m_colorGroup) m_colorGroup->setVisible(hasSelection);
+    if (m_layerGroup) m_layerGroup->setVisible(hasSelection);
+    if (m_guideGroup) m_guideGroup->setVisible(hasSelection);
+    if (m_canvasGroup) m_canvasGroup->setVisible(designer);
+    if (m_effectGroup) m_effectGroup->setVisible(hasSelection);
     if (m_layoutGroup) m_layoutGroup->setVisible(!designer);
     if (!designer && m_designer) m_designer->setEyedropperActive(false);
 }

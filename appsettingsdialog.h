@@ -3,12 +3,16 @@
 
 #include <QDialog>
 #include <QShowEvent>
+#include "canvasbackgroundmode.h"
 
 struct AppSettings {
     bool darkTheme = true;
     bool gridVisible = true;
+    bool rulersVisible = true;
     bool snapToGrid = true;
-    double gridSpacingMm = 1.0;
+    double gridSpacingMm = 5.0;
+    CanvasBackgroundMode canvasBackgroundMode = CanvasBackgroundMode::PrintGuideGrid;
+    double defaultBadgeSizeMm = 57.0;
     bool lightingEnabled = false;
     int lightAngle = 315;
     int lightIntensity = 45;
@@ -39,8 +43,11 @@ private:
 
     QComboBox* m_themeCombo = nullptr;
     QCheckBox* m_gridVisible = nullptr;
+    QCheckBox* m_rulersVisible = nullptr;
     QCheckBox* m_snapToGrid = nullptr;
     QDoubleSpinBox* m_gridSpacing = nullptr;
+    QComboBox* m_canvasBackground = nullptr;
+    QComboBox* m_defaultBadgeSize = nullptr;
     QCheckBox* m_lightingEnabled = nullptr;
     QSpinBox* m_lightAngle = nullptr;
     QSpinBox* m_lightIntensity = nullptr;

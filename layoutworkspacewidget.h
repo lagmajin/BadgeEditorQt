@@ -16,6 +16,7 @@ class QGraphicsView;
 class QGraphicsScene;
 class QGraphicsPixmapItem;
 class QPrinter;
+class QResizeEvent;
 class QString;
 
 namespace badge {
@@ -40,6 +41,9 @@ public:
     bool print(QPrinter* printer, bool includeGuides = false) const;
     bool print(QPrinter* printer, const QList<QList<BadgeItem>>& pages, bool includeGuides = false) const;
 
+protected:
+    void resizeEvent(QResizeEvent* event) override;
+
 private:
     QGraphicsView* m_view = nullptr;
     QGraphicsScene* m_scene = nullptr;
@@ -50,6 +54,7 @@ private:
 
     void rebuildScene();
     void updateSceneRect();
+    void fitPageToViewport();
 };
 
 #endif

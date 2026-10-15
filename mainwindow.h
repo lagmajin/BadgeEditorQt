@@ -38,6 +38,7 @@ class BadgeGraphicItem;
 class QListWidget;
 class QGroupBox;
 class QPushButton;
+class QRadioButton;
 class WindowsIntegration;
 namespace badge {
 struct DocumentData;
@@ -101,6 +102,7 @@ private:
 
     // Badge
     void onAddBadge();
+    void onAddTextBadge();
     void onBatchAdd();
     void onMixedLayout();
     void onImageDropped(const QString& filePath);
@@ -141,6 +143,8 @@ private:
     void flushInternalEvents();
     void updateSafetyGuideHud();
     void updateTitle();
+    void setDesignerZoom(double factor);
+    void updateZoomControl(double factor);
     void loadDockState();
     void saveDockState();
     void loadAppSettings();
@@ -185,11 +189,12 @@ private:
 
     // Toolbar
     QToolBar* m_commonToolbar = nullptr;
+    QToolBar* m_toolPalette = nullptr;
     QToolBar* m_designerToolbar = nullptr;
     QToolBar* m_layoutToolbar = nullptr;
     QAction* m_actDesigner;
     QAction* m_actLayout;
-    QLabel* m_zoomLabel;
+    QComboBox* m_zoomCombo = nullptr;
     QAction* m_actTheme;
     QAction* m_actAppSettings = nullptr;
     QAction* m_actTransferDebug = nullptr;
@@ -211,18 +216,18 @@ private:
     QAction* m_actAlignTop = nullptr;
     QAction* m_actAlignVCenter = nullptr;
     QAction* m_actAlignBottom = nullptr;
+    QAction* m_selectionToolsSeparator = nullptr;
     QDoubleSpinBox* m_spinDuplicateOffset = nullptr;
+    QLabel* m_duplicateOffsetLabel = nullptr;
     QAction* m_actMixedLayout = nullptr;
     QAction* m_actSendToLayout = nullptr;
     QAction* m_actClearLayout = nullptr;
-    QAction* m_actOpenDesignerPerspective = nullptr;
     QAction* m_actOpenLayoutPerspective = nullptr;
     QAction* m_actZoomIn = nullptr;
     QAction* m_actZoomOut = nullptr;
     QAction* m_actLayoutPagePrev = nullptr;
     QAction* m_actLayoutPageNext = nullptr;
     QLabel* m_layoutPageLabel = nullptr;
-    QComboBox* m_layoutPageCombo = nullptr;
     QListWidget* m_layoutPageThumbList = nullptr;
 
     // Inspector - properties
@@ -241,6 +246,7 @@ private:
     QLabel* m_pickedColorSwatch = nullptr;
     QListWidget* m_layerList = nullptr;
     QGroupBox* m_propGroup = nullptr;
+    QGroupBox* m_selectionPlaceholder = nullptr;
     QGroupBox* m_checklistGroup = nullptr;
     QGroupBox* m_safetyGuideGroup = nullptr;
     QGroupBox* m_colorGroup = nullptr;
@@ -249,13 +255,13 @@ private:
     QSlider* m_sliderLayerOpacity = nullptr;
     QLabel* m_layerPreviewLabel = nullptr;
     QGroupBox* m_guideGroup = nullptr;
+    QGroupBox* m_canvasGroup = nullptr;
     QGroupBox* m_effectGroup = nullptr;
     QGroupBox* m_layoutGroup = nullptr;
     QLabel* m_checklistDesign = nullptr;
     QLabel* m_checklistLayout = nullptr;
     QLabel* m_checklistColor = nullptr;
     QLabel* m_safetyGuideDesign = nullptr;
-    QLabel* m_safetyGuideLayout = nullptr;
     QLabel* m_safetyGuideColor = nullptr;
     ads::CDockWidget* m_logDock = nullptr;
     QListWidget* m_logList = nullptr;
@@ -272,6 +278,14 @@ private:
     // Inspector - guides & effects
     QCheckBox* m_chkBleed;
     QCheckBox* m_chkVisible;
+    QCheckBox* m_chkGridVisible = nullptr;
+    QCheckBox* m_chkRulersVisible = nullptr;
+    QCheckBox* m_chkSnapToGrid = nullptr;
+    QDoubleSpinBox* m_spinGridSpacing = nullptr;
+    QComboBox* m_comboDefaultBadgeSize = nullptr;
+    QRadioButton* m_radioCanvasGrid = nullptr;
+    QRadioButton* m_radioCanvasWhite = nullptr;
+    QRadioButton* m_radioCanvasTransparent = nullptr;
     QDoubleSpinBox* m_spinCutLineOffset = nullptr;
     QCheckBox* m_chkLighting;
     QCheckBox* m_chkGlitter;
@@ -295,7 +309,7 @@ private:
     QList<BadgeItem> m_badges;
     QList<BadgeItem> m_layoutBadges;
     QList<QString> m_layoutPageNames;
-    double m_lastGuideSizeMm = 32.0;
+    double m_lastGuideSizeMm = 57.0;
     int m_lastLayerRow = -1;
     QList<BadgeItem> m_pendingEditBeforeBadges;
     QList<int> m_pendingEditBeforeSelection;
@@ -331,8 +345,7 @@ private:
     QString m_currentFile;
     QUndoStack* m_undoStack;
     QByteArray m_defaultDockState;
-    double m_zoomScale = 1.0;
-    bool m_isDark = true;
+    bool m_isDark = false;
     AppSettings m_appSettings;
     bool m_updatingUI = false;
     bool m_isDesigner = true;

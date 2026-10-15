@@ -214,14 +214,15 @@ void DockStyleManager::refreshDockDecorations() {
         const QColor textColor = m_palette.color(QPalette::WindowText);
         const QColor borderColor = m_palette.color(QPalette::Mid);
         const QColor baseColor = m_palette.color(QPalette::Base);
-        const QColor buttonColor = m_palette.color(QPalette::Button);
-        const QColor accentColor = m_palette.color(QPalette::Highlight);
-        const QColor accentTextColor = m_palette.color(QPalette::HighlightedText);
-        const QColor activeTabBg = blend(buttonColor, accentColor, 0.18);
+        const bool dark = windowColor.lightness() < 128;
+        const QColor accentColor = dark ? QColor(0x31, 0x5b, 0xb8) : QColor(0x40, 0x59, 0xed);
+        const QColor accentTextColor(Qt::white);
+        const QColor activeTabBg = accentColor;
         const QColor inactiveTabBg = blend(windowColor, baseColor, 0.58);
         const QColor inactiveTextColor = textColor.lighter(112);
         const bool isActiveTab = dock->tabWidget() && dock->tabWidget()->isActiveTab();
         const QColor tabBg = isActiveTab ? activeTabBg : inactiveTabBg;
+        const QColor tabTextColor = isActiveTab ? accentTextColor : inactiveTextColor;
 
         auto dockPalette = dock->palette();
         dockPalette.setColor(QPalette::Window, windowColor);
@@ -241,9 +242,9 @@ void DockStyleManager::refreshDockDecorations() {
             tabPalette.setColor(QPalette::Window, tabBg);
             tabPalette.setColor(QPalette::Base, tabBg);
             tabPalette.setColor(QPalette::Button, tabBg);
-            tabPalette.setColor(QPalette::WindowText, isActiveTab ? textColor : inactiveTextColor);
-            tabPalette.setColor(QPalette::Text, isActiveTab ? textColor : inactiveTextColor);
-            tabPalette.setColor(QPalette::ButtonText, isActiveTab ? accentTextColor : textColor);
+            tabPalette.setColor(QPalette::WindowText, tabTextColor);
+            tabPalette.setColor(QPalette::Text, tabTextColor);
+            tabPalette.setColor(QPalette::ButtonText, tabTextColor);
             tabPalette.setColor(QPalette::Mid, borderColor.lighter(isActiveTab ? 138 : 118));
             tabPalette.setColor(QPalette::Light, tabBg.lighter(isActiveTab ? 122 : 115));
             tabPalette.setColor(QPalette::Dark, tabBg.darker(isActiveTab ? 140 : 150));
@@ -258,11 +259,11 @@ void DockStyleManager::refreshDockDecorations() {
                     continue;
                 }
                 auto pal = label->palette();
-                pal.setColor(QPalette::WindowText, isActiveTab ? textColor : inactiveTextColor);
-                pal.setColor(QPalette::Text, isActiveTab ? textColor : inactiveTextColor);
+                pal.setColor(QPalette::WindowText, tabTextColor);
+                pal.setColor(QPalette::Text, tabTextColor);
                 pal.setColor(QPalette::Base, tabBg);
                 pal.setColor(QPalette::Button, tabBg);
-                pal.setColor(QPalette::ButtonText, isActiveTab ? accentTextColor : textColor);
+                pal.setColor(QPalette::ButtonText, tabTextColor);
                 label->setPalette(pal);
                 auto font = label->font();
                 font.setBold(isActiveTab);
@@ -278,9 +279,9 @@ void DockStyleManager::refreshDockDecorations() {
                 pal.setColor(QPalette::Window, tabBg);
                 pal.setColor(QPalette::Base, tabBg);
                 pal.setColor(QPalette::Button, tabBg);
-                pal.setColor(QPalette::WindowText, isActiveTab ? textColor : inactiveTextColor);
-                pal.setColor(QPalette::Text, isActiveTab ? textColor : inactiveTextColor);
-                pal.setColor(QPalette::ButtonText, isActiveTab ? accentTextColor : textColor);
+                pal.setColor(QPalette::WindowText, tabTextColor);
+                pal.setColor(QPalette::Text, tabTextColor);
+                pal.setColor(QPalette::ButtonText, tabTextColor);
                 button->setPalette(pal);
                 button->setAutoFillBackground(true);
                 auto font = button->font();

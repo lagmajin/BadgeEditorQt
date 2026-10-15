@@ -118,7 +118,7 @@ DesignerWidget::DesignerWidget(QWidget* parent) : QGraphicsView(parent) {
     setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
     setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
     setBackgroundBrush(Qt::NoBrush);
-    scale(1.25, 1.25);
+    scale(1.0, 1.0);
     setFocusPolicy(Qt::StrongFocus);
 
     // Guide circles (drawn in drawForeground, not as scene items)
@@ -384,6 +384,22 @@ void DesignerWidget::setGridVisible(bool b) {
     viewport()->update();
 }
 
+void DesignerWidget::setRulersVisible(bool b) {
+    if (m_rulersVisible == b) {
+        return;
+    }
+    m_rulersVisible = b;
+    viewport()->update();
+}
+
+void DesignerWidget::setCanvasBackgroundMode(CanvasBackgroundMode mode) {
+    if (m_canvasBackgroundMode == mode) {
+        return;
+    }
+    m_canvasBackgroundMode = mode;
+    viewport()->update();
+}
+
 void DesignerWidget::setSnapToGrid(bool b) {
     m_snapToGrid = b;
     for (auto* gi : m_graphicItems) {
@@ -543,10 +559,22 @@ QPainterPath DesignerWidget::createSnowflake(double size) {
 
 void DesignerWidget::updateBackground(const QBrush& brush) { m_scene->setBackgroundBrush(brush); }
 
+void DesignerWidget::setZoomFactor(double factor) {
+    constexpr double minZoom = 0.1;
+    constexpr double maxZoom = 8.0;
+    factor = std::clamp(factor, minZoom, maxZoom);
+    const double current = zoomFactor();
+    if (current <= 0.0 || qFuzzyCompare(current, factor)) {
+        return;
+    }
+    scale(factor / current, factor / current);
+    emit zoomChanged(factor);
+}
+
 void DesignerWidget::wheelEvent(QWheelEvent* event) {
     if (event->modifiers() & Qt::ControlModifier) {
         double factor = event->angleDelta().y() > 0 ? 1.15 : 1.0 / 1.15;
-        scale(factor, factor);
+        setZoomFactor(zoomFactor() * factor);
         event->accept();
     } else {
         QGraphicsView::wheelEvent(event);
@@ -625,17 +653,27 @@ void DesignerWidget::drawBackground(QPainter* painter, const QRectF& rect) {
     const int tileSize = 16;
     const QColor windowColor = palette().color(QPalette::Window);
     const QColor baseColor = palette().color(QPalette::Base);
-    const QColor c1 = blend(windowColor, baseColor, 0.16);
-    const QColor c2 = blend(windowColor, baseColor, 0.26);
+    const bool dark = windowColor.lightness() < 128;
+    const bool printGuideGrid = m_canvasBackgroundMode == CanvasBackgroundMode::PrintGuideGrid;
+    const QColor c1 = printGuideGrid ? QColor(250, 249, 246)
+                                     : (dark ? blend(windowColor, baseColor, 0.16) : QColor(248, 247, 243));
 
-    int left = int(rect.left()) - ((int(rect.left()) % tileSize + tileSize) % tileSize);
-    int top = int(rect.top()) - ((int(rect.top()) % tileSize + tileSize) % tileSize);
+    if (m_canvasBackgroundMode == CanvasBackgroundMode::White) {
+        painter->fillRect(rect, Qt::white);
+    } else if (m_canvasBackgroundMode == CanvasBackgroundMode::TransparentCheckerboard) {
+        const QColor checkLight = dark ? QColor(55, 66, 80) : QColor(248, 249, 251);
+        const QColor checkDark = dark ? QColor(42, 52, 65) : QColor(228, 232, 238);
+        int left = int(rect.left()) - ((int(rect.left()) % tileSize + tileSize) % tileSize);
+        int top = int(rect.top()) - ((int(rect.top()) % tileSize + tileSize) % tileSize);
 
-    for (int y = top; y < int(rect.bottom()); y += tileSize) {
-        for (int x = left; x < int(rect.right()); x += tileSize) {
-            QColor c = ((x / tileSize + y / tileSize) & 1) ? c2 : c1;
-            painter->fillRect(QRect(x, y, tileSize, tileSize), c);
+        for (int y = top; y < int(rect.bottom()); y += tileSize) {
+            for (int x = left; x < int(rect.right()); x += tileSize) {
+                const QColor c = ((x / tileSize + y / tileSize) & 1) ? checkDark : checkLight;
+                painter->fillRect(QRect(x, y, tileSize, tileSize), c);
+            }
         }
+    } else {
+        painter->fillRect(rect, c1);
     }
 
     if (!m_gridVisible) {
@@ -643,16 +681,37 @@ void DesignerWidget::drawBackground(QPainter* painter, const QRectF& rect) {
     }
 
     const double mmToPx = Constants::kMmToPx;
-    const double stepPx = std::max(1.0, m_gridSpacingMm * mmToPx);
-    const double majorStepPx = stepPx * 5.0;
-    const bool simplifiedGrid = stepPx < 6.0;
+    const double gridSpacingMm = std::max(0.5, m_gridSpacingMm);
+    const double stepPx = std::max(1.0, gridSpacingMm * mmToPx);
+    const double majorIntervalCount = std::max(1.0, std::ceil(10.0 / gridSpacingMm));
+    const double majorStepPx = stepPx * majorIntervalCount;
+    const double screenStepPx = stepPx * std::abs(transform().m11());
+    const bool simplifiedGrid = screenStepPx < 3.0;
 
     painter->save();
     painter->setRenderHint(QPainter::Antialiasing, false);
-    const QColor majorGridBase = palette().color(QPalette::Mid);
-    const QColor minorGridBase = blend(palette().color(QPalette::Mid), palette().color(QPalette::Highlight), 0.10);
-    const QColor majorGridColor = QColor::fromRgb(majorGridBase.red(), majorGridBase.green(), majorGridBase.blue(), 150);
-    const QColor minorGridColor = QColor::fromRgb(minorGridBase.red(), minorGridBase.green(), minorGridBase.blue(), 86);
+    const QColor majorGridBase = dark && !printGuideGrid ? palette().color(QPalette::Mid) : QColor(170, 179, 194);
+    const QColor minorGridBase = dark && !printGuideGrid
+        ? blend(palette().color(QPalette::Mid), palette().color(QPalette::Highlight), 0.10)
+        : QColor(201, 205, 211);
+    const int majorAlpha = dark && !printGuideGrid ? 150 : 105;
+    const int minorAlpha = dark && !printGuideGrid ? 86 : 58;
+    const QColor majorGridColor = QColor::fromRgb(majorGridBase.red(), majorGridBase.green(), majorGridBase.blue(), majorAlpha);
+    const QColor minorGridColor = QColor::fromRgb(minorGridBase.red(), minorGridBase.green(), minorGridBase.blue(), minorAlpha);
+
+    const double screenFineStepPx = mmToPx * std::abs(transform().m11());
+    if (printGuideGrid && gridSpacingMm > 1.0 && screenFineStepPx >= 3.0) {
+        const QColor fineGridColor(191, 197, 206, 32);
+        const double fineLeft = std::floor(rect.left() / mmToPx) * mmToPx;
+        const double fineTop = std::floor(rect.top() / mmToPx) * mmToPx;
+        painter->setPen(QPen(fineGridColor, 0.5));
+        for (double x = fineLeft; x <= rect.right(); x += mmToPx) {
+            painter->drawLine(QPointF(x, rect.top()), QPointF(x, rect.bottom()));
+        }
+        for (double y = fineTop; y <= rect.bottom(); y += mmToPx) {
+            painter->drawLine(QPointF(rect.left(), y), QPointF(rect.right(), y));
+        }
+    }
 
     const double gridStep = simplifiedGrid ? majorStepPx : stepPx;
     const int gridLeft = int(std::floor(rect.left() / gridStep) * gridStep);
@@ -687,7 +746,7 @@ void DesignerWidget::drawForeground(QPainter* painter, const QRectF& rect) {
 
     // Bleed line (red dashed)
     if (m_guideBleed->isVisible()) {
-        QPen pen(QColor(255, 0, 0), 1.5);
+        QPen pen(QColor(239, 68, 68), 1.5);
         pen.setDashPattern({4, 2});
         painter->setPen(pen);
         painter->setBrush(Qt::NoBrush);
@@ -696,7 +755,7 @@ void DesignerWidget::drawForeground(QPainter* painter, const QRectF& rect) {
 
     // Visible area (green solid)
     if (m_guideVisible->isVisible()) {
-        QPen pen(QColor(0, 255, 0), 2.0);
+        QPen pen(QColor(34, 197, 94), 2.0);
         painter->setPen(pen);
         painter->setBrush(Qt::NoBrush);
         painter->drawEllipse(QPointF(cx, cy), rv, rv);
@@ -704,28 +763,93 @@ void DesignerWidget::drawForeground(QPainter* painter, const QRectF& rect) {
 
     if (m_graphicItems.isEmpty()) {
         painter->save();
-        QColor titleColor = palette().color(QPalette::WindowText);
-        titleColor.setAlpha(230);
-        painter->setPen(titleColor);
+        const bool dark = palette().color(QPalette::Window).lightness() < 128;
+        const QColor title = dark ? QColor(241, 245, 252) : QColor(37, 48, 69);
+        const QColor hint = dark ? QColor(177, 190, 208) : QColor(105, 117, 140);
+        const double contentWidth = visiblePx * 0.78;
+        const double contentHeight = visiblePx * 0.64;
+        const QRectF titleRect(center.x() - contentWidth / 2.0,
+                               center.y() - contentHeight * 0.49,
+                               contentWidth,
+                               contentHeight * 0.42);
+        const QRectF hintRect(center.x() - contentWidth / 2.0,
+                              center.y() - contentHeight * 0.01,
+                              contentWidth,
+                              contentHeight * 0.52);
+
         QFont titleFont = painter->font();
-        titleFont.setPointSizeF(titleFont.pointSizeF() + 2.0);
+        titleFont.setPointSizeF(std::clamp(visiblePx / 23.0, 7.0, 11.0));
         titleFont.setBold(true);
         painter->setFont(titleFont);
-        const QRectF titleRect(rect.center().x() - 220.0, rect.center().y() - 36.0, 440.0, 30.0);
-        painter->drawText(titleRect, Qt::AlignCenter, QStringLiteral("ここにバッジを追加してください"));
+        painter->setPen(title);
+        painter->drawText(titleRect,
+                          Qt::AlignCenter | Qt::TextWordWrap,
+                          QStringLiteral("ここにバッジを追加してください"));
 
         QFont hintFont = painter->font();
-        hintFont.setPointSizeF(std::max(8.0, hintFont.pointSizeF() - 1.0));
+        hintFont.setPointSizeF(std::clamp(visiblePx / 27.0, 6.0, 9.0));
         hintFont.setBold(false);
         painter->setFont(hintFont);
-        const QRectF hintRect(rect.center().x() - 260.0, rect.center().y() - 4.0, 520.0, 30.0);
+        painter->setPen(hint);
         painter->drawText(hintRect,
-                          Qt::AlignCenter,
-                          QStringLiteral("画像をドラッグ&ドロップするか、ツールバーから追加できます"));
+                          Qt::AlignCenter | Qt::TextWordWrap,
+                          QStringLiteral("画像をドロップするか、\nツールバーから追加できます"));
         painter->restore();
     }
 
     if (!m_graphicItems.isEmpty() && m_hasSelection) {
+        QList<BadgeGraphicItem*> selectedBadges;
+        QRectF selectionBounds;
+        for (auto* item : m_scene->selectedItems()) {
+            auto* badge = dynamic_cast<BadgeGraphicItem*>(item);
+            if (!badge) {
+                continue;
+            }
+            selectedBadges.push_back(badge);
+            selectionBounds = selectionBounds.isNull()
+                ? badge->sceneBoundingRect()
+                : selectionBounds.united(badge->sceneBoundingRect());
+        }
+        if (!selectedBadges.isEmpty()) {
+            const double mmToPx = Constants::kMmToPx;
+            const QString dimensions = selectedBadges.size() == 1
+                ? QStringLiteral("W: %1 mm\nH: %2 mm")
+                      .arg(selectedBadges.first()->badge().widthMm, 0, 'f', 1)
+                      .arg(selectedBadges.first()->badge().heightMm, 0, 'f', 1)
+                : QStringLiteral("選択範囲\nW: %1 mm  H: %2 mm")
+                      .arg(selectionBounds.width() / mmToPx, 0, 'f', 1)
+                      .arg(selectionBounds.height() / mmToPx, 0, 'f', 1);
+            const QPoint anchor = mapFromScene(selectionBounds.topRight()) + QPoint(10, -8);
+            painter->save();
+            painter->resetTransform();
+            QFont dimensionFont = painter->font();
+            dimensionFont.setPointSizeF(std::max(8.0, dimensionFont.pointSizeF() - 1.0));
+            dimensionFont.setBold(true);
+            painter->setFont(dimensionFont);
+            const QFontMetricsF metrics(dimensionFont);
+            QRectF box = metrics.boundingRect(QRectF(0.0, 0.0, 180.0, 80.0),
+                                               Qt::AlignLeft | Qt::AlignVCenter,
+                                               dimensions)
+                             .adjusted(-8.0, -5.0, 8.0, 5.0);
+            box.moveTopLeft(QPointF(anchor) + QPointF(0.0, -box.height()));
+            const QRect viewportRect = viewport()->rect().adjusted(42, 28, -8, -8);
+            if (box.right() > viewportRect.right()) {
+                box.moveRight(viewportRect.right());
+            }
+            if (box.top() < viewportRect.top()) {
+                box.moveTop(viewportRect.top());
+            }
+            const bool dark = palette().color(QPalette::Window).lightness() < 128;
+            painter->setPen(Qt::NoPen);
+            painter->setBrush(dark ? QColor(23, 34, 48, 238) : QColor(255, 255, 255, 245));
+            painter->drawRoundedRect(box, 6.0, 6.0);
+            painter->setPen(dark ? QColor(231, 239, 249) : QColor(38, 50, 74));
+            painter->drawText(box.adjusted(8.0, 5.0, -8.0, -5.0),
+                              Qt::AlignLeft | Qt::AlignVCenter,
+                              dimensions);
+            painter->restore();
+        }
+
         const auto modifiers = QApplication::keyboardModifiers();
         const bool altDown = modifiers & Qt::AltModifier;
         const bool shiftDown = modifiers & Qt::ShiftModifier;
@@ -749,6 +873,97 @@ void DesignerWidget::drawForeground(QPainter* painter, const QRectF& rect) {
         painter->drawRoundedRect(placed, 8.0, 8.0);
         painter->setPen(fg);
         painter->drawText(placed, Qt::AlignCenter, text);
+        painter->restore();
+    }
+
+    if (!m_rulersVisible) {
+        return;
+    }
+
+    constexpr int kRulerWidth = 40;
+    constexpr int kRulerHeight = 26;
+    const bool dark = palette().color(QPalette::Window).lightness() < 128;
+    const QColor rulerBackground = dark ? QColor(32, 42, 54) : QColor(248, 249, 252);
+    const QColor rulerBorder = dark ? QColor(65, 82, 103) : QColor(211, 218, 230);
+    const QColor rulerText = dark ? QColor(173, 188, 208) : QColor(105, 117, 140);
+    const QColor rulerTick = dark ? QColor(111, 132, 159) : QColor(152, 165, 184);
+    const QRect viewportRect = viewport()->rect();
+    const QRect topRuler(kRulerWidth, 0, viewportRect.width() - kRulerWidth, kRulerHeight);
+    const QRect leftRuler(0, kRulerHeight, kRulerWidth, viewportRect.height() - kRulerHeight);
+    if (!topRuler.isEmpty() && !leftRuler.isEmpty()) {
+        painter->save();
+        painter->resetTransform();
+        painter->setRenderHint(QPainter::Antialiasing, false);
+        painter->fillRect(QRect(0, 0, kRulerWidth, kRulerHeight), rulerBackground);
+        painter->fillRect(topRuler, rulerBackground);
+        painter->fillRect(leftRuler, rulerBackground);
+        painter->setPen(QPen(rulerBorder, 1.0));
+        painter->drawLine(kRulerWidth, kRulerHeight - 1, viewportRect.right(), kRulerHeight - 1);
+        painter->drawLine(kRulerWidth - 1, 0, kRulerWidth - 1, viewportRect.bottom());
+
+        QFont rulerFont = painter->font();
+        rulerFont.setPointSize(8);
+        painter->setFont(rulerFont);
+        painter->setPen(rulerText);
+
+        const QRectF sceneBounds = m_scene->sceneRect();
+        const QPointF sceneOrigin = sceneBounds.center();
+        const QRectF visibleScene = mapToScene(viewportRect).boundingRect();
+        const double pixelsPerMm = std::abs(transform().m11()) * mmToPx;
+        const double targetIntervalMm = 32.0 / std::max(1e-6, pixelsPerMm);
+        const double intervalMagnitude = std::pow(10.0, std::floor(std::log10(targetIntervalMm)));
+        const double normalizedInterval = targetIntervalMm / intervalMagnitude;
+        const double intervalStep = normalizedInterval <= 1.0 ? 1.0
+                                  : normalizedInterval <= 2.0 ? 2.0
+                                  : normalizedInterval <= 5.0 ? 5.0
+                                  : 10.0;
+        const double intervalMm = intervalStep * intervalMagnitude;
+        const double intervalScene = intervalMm * mmToPx;
+        const bool showMinorTicks = intervalMm * pixelsPerMm / 5.0 >= 6.0;
+        const int firstX = static_cast<int>(std::ceil((visibleScene.left() - sceneOrigin.x()) / intervalScene));
+        const int lastX = static_cast<int>(std::floor((visibleScene.right() - sceneOrigin.x()) / intervalScene));
+        for (int tick = firstX; tick <= lastX; ++tick) {
+            const double majorSceneX = sceneOrigin.x() + tick * intervalScene;
+            if (showMinorTicks) {
+                for (int minor = 1; minor < 5; ++minor) {
+                    const qreal minorX = mapFromScene(QPointF(majorSceneX + minor * intervalScene / 5.0,
+                                                              sceneBounds.top())).x();
+                    painter->setPen(QPen(rulerTick, 1.0));
+                    painter->drawLine(QPointF(minorX, kRulerHeight - 3), QPointF(minorX, kRulerHeight));
+                }
+            }
+            const qreal x = mapFromScene(QPointF(majorSceneX, sceneBounds.top())).x();
+            painter->setPen(QPen(rulerTick, 1.0));
+            painter->drawLine(QPointF(x, kRulerHeight - 6), QPointF(x, kRulerHeight));
+            painter->setPen(rulerText);
+            painter->drawText(QRectF(x - 21.0, 1.0, 42.0, kRulerHeight - 8.0),
+                              Qt::AlignHCenter | Qt::AlignVCenter,
+                              QString::number(tick * intervalMm, 'f', 0));
+        }
+
+        const int firstY = static_cast<int>(std::ceil((visibleScene.top() - sceneOrigin.y()) / intervalScene));
+        const int lastY = static_cast<int>(std::floor((visibleScene.bottom() - sceneOrigin.y()) / intervalScene));
+        for (int tick = firstY; tick <= lastY; ++tick) {
+            const double majorSceneY = sceneOrigin.y() + tick * intervalScene;
+            if (showMinorTicks) {
+                for (int minor = 1; minor < 5; ++minor) {
+                    const qreal minorY = mapFromScene(QPointF(sceneBounds.left(), majorSceneY + minor * intervalScene / 5.0)).y();
+                    painter->setPen(QPen(rulerTick, 1.0));
+                    painter->drawLine(QPointF(kRulerWidth - 3, minorY), QPointF(kRulerWidth, minorY));
+                }
+            }
+            const qreal y = mapFromScene(QPointF(sceneBounds.left(), majorSceneY)).y();
+            painter->setPen(QPen(rulerTick, 1.0));
+            painter->drawLine(QPointF(kRulerWidth - 6, y), QPointF(kRulerWidth, y));
+            painter->setPen(rulerText);
+            painter->drawText(QRectF(1.0, y - 9.0, kRulerWidth - 10.0, 18.0),
+                              Qt::AlignRight | Qt::AlignVCenter,
+                              QString::number(tick * intervalMm, 'f', 0));
+        }
+        painter->setPen(rulerText);
+        painter->drawText(QRect(1, 0, kRulerWidth - 3, kRulerHeight - 2),
+                          Qt::AlignCenter,
+                          QStringLiteral("mm"));
         painter->restore();
     }
 }

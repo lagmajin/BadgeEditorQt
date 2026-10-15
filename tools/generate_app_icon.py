@@ -3,7 +3,7 @@ from __future__ import annotations
 import math
 from pathlib import Path
 
-from PIL import Image, ImageDraw, ImageFilter, ImageOps
+from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageOps
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -68,6 +68,28 @@ def dashed_arc(
 
 
 def build_icon(size: int) -> Image.Image:
+    generated_path = ASSETS / 'appicon-source.png'
+    if generated_path.exists():
+        source = Image.open(generated_path).convert('RGBA')
+        target_size = int(size * 0.90)
+        scale = min(target_size / source.width, target_size / source.height)
+        source = source.resize(
+            (max(1, int(round(source.width * scale))), max(1, int(round(source.height * scale)))),
+            Image.Resampling.LANCZOS,
+        )
+        icon = Image.new('RGBA', (size, size), (0, 0, 0, 0))
+        icon.alpha_composite(source, ((size - source.width) // 2, (size - source.height) // 2))
+        rounded_mask = Image.new('L', (size, size), 0)
+        mask_draw = ImageDraw.Draw(rounded_mask)
+        inset = size * 0.05
+        mask_draw.rounded_rectangle(
+            (inset, inset, size - inset, size - inset),
+            radius=int(size * 0.15),
+            fill=255,
+        )
+        icon.putalpha(ImageChops.multiply(icon.getchannel('A'), rounded_mask))
+        return icon
+
     img = Image.new('RGBA', (size, size), rgba('#0b0c10'))
     draw = ImageDraw.Draw(img, 'RGBA')
 

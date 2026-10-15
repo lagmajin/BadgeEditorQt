@@ -1,6 +1,7 @@
 #include "mainwindow.h"
 #include "appsettingsdialog.h"
 #include "badgegraphicitem.h"
+#include "badge_text_rendering.h"
 #include "batchlayoutdialog.h"
 #include "exportdialog.h"
 #include "imageprocessor.h"
@@ -18,6 +19,7 @@ import badge.event;
 #include <QMenuBar>
 #include <QMenu>
 #include <QAction>
+#include <QActionGroup>
 #include <QFileDialog>
 #include <QMessageBox>
 #include <QVBoxLayout>
@@ -28,6 +30,7 @@ import badge.event;
 #include <QSizePolicy>
 #include <QListWidget>
 #include <QApplication>
+#include <QScreen>
 #include <QClipboard>
 #include <QBrush>
 #include <QColor>
@@ -40,6 +43,7 @@ import badge.event;
 #include <QDragEnterEvent>
 #include <QDropEvent>
 #include <QPushButton>
+#include <QToolButton>
 #include <QShortcut>
 #include <QSize>
 #include <QStyle>
@@ -63,6 +67,7 @@ import badge.event;
 #include <QDockWidget>
 #include <QTabWidget>
 #include <QSignalBlocker>
+#include <QRadioButton>
 #include <QAbstractItemModel>
 #include <QAbstractItemView>
 #include <QListWidgetItem>
@@ -152,7 +157,7 @@ QPalette makeEditorDarkPalette() {
     const QColor button(0x2A, 0x38, 0x48);
     const QColor text(0xF1, 0xF1, 0xF1);
     const QColor border(0x3B, 0x4B, 0x5D);
-    const QColor highlight(0x32, 0x82, 0xE8);
+    const QColor highlight(0x31, 0x5B, 0xB8);
     const QColor highlightText(0xFF, 0xFF, 0xFF);
 
     QPalette pal;
@@ -193,12 +198,6 @@ void configureToolbar(QToolBar* toolbar, Qt::ToolButtonStyle style) {
     toolbar->setContentsMargins(6, 4, 6, 4);
     if (auto* layout = toolbar->layout()) {
         layout->setSpacing(6);
-    }
-}
-
-void setToolbarIcon(QAction* action, QStyle::StandardPixmap pixmap) {
-    if (action) {
-        action->setIcon(standardToolbarIcon(pixmap));
     }
 }
 
@@ -721,12 +720,7 @@ QPixmap renderLayerPreviewPixmap(const BadgeItem& badge, int layerIndex, const Q
 
     painter.setOpacity(1.0);
     if (!previewBadge.displayText.isEmpty()) {
-        QFont font("Arial", 10);
-        painter.setFont(font);
-        painter.setPen(Qt::white);
-        painter.drawText(contentRect.adjusted(1, 1, 1, 1), Qt::AlignCenter, previewBadge.displayText);
-        painter.setPen(Qt::black);
-        painter.drawText(contentRect, Qt::AlignCenter, previewBadge.displayText);
+        badge::rendering::drawBadgeDisplayText(&painter, contentRect, previewBadge.displayText);
     }
 
     const LayerItem& selectedLayer = previewBadge.layers[layerIndex];
@@ -783,12 +777,7 @@ void paintTransferBadgeContent(QPainter& painter, const BadgeItem& badge) {
 
     painter.setOpacity(1.0);
     if (!badge.displayText.isEmpty()) {
-        QFont font("Arial", 10);
-        painter.setFont(font);
-        painter.setPen(Qt::white);
-        painter.drawText(contentRect.adjusted(1, 1, 1, 1), Qt::AlignCenter, badge.displayText);
-        painter.setPen(Qt::black);
-        painter.drawText(contentRect, Qt::AlignCenter, badge.displayText);
+        badge::rendering::drawBadgeDisplayText(&painter, contentRect, badge.displayText);
     }
 }
 
@@ -954,7 +943,7 @@ double activeGuideSizeMmFromBadges(const QList<BadgeItem>& badges, const QList<B
     if (!badges.isEmpty()) {
         return badgeGuideSizeMm(badges.first());
     }
-    return 32.0;
+    return 57.0;
 }
 
 bool badgeInsideCentralGuide(const BadgeItem& badge, double guideSizeMm) {
@@ -1030,7 +1019,14 @@ static void applyWinBackdrop(HWND hwnd, bool darkMode) {
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent), m_internalEventQueue(std::make_unique<badge::AppEventQueue>()) {
     setWindowTitle("Badge Editor Pro");
-    resize(1500, 900);
+    if (QScreen* screen = QApplication::primaryScreen()) {
+        const QRect available = screen->availableGeometry();
+        resize(std::min(1500, qRound(available.width() * 0.94)),
+               std::min(900, qRound(available.height() * 0.90)));
+        move(available.center() - rect().center());
+    } else {
+        resize(1500, 900);
+    }
     setAcceptDrops(true);
     m_undoStack = new QUndoStack(this);
     m_windowsIntegration = new WindowsIntegration(this);
@@ -1105,8 +1101,8 @@ MainWindow::MainWindow(QWidget* parent)
     setMaterialIcon(m_actAlignBottom, QStringLiteral("vertical_align_bottom"));
 
     auto* viewMenu = menuBar()->addMenu("表示(&V)");
-    auto* actViewZoomIn = viewMenu->addAction("ズームイン", this, [this]{ m_zoomScale *= 1.2; m_zoomLabel->setText(QString::number(m_zoomScale*100,'f',0)+"%"); });
-    auto* actViewZoomOut = viewMenu->addAction("ズームアウト", this, [this]{ m_zoomScale /= 1.2; m_zoomLabel->setText(QString::number(m_zoomScale*100,'f',0)+"%"); });
+    auto* actViewZoomIn = viewMenu->addAction("ズームイン", this, [this]{ if (m_designer) setDesignerZoom(m_designer->zoomFactor() * 1.2); });
+    auto* actViewZoomOut = viewMenu->addAction("ズームアウト", this, [this]{ if (m_designer) setDesignerZoom(m_designer->zoomFactor() / 1.2); });
     viewMenu->addSeparator();
     m_actTheme = viewMenu->addAction("テーマ切替", this, &MainWindow::onToggleTheme);
     m_actAppSettings = viewMenu->addAction("アプリ設定...", this, &MainWindow::onAppSettings, QKeySequence("Ctrl+,"));
@@ -1154,17 +1150,45 @@ MainWindow::MainWindow(QWidget* parent)
     m_commonToolbar = addToolBar("共通");
     m_commonToolbar->setFont(uiFont);
     configureToolbar(m_commonToolbar, Qt::ToolButtonTextBesideIcon);
-    m_commonToolbar->addAction(actNew);
-    m_commonToolbar->addAction(actOpen);
-    m_commonToolbar->addAction(actSave);
+    m_commonToolbar->setObjectName(QStringLiteral("workspaceToolbar"));
+    m_commonToolbar->setMinimumHeight(64);
+    m_commonToolbar->setIconSize(QSize(24, 24));
+    auto* toolbarNew = m_commonToolbar->addAction(QStringLiteral("新規"), this, &MainWindow::onNew);
+    setMaterialIcon(toolbarNew, QStringLiteral("note_add"));
+    toolbarNew->setToolTip(QStringLiteral("新しいドキュメントを作成 (Ctrl+N)"));
+    auto* toolbarOpen = m_commonToolbar->addAction(QStringLiteral("開く"), this, &MainWindow::onOpen);
+    setMaterialIcon(toolbarOpen, QStringLiteral("folder_open"));
+    toolbarOpen->setToolTip(QStringLiteral("ドキュメントを開く (Ctrl+O)"));
+    auto* toolbarSave = m_commonToolbar->addAction(QStringLiteral("保存"), this, &MainWindow::onSave);
+    setMaterialIcon(toolbarSave, QStringLiteral("save"));
+    toolbarSave->setToolTip(QStringLiteral("ドキュメントを保存 (Ctrl+S)"));
     m_commonToolbar->addSeparator();
     m_actDesigner = m_commonToolbar->addAction("DESIGNER");
+    m_actDesigner->setObjectName(QStringLiteral("designerModeAction"));
     m_actDesigner->setCheckable(true);
     m_actDesigner->setChecked(true);
+    m_actDesigner->setShortcut(QKeySequence("Ctrl+E"));
+    auto* modeGroup = new QActionGroup(this);
+    modeGroup->setExclusive(true);
+    modeGroup->addAction(m_actDesigner);
     setMaterialIcon(m_actDesigner, QStringLiteral("edit"));
+    if (auto* designerButton = m_commonToolbar->widgetForAction(m_actDesigner)) {
+        designerButton->setObjectName(QStringLiteral("designerModeAction"));
+    }
     m_actLayout = m_commonToolbar->addAction("LAYOUT");
+    m_actLayout->setObjectName(QStringLiteral("layoutModeAction"));
     m_actLayout->setCheckable(true);
+    modeGroup->addAction(m_actLayout);
     setMaterialIcon(m_actLayout, QStringLiteral("grid_view"));
+    if (auto* layoutButton = m_commonToolbar->widgetForAction(m_actLayout)) {
+        layoutButton->setObjectName(QStringLiteral("layoutModeAction"));
+    }
+    if (auto* designerButton = qobject_cast<QToolButton*>(m_commonToolbar->widgetForAction(m_actDesigner))) {
+        designerButton->setMinimumSize(184, 50);
+    }
+    if (auto* layoutButton = qobject_cast<QToolButton*>(m_commonToolbar->widgetForAction(m_actLayout))) {
+        layoutButton->setMinimumSize(154, 50);
+    }
     connect(m_actDesigner, &QAction::triggered, this, [this]{ onModeChanged(true); });
     connect(m_actLayout, &QAction::triggered, this, [this]{ onModeChanged(false); });
     m_commonToolbar->addSeparator();
@@ -1173,24 +1197,59 @@ MainWindow::MainWindow(QWidget* parent)
     setMaterialIcon(m_actTheme, QStringLiteral("dark_mode"));
     setMaterialIcon(m_actAppSettings, QStringLiteral("settings"));
     m_commonToolbar->addSeparator();
-    m_actZoomIn = m_commonToolbar->addAction("ズームイン", this, [this]{ m_zoomScale *= 1.2; m_zoomLabel->setText(QString::number(m_zoomScale*100,'f',0)+"%"); });
+    m_actZoomIn = m_commonToolbar->addAction("ズームイン", this, [this]{ if (m_designer) setDesignerZoom(m_designer->zoomFactor() * 1.2); });
     setMaterialIcon(m_actZoomIn, QStringLiteral("zoom_in"));
-    m_actZoomOut = m_commonToolbar->addAction("ズームアウト", this, [this]{ m_zoomScale /= 1.2; m_zoomLabel->setText(QString::number(m_zoomScale*100,'f',0)+"%"); });
+    if (auto* zoomInButton = qobject_cast<QToolButton*>(m_commonToolbar->widgetForAction(m_actZoomIn))) {
+        zoomInButton->setToolButtonStyle(Qt::ToolButtonIconOnly);
+        zoomInButton->setToolTip(QStringLiteral("ズームイン"));
+    }
+    m_actZoomOut = m_commonToolbar->addAction("ズームアウト", this, [this]{ if (m_designer) setDesignerZoom(m_designer->zoomFactor() / 1.2); });
     setMaterialIcon(m_actZoomOut, QStringLiteral("zoom_out"));
+    if (auto* zoomOutButton = qobject_cast<QToolButton*>(m_commonToolbar->widgetForAction(m_actZoomOut))) {
+        zoomOutButton->setToolButtonStyle(Qt::ToolButtonIconOnly);
+        zoomOutButton->setToolTip(QStringLiteral("ズームアウト"));
+    }
     m_commonToolbar->addSeparator();
-    m_zoomLabel = new QLabel("100%");
-    m_commonToolbar->addWidget(m_zoomLabel);
+    m_zoomCombo = new QComboBox;
+    m_zoomCombo->setObjectName(QStringLiteral("zoomValueCombo"));
+    m_zoomCombo->setEditable(true);
+    m_zoomCombo->setMinimumWidth(78);
+    m_zoomCombo->setMaximumWidth(96);
+    m_zoomCombo->addItem(QStringLiteral("25%"), 0.25);
+    m_zoomCombo->addItem(QStringLiteral("50%"), 0.50);
+    m_zoomCombo->addItem(QStringLiteral("75%"), 0.75);
+    m_zoomCombo->addItem(QStringLiteral("100%"), 1.00);
+    m_zoomCombo->addItem(QStringLiteral("125%"), 1.25);
+    m_zoomCombo->addItem(QStringLiteral("150%"), 1.50);
+    m_zoomCombo->addItem(QStringLiteral("200%"), 2.00);
+    m_zoomCombo->addItem(QStringLiteral("300%"), 3.00);
+    m_zoomCombo->addItem(QStringLiteral("400%"), 4.00);
+    m_zoomCombo->setCurrentIndex(m_zoomCombo->findData(1.0));
+    connect(m_zoomCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int index) {
+        if (index >= 0 && m_designer) {
+            setDesignerZoom(m_zoomCombo->itemData(index).toDouble());
+        }
+    });
+    connect(m_zoomCombo->lineEdit(), &QLineEdit::editingFinished, this, [this] {
+        if (!m_zoomCombo || !m_designer) return;
+        QString text = m_zoomCombo->currentText().trimmed();
+        text.remove('%');
+        bool ok = false;
+        const double percent = text.toDouble(&ok);
+        if (ok && percent > 0.0) setDesignerZoom(percent / 100.0);
+    });
+    m_commonToolbar->addWidget(m_zoomCombo);
 
     m_designerToolbar = addToolBar("Designer");
     m_designerToolbar->setFont(uiFont);
     configureToolbar(m_designerToolbar, Qt::ToolButtonTextBesideIcon);
+    m_designerToolbar->setIconSize(QSize(20, 20));
     m_actAddBadge = m_designerToolbar->addAction("追加");
     connect(m_actAddBadge, &QAction::triggered, this, [this]{ onAddBadge(); });
     setMaterialIcon(m_actAddBadge, QStringLiteral("add_circle"));
     m_actBatchAdd = m_designerToolbar->addAction("一括");
     connect(m_actBatchAdd, &QAction::triggered, this, [this]{ onBatchAdd(); });
     setMaterialIcon(m_actBatchAdd, QStringLiteral("library_add"));
-    m_designerToolbar->addSeparator();
     if (m_actDelete) {
         m_designerToolbar->addAction(m_actDelete);
     }
@@ -1215,8 +1274,19 @@ MainWindow::MainWindow(QWidget* parent)
     if (m_actAlignBottom) {
         m_designerToolbar->addAction(m_actAlignBottom);
     }
-    auto* duplicateOffsetLabel = new QLabel(QStringLiteral("複製ずれ"));
-    m_designerToolbar->addWidget(duplicateOffsetLabel);
+    for (auto* action : {m_actAlignLeft, m_actAlignHCenter, m_actAlignRight,
+                         m_actAlignTop, m_actAlignVCenter, m_actAlignBottom}) {
+        if (!action) {
+            continue;
+        }
+        if (auto* button = qobject_cast<QToolButton*>(m_designerToolbar->widgetForAction(action))) {
+            button->setToolButtonStyle(Qt::ToolButtonIconOnly);
+            button->setToolTip(action->text() + QStringLiteral(" (%1)").arg(action->shortcut().toString(QKeySequence::NativeText)));
+            button->setAccessibleName(action->text());
+        }
+    }
+    m_duplicateOffsetLabel = new QLabel(QStringLiteral("複製ずれ"));
+    m_designerToolbar->addWidget(m_duplicateOffsetLabel);
     m_spinDuplicateOffset = new QDoubleSpinBox;
     m_spinDuplicateOffset->setRange(0.0, 50.0);
     m_spinDuplicateOffset->setDecimals(1);
@@ -1244,14 +1314,103 @@ MainWindow::MainWindow(QWidget* parent)
         sendButton->setObjectName(QStringLiteral("sendToLayoutButton"));
     }
     m_designerToolbar->addSeparator();
-    m_actOpenDesignerPerspective = m_designerToolbar->addAction("編集");
-    connect(m_actOpenDesignerPerspective, &QAction::triggered, this, [this]{ openDesignerPerspective(); });
-    m_actOpenDesignerPerspective->setShortcut(QKeySequence("Ctrl+E"));
-    setMaterialIcon(m_actOpenDesignerPerspective, QStringLiteral("edit"));
+    m_selectionToolsSeparator = m_designerToolbar->insertSeparator(m_actDelete ? m_actDelete : m_actDuplicate);
+    m_designerToolbar->insertSeparator(m_actMixedLayout);
+    m_designerToolbar->insertSeparator(m_actSendToLayout);
+
+    m_toolPalette = addToolBar(Qt::LeftToolBarArea, QStringLiteral("デザインツール"));
+    m_toolPalette->setObjectName(QStringLiteral("toolPalette"));
+    m_toolPalette->setAllowedAreas(Qt::LeftToolBarArea);
+    m_toolPalette->setFont(uiFont);
+    configureToolbar(m_toolPalette, Qt::ToolButtonTextBesideIcon);
+    m_toolPalette->setIconSize(QSize(32, 32));
+    m_toolPalette->setMinimumWidth(280);
+    m_toolPalette->setMaximumWidth(300);
+    auto* toolPaletteHeading = new QLabel(QStringLiteral("ツール"), m_toolPalette);
+    toolPaletteHeading->setObjectName(QStringLiteral("toolPaletteHeading"));
+    toolPaletteHeading->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+    toolPaletteHeading->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+    toolPaletteHeading->setMinimumWidth(252);
+    toolPaletteHeading->setMinimumHeight(30);
+    m_toolPalette->addWidget(toolPaletteHeading);
+    auto* selectAction = new QAction(m_toolPalette);
+    selectAction->setText(QStringLiteral("選択"));
+    selectAction->setCheckable(true);
+    selectAction->setChecked(true);
+    selectAction->setToolTip(QStringLiteral("キャンバス上のバッジを選択"));
+    setMaterialIcon(selectAction, QStringLiteral("select"));
+    auto* selectToolGroup = new QActionGroup(this);
+    selectToolGroup->setExclusive(true);
+    selectToolGroup->addAction(selectAction);
+    connect(selectAction, &QAction::triggered, this, [this] {
+        if (m_designer) {
+            m_designer->setDragMode(QGraphicsView::RubberBandDrag);
+        }
+    });
+    auto* addTextAction = new QAction(m_toolPalette);
+    addTextAction->setText(QStringLiteral("テキスト"));
+    addTextAction->setToolTip(QStringLiteral("文字を入力してバッジを作成"));
+    setMaterialIcon(addTextAction, QStringLiteral("text_fields"));
+    connect(addTextAction, &QAction::triggered, this, &MainWindow::onAddTextBadge);
+    m_actAddBadge->setText(QStringLiteral("追加"));
+    m_actAddBadge->setToolTip(QStringLiteral("空のバッジを追加"));
+    m_actBatchAdd->setText(QStringLiteral("一括追加"));
+    m_actBatchAdd->setToolTip(QStringLiteral("画像をまとめてバッジとして追加"));
+    m_actMixedLayout->setToolTip(QStringLiteral("複数バッジを面付け"));
+    m_actSendToLayout->setText(QStringLiteral("配置へ"));
+    m_actSendToLayout->setToolTip(QStringLiteral("バッジを配置確認へ送る"));
+    for (auto* action : {m_actDelete, m_actDuplicate, m_actMixedLayout}) {
+        if (!action) {
+            continue;
+        }
+        if (auto* button = qobject_cast<QToolButton*>(m_designerToolbar->widgetForAction(action))) {
+            button->setToolButtonStyle(Qt::ToolButtonIconOnly);
+            const QString shortcut = action->shortcut().toString(QKeySequence::NativeText);
+            const QString description = shortcut.isEmpty()
+                ? action->text()
+                : QStringLiteral("%1 (%2)").arg(action->text(), shortcut);
+            button->setToolTip(description);
+            button->setAccessibleName(action->text());
+        }
+    }
+    auto* importImageAction = new QAction(m_toolPalette);
+    importImageAction->setText(QStringLiteral("画像"));
+    importImageAction->setToolTip(QStringLiteral("画像ファイルからバッジを作成"));
+    setMaterialIcon(importImageAction, QStringLiteral("image"));
+    connect(importImageAction, &QAction::triggered, this, [this] {
+        const QString path = QFileDialog::getOpenFileName(
+            this,
+            QStringLiteral("バッジ画像を追加"),
+            QString(),
+            QStringLiteral("画像ファイル (*.png *.jpg *.jpeg *.bmp *.gif *.webp *.tiff *.tif *.svg *.ico)"));
+        if (!path.isEmpty()) {
+            onImageDropped(path);
+        }
+    });
+    const auto addToolHint = [this](const QString& text) {
+        auto* hint = new QLabel(text, m_toolPalette);
+        hint->setObjectName(QStringLiteral("toolPaletteHint"));
+        hint->setMinimumWidth(252);
+        hint->setMinimumHeight(18);
+        m_toolPalette->addWidget(hint);
+    };
+    m_toolPalette->addAction(selectAction);
+    addToolHint(QStringLiteral("オブジェクトを選択"));
+    m_toolPalette->addAction(addTextAction);
+    addToolHint(QStringLiteral("文字を追加"));
+    m_toolPalette->addAction(importImageAction);
+    addToolHint(QStringLiteral("画像からバッジを作成"));
+    m_toolPalette->addSeparator();
+    for (auto* action : {selectAction, addTextAction, importImageAction}) {
+        if (auto* button = qobject_cast<QToolButton*>(m_toolPalette->widgetForAction(action))) {
+            button->setMinimumSize(242, 58);
+        }
+    }
 
     m_layoutToolbar = addToolBar("Layout");
     m_layoutToolbar->setFont(uiFont);
     configureToolbar(m_layoutToolbar, Qt::ToolButtonTextBesideIcon);
+    m_layoutToolbar->setIconSize(QSize(20, 20));
     m_actOpenLayoutPerspective = m_layoutToolbar->addAction("配置確認");
     connect(m_actOpenLayoutPerspective, &QAction::triggered, this, [this]{ openLayoutPerspective(); });
     m_actOpenLayoutPerspective->setShortcut(QKeySequence("Ctrl+L"));
@@ -1266,16 +1425,15 @@ MainWindow::MainWindow(QWidget* parent)
     setMaterialIcon(m_actLayoutPagePrev, QStringLiteral("chevron_left"));
     m_actLayoutPagePrev->setShortcut(QKeySequence(Qt::Key_PageUp));
     m_layoutPageLabel = new QLabel(QStringLiteral("1 / 1"));
-    m_layoutPageLabel->setMinimumWidth(56);
+    m_layoutPageLabel->setObjectName(QStringLiteral("layoutPageCount"));
+    m_layoutPageLabel->setMinimumWidth(64);
+    QFont pageCountFont = m_layoutPageLabel->font();
+    pageCountFont.setPointSize(11);
+    pageCountFont.setWeight(QFont::DemiBold);
+    m_layoutPageLabel->setFont(pageCountFont);
     m_layoutPageLabel->setAlignment(Qt::AlignCenter);
     m_layoutToolbar->addWidget(m_layoutPageLabel);
-    m_layoutPageCombo = new QComboBox;
-    m_layoutPageCombo->setMinimumWidth(104);
-    m_layoutPageCombo->setSizeAdjustPolicy(QComboBox::AdjustToContents);
-    connect(m_layoutPageCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int index) {
-        onLayoutPageSelected(index);
-    });
-    m_layoutToolbar->addWidget(m_layoutPageCombo);
+    m_layoutToolbar->addSeparator();
     m_layoutPageThumbList = new QListWidget;
     m_layoutPageThumbList->setObjectName(QStringLiteral("layoutPageStrip"));
     m_layoutPageThumbList->setViewMode(QListView::IconMode);
@@ -1345,6 +1503,8 @@ MainWindow::MainWindow(QWidget* parent)
 
     // Designer
     m_designer = new DesignerWidget;
+    connect(m_designer, &DesignerWidget::zoomChanged, this, &MainWindow::updateZoomControl);
+    updateZoomControl(m_designer->zoomFactor());
     connect(m_designer, &DesignerWidget::badgeSelected, this, [this](BadgeGraphicItem* item){ onBadgeSelected(item); });
     connect(m_designer, &DesignerWidget::selectionChanged, this, [this]{ onSelectionChanged(); });
     connect(m_designer, &DesignerWidget::badgeDeselected, this, [this]{ onBadgeDeselected(); });
@@ -1369,7 +1529,7 @@ MainWindow::MainWindow(QWidget* parent)
             appendLog(QStringLiteral("スポイトを有効化しました。デザイナー上をクリックして色を拾います"));
         }
     });
-    m_designer->updateGuides(32);
+    m_designer->updateGuides(m_appSettings.defaultBadgeSizeMm);
     updateSafetyGuideHud();
 
     // Layout
@@ -1414,9 +1574,31 @@ MainWindow::MainWindow(QWidget* parent)
     inspLayout->setContentsMargins(10, 10, 10, 10);
     inspLayout->setSpacing(8);
 
-    auto* checklistGroup = new QGroupBox("手順チェック");
+    auto* checklistGroup = new QGroupBox;
+    checklistGroup->setObjectName(QStringLiteral("checklistGroup"));
     m_checklistGroup = checklistGroup;
-    auto* checklistLayout = new QVBoxLayout(checklistGroup);
+    auto* checklistGroupLayout = new QVBoxLayout(checklistGroup);
+    checklistGroupLayout->setContentsMargins(5, 5, 5, 5);
+    checklistGroupLayout->setSpacing(3);
+    auto* checklistHeader = new QToolButton(checklistGroup);
+    checklistHeader->setObjectName(QStringLiteral("inspectorSectionHeader"));
+    checklistHeader->setText(QStringLiteral("手順チェック"));
+    checklistHeader->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+    checklistHeader->setArrowType(Qt::DownArrow);
+    checklistHeader->setCheckable(true);
+    checklistHeader->setChecked(true);
+    checklistHeader->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+    auto* checklistContents = new QWidget(checklistGroup);
+    auto* checklistLayout = new QVBoxLayout(checklistContents);
+    checklistLayout->setContentsMargins(0, 0, 0, 0);
+    checklistLayout->setSpacing(4);
+    checklistGroupLayout->addWidget(checklistHeader);
+    checklistGroupLayout->addWidget(checklistContents);
+    connect(checklistHeader, &QToolButton::toggled, this, [checklistHeader, checklistContents](bool expanded) {
+        checklistContents->setVisible(expanded);
+        checklistHeader->setArrowType(expanded ? Qt::DownArrow : Qt::RightArrow);
+    });
+    checklistHeader->setChecked(false);
     m_checklistDesign = new QLabel;
     m_checklistLayout = new QLabel;
     m_checklistColor = new QLabel;
@@ -1425,28 +1607,61 @@ MainWindow::MainWindow(QWidget* parent)
             continue;
         }
         label->setWordWrap(false);
-        label->setMargin(5);
+        label->setMargin(4);
         label->setAutoFillBackground(true);
         checklistLayout->addWidget(label);
     }
     inspLayout->addWidget(checklistGroup);
 
-    auto* safetyGroup = new QGroupBox("安全ガイド");
+    auto* safetyGroup = new QGroupBox("ガイド寸法");
+    safetyGroup->setObjectName(QStringLiteral("safetyGuideGroup"));
     m_safetyGuideGroup = safetyGroup;
     auto* safetyLayout = new QVBoxLayout(safetyGroup);
+    safetyLayout->setSpacing(6);
     m_safetyGuideDesign = new QLabel;
-    m_safetyGuideLayout = new QLabel;
     m_safetyGuideColor = new QLabel;
-    for (auto* label : {m_safetyGuideDesign, m_safetyGuideLayout, m_safetyGuideColor}) {
-        if (!label) {
-            continue;
-        }
-        label->setWordWrap(false);
-        label->setMargin(5);
-        label->setAutoFillBackground(true);
-        safetyLayout->addWidget(label);
-    }
-    inspLayout->addWidget(safetyGroup);
+    const auto addSafetyGuideEntry = [safetyGroup, safetyLayout](QLabel* label,
+                                                                 const QColor& color,
+                                                                 Qt::PenStyle penStyle) {
+        auto* row = new QWidget(safetyGroup);
+        auto* rowLayout = new QHBoxLayout(row);
+        rowLayout->setContentsMargins(0, 0, 0, 0);
+        rowLayout->setSpacing(8);
+        auto* swatch = new QLabel(row);
+        swatch->setFixedSize(32, 32);
+        swatch->setAlignment(Qt::AlignCenter);
+        QPixmap pixmap(32, 32);
+        pixmap.fill(Qt::transparent);
+        QPainter painter(&pixmap);
+        painter.setRenderHint(QPainter::Antialiasing);
+        painter.setPen(QPen(color, 2.0, penStyle));
+        painter.setBrush(Qt::NoBrush);
+        painter.drawEllipse(QRectF(4.0, 4.0, 24.0, 24.0));
+        painter.end();
+        swatch->setPixmap(pixmap);
+        label->setWordWrap(true);
+        label->setMargin(0);
+        label->setAutoFillBackground(false);
+        label->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+        rowLayout->addWidget(swatch);
+        rowLayout->addWidget(label, 1);
+        safetyLayout->addWidget(row);
+    };
+    addSafetyGuideEntry(m_safetyGuideDesign, QColor(0xEF, 0x44, 0x44), Qt::DashLine);
+    addSafetyGuideEntry(m_safetyGuideColor, QColor(0x22, 0xC5, 0x5E), Qt::SolidLine);
+
+    auto* selectionPlaceholder = new QGroupBox(QStringLiteral("オブジェクト設定"), m_toolPalette);
+    selectionPlaceholder->setObjectName(QStringLiteral("toolSelectionPlaceholder"));
+    selectionPlaceholder->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+    selectionPlaceholder->setMinimumWidth(252);
+    m_selectionPlaceholder = selectionPlaceholder;
+    auto* selectionPlaceholderLayout = new QVBoxLayout(selectionPlaceholder);
+    selectionPlaceholderLayout->setContentsMargins(0, 0, 0, 0);
+    auto* selectionPlaceholderText = new QLabel(QStringLiteral("キャンバス上のオブジェクトを選択すると、編集項目が表示されます。"), selectionPlaceholder);
+    selectionPlaceholderText->setObjectName(QStringLiteral("toolSelectionPlaceholderText"));
+    selectionPlaceholderText->setWordWrap(true);
+    selectionPlaceholderLayout->addWidget(selectionPlaceholderText);
+    m_toolPalette->addWidget(selectionPlaceholder);
 
     // Properties group
     auto* propGroup = new QGroupBox("オブジェクト情報");
@@ -1499,12 +1714,16 @@ MainWindow::MainWindow(QWidget* parent)
             m_propH->setValue(sizes[idx]);
         }
     });
-    m_sizePreset->setCurrentIndex(badgeSizePresetIndex(32.0, 32.0));
+    m_sizePreset->setCurrentIndex(badgeSizePresetIndex(m_appSettings.defaultBadgeSizeMm,
+                                                       m_appSettings.defaultBadgeSizeMm));
     propForm->addRow("回転:", m_propRotation); propForm->addRow("テキスト:", m_propText);
     m_propClipCircle = new QCheckBox("円形クリップ");
     m_propClipCircle->setChecked(true);
     propForm->addRow(m_propClipCircle);
     auto* imgBtn = new QPushButton("画像を変更...");
+    imgBtn->setIcon(loadMaterialIcon(QStringLiteral("image")));
+    imgBtn->setIconSize(QSize(18, 18));
+    imgBtn->setToolTip(QStringLiteral("選択中のバッジ画像を変更します"));
     connect(imgBtn, &QPushButton::clicked, this, [this]{ onSetImage(); });
     propForm->addRow(imgBtn);
     m_propColorSpace = new QLineEdit;
@@ -1529,10 +1748,29 @@ MainWindow::MainWindow(QWidget* parent)
     m_propBrightness = new QSlider(Qt::Horizontal); m_propBrightness->setRange(-100, 100);
     m_propContrast = new QSlider(Qt::Horizontal); m_propContrast->setRange(-100, 100);
     m_propSaturation = new QSlider(Qt::Horizontal); m_propSaturation->setRange(-100, 100);
-    colorForm->addRow("明るさ:", m_propBrightness);
-    colorForm->addRow("コントラスト:", m_propContrast);
-    colorForm->addRow("彩度:", m_propSaturation);
+    auto addAdjustmentRow = [colorGroup, colorForm](const QString& title, QSlider* slider) {
+        auto* row = new QWidget(colorGroup);
+        auto* rowLayout = new QHBoxLayout(row);
+        rowLayout->setContentsMargins(0, 0, 0, 0);
+        rowLayout->setSpacing(8);
+        auto* value = new QLabel(QStringLiteral("0"), row);
+        value->setObjectName(QStringLiteral("adjustmentValue"));
+        value->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+        value->setMinimumWidth(36);
+        QObject::connect(slider, &QSlider::valueChanged, value, [value](int current) {
+            value->setText(QString::number(current));
+        });
+        rowLayout->addWidget(slider, 1);
+        rowLayout->addWidget(value);
+        colorForm->addRow(title, row);
+    };
+    addAdjustmentRow(QStringLiteral("明るさ"), m_propBrightness);
+    addAdjustmentRow(QStringLiteral("コントラスト"), m_propContrast);
+    addAdjustmentRow(QStringLiteral("彩度"), m_propSaturation);
     auto* resetBtn = new QPushButton("リセット");
+    resetBtn->setIcon(loadMaterialIcon(QStringLiteral("refresh")));
+    resetBtn->setIconSize(QSize(16, 16));
+    resetBtn->setToolTip(QStringLiteral("明るさ・コントラスト・彩度を初期値に戻します"));
     connect(resetBtn, &QPushButton::clicked, this, [this]{ m_propBrightness->setValue(0); m_propContrast->setValue(0); m_propSaturation->setValue(0); onInspectorChanged(); });
     colorForm->addRow(resetBtn);
     auto* pickRow = new QWidget(colorGroup);
@@ -1567,34 +1805,57 @@ MainWindow::MainWindow(QWidget* parent)
     auto* layerLayout = new QVBoxLayout(layerGroup);
     m_layerList = new QListWidget;
     m_layerList->setMaximumHeight(84);
+    m_layerList->setIconSize(QSize(36, 36));
     m_layerList->setDragEnabled(true);
     m_layerList->setAcceptDrops(true);
     m_layerList->setDropIndicatorShown(true);
     m_layerList->setDragDropMode(QAbstractItemView::InternalMove);
     m_layerList->setDefaultDropAction(Qt::MoveAction);
     m_layerList->setSelectionMode(QAbstractItemView::SingleSelection);
+    m_layerList->setEditTriggers(QAbstractItemView::EditKeyPressed | QAbstractItemView::DoubleClicked);
     layerLayout->addWidget(m_layerList);
-    m_layerPreviewLabel = new QLabel;
-    m_layerPreviewLabel->setFixedSize(72, 72);
+    auto* layerDetailsRow = new QWidget(layerGroup);
+    auto* layerDetailsLayout = new QHBoxLayout(layerDetailsRow);
+    layerDetailsLayout->setContentsMargins(0, 0, 0, 0);
+    layerDetailsLayout->setSpacing(8);
+    m_layerPreviewLabel = new QLabel(layerDetailsRow);
+    m_layerPreviewLabel->setFixedSize(56, 56);
     m_layerPreviewLabel->setAlignment(Qt::AlignCenter);
     m_layerPreviewLabel->setAutoFillBackground(true);
-    layerLayout->addWidget(m_layerPreviewLabel);
+    layerDetailsLayout->addWidget(m_layerPreviewLabel);
+    auto* layerAdjustments = new QVBoxLayout;
+    layerAdjustments->setContentsMargins(0, 0, 0, 0);
+    layerAdjustments->setSpacing(4);
     auto* layerOpacityLabel = new QLabel("不透明度");
-    layerLayout->addWidget(layerOpacityLabel);
+    layerAdjustments->addWidget(layerOpacityLabel);
     m_sliderLayerOpacity = new QSlider(Qt::Horizontal);
     m_sliderLayerOpacity->setRange(0, 100);
     m_sliderLayerOpacity->setValue(100);
-    layerLayout->addWidget(m_sliderLayerOpacity);
+    layerAdjustments->addWidget(m_sliderLayerOpacity);
     m_comboLayerBlendMode = new QComboBox;
     m_comboLayerBlendMode->addItems({"Normal", "Multiply", "Screen", "Overlay", "Soft Light", "Add"});
-    layerLayout->addWidget(m_comboLayerBlendMode);
+    layerAdjustments->addWidget(m_comboLayerBlendMode);
+    layerDetailsLayout->addLayout(layerAdjustments, 1);
+    layerLayout->addWidget(layerDetailsRow);
     auto* layerBtnRow = new QHBoxLayout;
-    auto* btnAddLayer = new QPushButton("＋");
-    auto* btnDelLayer = new QPushButton("－");
-    auto* btnUpLayer = new QPushButton("▲");
-    auto* btnDownLayer = new QPushButton("▼");
-    btnAddLayer->setFixedWidth(30); btnDelLayer->setFixedWidth(30);
-    btnUpLayer->setFixedWidth(30); btnDownLayer->setFixedWidth(30);
+    auto* btnAddLayer = new QPushButton;
+    auto* btnDelLayer = new QPushButton;
+    auto* btnUpLayer = new QPushButton;
+    auto* btnDownLayer = new QPushButton;
+    btnAddLayer->setIcon(loadMaterialIcon(QStringLiteral("image")));
+    btnDelLayer->setIcon(loadMaterialIcon(QStringLiteral("delete")));
+    btnUpLayer->setIcon(style()->standardIcon(QStyle::SP_ArrowUp));
+    btnDownLayer->setIcon(style()->standardIcon(QStyle::SP_ArrowDown));
+    for (const auto& buttonInfo : {
+             qMakePair(btnAddLayer, QStringLiteral("画像レイヤーを追加")),
+             qMakePair(btnDelLayer, QStringLiteral("選択レイヤーを削除")),
+             qMakePair(btnUpLayer, QStringLiteral("選択レイヤーを上へ移動")),
+             qMakePair(btnDownLayer, QStringLiteral("選択レイヤーを下へ移動"))}) {
+        buttonInfo.first->setFixedSize(32, 30);
+        buttonInfo.first->setIconSize(QSize(16, 16));
+        buttonInfo.first->setToolTip(buttonInfo.second);
+        buttonInfo.first->setAccessibleName(buttonInfo.second);
+    }
     layerBtnRow->addWidget(btnAddLayer);
     layerBtnRow->addWidget(btnDelLayer);
     layerBtnRow->addWidget(btnUpLayer);
@@ -1608,6 +1869,44 @@ MainWindow::MainWindow(QWidget* parent)
         updateLayerOpacityUi();
         updateLayerPreviewUi();
         updateLayerFillUi();
+    });
+    connect(m_layerList, &QListWidget::itemChanged, this, [this](QListWidgetItem* item) {
+        if (!item || m_selected.isEmpty() || !m_designer) {
+            return;
+        }
+        const int row = m_layerList->row(item);
+        const auto before = currentDesignerBadges();
+        const auto selected = selectedBadgeIndices();
+        if (selected.isEmpty()) {
+            return;
+        }
+        const int badgeIndex = selected.first();
+        if (badgeIndex < 0 || badgeIndex >= before.size()
+            || row < 0 || row >= before[badgeIndex].layers.size()) {
+            return;
+        }
+        const auto& originalLayer = before[badgeIndex].layers[row];
+        const QString originalName = originalLayer.name.isEmpty()
+            ? QFileInfo(originalLayer.imagePath).baseName()
+            : originalLayer.name;
+        const QString editedName = item->text().trimmed();
+        if (editedName.isEmpty()) {
+            const QSignalBlocker blocker(m_layerList);
+            item->setText(originalName);
+            return;
+        }
+        const bool renamed = editedName != originalName;
+        const bool visibilityChanged = originalLayer.visible != (item->checkState() == Qt::Checked);
+        auto after = before;
+        auto& changedLayer = after[badgeIndex].layers[row];
+        changedLayer.visible = item->checkState() == Qt::Checked;
+        if (renamed) {
+            changedLayer.name = editedName;
+        }
+        if (renamed || visibilityChanged) {
+            pushBadgeChange(renamed ? QStringLiteral("レイヤー名変更") : QStringLiteral("レイヤー表示切替"),
+                            before, selected, after, selected);
+        }
     });
     connect(m_comboLayerBlendMode, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int){ onInspectorChanged(); });
     connect(m_sliderLayerOpacity, &QSlider::valueChanged, this, [this](int){ onInspectorChanged(); });
@@ -1745,19 +2044,17 @@ MainWindow::MainWindow(QWidget* parent)
     });
 
     // Guide group
-    auto* guideGroup = new QGroupBox("ガイド表示");
+    auto* guideGroup = new QGroupBox("ガイド調整");
     m_guideGroup = guideGroup;
     auto* guideLayout = new QVBoxLayout(guideGroup);
-    m_chkBleed = new QCheckBox("巻き込みエリア (塗り足し)"); m_chkBleed->setChecked(true);
-    m_chkVisible = new QCheckBox("可視エリア (安全圏)"); m_chkVisible->setChecked(true);
+    m_chkBleed = new QCheckBox("塗り足し線を表示"); m_chkBleed->setChecked(true);
+    m_chkVisible = new QCheckBox("セーフエリアを表示"); m_chkVisible->setChecked(true);
     m_spinCutLineOffset = new QDoubleSpinBox;
     m_spinCutLineOffset->setRange(-3.9, 20.0);
     m_spinCutLineOffset->setDecimals(1);
     m_spinCutLineOffset->setSingleStep(0.1);
     m_spinCutLineOffset->setSuffix(" mm");
-    m_spinCutLineOffset->setToolTip("基準のカットラインは仕上がり面の外側 4.0 mm です。32 mm バッジでは 40 mm になります。");
-    guideLayout->addWidget(m_chkBleed);
-    guideLayout->addWidget(m_chkVisible);
+    m_spinCutLineOffset->setToolTip("基準のカットラインは仕上がり面の外側 4.0 mm です。");
     auto* cutLineForm = new QFormLayout;
     cutLineForm->setContentsMargins(0, 0, 0, 0);
     cutLineForm->addRow("カット線オフセット:", m_spinCutLineOffset);
@@ -1766,6 +2063,225 @@ MainWindow::MainWindow(QWidget* parent)
     connect(m_chkBleed, &QCheckBox::toggled, this, [this](bool){ onGuideToggle(); });
     connect(m_chkVisible, &QCheckBox::toggled, this, [this](bool){ onGuideToggle(); });
     connect(m_spinCutLineOffset, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this](double){ onInspectorChanged(); });
+
+    auto* canvasGroup = new QGroupBox;
+    canvasGroup->setObjectName(QStringLiteral("pageSettingsGroup"));
+    m_canvasGroup = canvasGroup;
+    auto* canvasLayout = new QVBoxLayout(canvasGroup);
+    canvasLayout->setContentsMargins(5, 5, 5, 5);
+    canvasLayout->setSpacing(3);
+    auto* canvasHeader = new QToolButton(canvasGroup);
+    canvasHeader->setObjectName(QStringLiteral("inspectorSectionHeader"));
+    canvasHeader->setText(QStringLiteral("ページ設定"));
+    canvasHeader->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+    canvasHeader->setArrowType(Qt::DownArrow);
+    canvasHeader->setCheckable(true);
+    canvasHeader->setChecked(true);
+    canvasHeader->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+    auto* canvasContents = new QWidget(canvasGroup);
+    auto* canvasForm = new QFormLayout(canvasContents);
+    canvasForm->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
+    canvasLayout->addWidget(canvasHeader);
+    canvasLayout->addWidget(canvasContents);
+    connect(canvasHeader, &QToolButton::toggled, this, [canvasHeader, canvasContents](bool expanded) {
+        canvasContents->setVisible(expanded);
+        canvasHeader->setArrowType(expanded ? Qt::DownArrow : Qt::RightArrow);
+    });
+    m_chkGridVisible = new QCheckBox(QStringLiteral("グリッドを表示"));
+    m_chkGridVisible->setChecked(true);
+    m_chkRulersVisible = new QCheckBox(QStringLiteral("定規を表示"));
+    m_chkRulersVisible->setChecked(true);
+    m_chkSnapToGrid = new QCheckBox(QStringLiteral("グリッドにスナップ"));
+    m_chkSnapToGrid->setChecked(true);
+    m_spinGridSpacing = new QDoubleSpinBox;
+    m_spinGridSpacing->setRange(0.5, 50.0);
+    m_spinGridSpacing->setSingleStep(0.5);
+    m_spinGridSpacing->setDecimals(1);
+    m_spinGridSpacing->setSuffix(QStringLiteral(" mm"));
+    m_spinGridSpacing->setValue(m_appSettings.gridSpacingMm);
+    m_comboDefaultBadgeSize = new QComboBox;
+    m_comboDefaultBadgeSize->addItem(QStringLiteral("25 mm"), 25.0);
+    m_comboDefaultBadgeSize->addItem(QStringLiteral("32 mm"), 32.0);
+    m_comboDefaultBadgeSize->addItem(QStringLiteral("44 mm"), 44.0);
+    m_comboDefaultBadgeSize->addItem(QStringLiteral("57 mm（標準）"), 57.0);
+    m_comboDefaultBadgeSize->addItem(QStringLiteral("65 mm"), 65.0);
+    m_comboDefaultBadgeSize->addItem(QStringLiteral("76 mm"), 76.0);
+    m_comboDefaultBadgeSize->addItem(QStringLiteral("100 mm"), 100.0);
+    const int defaultBadgeSizeIndex = m_comboDefaultBadgeSize->findData(m_appSettings.defaultBadgeSizeMm);
+    m_comboDefaultBadgeSize->setCurrentIndex(defaultBadgeSizeIndex >= 0 ? defaultBadgeSizeIndex : 3);
+    auto* backgroundOptions = new QWidget(canvasGroup);
+    auto* backgroundLayout = new QVBoxLayout(backgroundOptions);
+    backgroundLayout->setContentsMargins(0, 2, 0, 2);
+    backgroundLayout->setSpacing(4);
+    const auto makeBackgroundSwatch = [](CanvasBackgroundMode mode) {
+        QPixmap swatch(40, 26);
+        swatch.fill(Qt::transparent);
+        QPainter painter(&swatch);
+        painter.setRenderHint(QPainter::Antialiasing);
+        const QRectF tileRect(0.5, 0.5, 39.0, 25.0);
+        painter.setPen(QPen(QColor(117, 131, 151), 1.0));
+        painter.setBrush(QColor(248, 250, 253));
+        painter.drawRoundedRect(tileRect, 3.0, 3.0);
+        painter.save();
+        QPainterPath clipPath;
+        clipPath.addRoundedRect(tileRect, 3.0, 3.0);
+        painter.setClipPath(clipPath);
+        if (mode == CanvasBackgroundMode::PrintGuideGrid) {
+            painter.fillRect(tileRect, QColor(235, 238, 243));
+            painter.setPen(QPen(QColor(168, 178, 192), 0.7));
+            for (int x = 7; x < 40; x += 7) painter.drawLine(x, 0, x, 26);
+            for (int y = 7; y < 26; y += 7) painter.drawLine(0, y, 40, y);
+        } else if (mode == CanvasBackgroundMode::TransparentCheckerboard) {
+            constexpr int tile = 7;
+            for (int y = 0; y < 26; y += tile) {
+                for (int x = 0; x < 40; x += tile) {
+                    const bool shade = ((x / tile + y / tile) & 1) != 0;
+                    painter.fillRect(QRect(x, y, tile, tile), shade ? QColor(194, 202, 213) : QColor(250, 251, 253));
+                }
+            }
+        }
+        painter.restore();
+        painter.end();
+        return QIcon(swatch);
+    };
+    m_radioCanvasGrid = new QRadioButton(QStringLiteral("グリッド（印刷ガイド）"), backgroundOptions);
+    m_radioCanvasWhite = new QRadioButton(QStringLiteral("白"), backgroundOptions);
+    m_radioCanvasTransparent = new QRadioButton(QStringLiteral("透明（チェック柄）"), backgroundOptions);
+    for (auto* option : {m_radioCanvasGrid, m_radioCanvasWhite, m_radioCanvasTransparent}) {
+        option->setObjectName(QStringLiteral("canvasBackgroundOption"));
+        option->setIconSize(QSize(28, 18));
+        option->setMinimumHeight(30);
+    }
+    m_radioCanvasGrid->setIcon(makeBackgroundSwatch(CanvasBackgroundMode::PrintGuideGrid));
+    m_radioCanvasWhite->setIcon(makeBackgroundSwatch(CanvasBackgroundMode::White));
+    m_radioCanvasTransparent->setIcon(makeBackgroundSwatch(CanvasBackgroundMode::TransparentCheckerboard));
+    m_radioCanvasGrid->setToolTip(QStringLiteral("印刷ガイドに合わせたグリッドを表示します"));
+    m_radioCanvasWhite->setToolTip(QStringLiteral("白い背景でバッジの見た目を確認します"));
+    m_radioCanvasTransparent->setToolTip(QStringLiteral("透明部分をチェック柄で表示します"));
+    const auto makeCanvasSubheading = [canvasGroup](const QString& text) {
+        auto* heading = new QLabel(text, canvasGroup);
+        heading->setObjectName(QStringLiteral("canvasSubheading"));
+        QFont font = heading->font();
+        font.setWeight(QFont::DemiBold);
+        heading->setFont(font);
+        heading->setContentsMargins(0, 6, 0, 1);
+        return heading;
+    };
+    const auto makeGuideSwatch = [](const QColor& color, Qt::PenStyle style) {
+        QPixmap swatch(34, 14);
+        swatch.fill(Qt::transparent);
+        QPainter painter(&swatch);
+        painter.setRenderHint(QPainter::Antialiasing);
+        painter.setPen(QPen(color, 2.0, style));
+        painter.drawLine(2, 7, 32, 7);
+        painter.end();
+        return QIcon(swatch);
+    };
+    m_chkBleed->setText(QStringLiteral("塗り足し"));
+    m_chkVisible->setText(QStringLiteral("安全圏"));
+    m_chkBleed->setObjectName(QStringLiteral("guideVisibilityToggle"));
+    m_chkVisible->setObjectName(QStringLiteral("guideVisibilityToggle"));
+    m_chkBleed->setIcon(makeGuideSwatch(QColor(239, 68, 68), Qt::DashLine));
+    m_chkVisible->setIcon(makeGuideSwatch(QColor(34, 197, 94), Qt::SolidLine));
+    m_chkBleed->setIconSize(QSize(30, 12));
+    m_chkVisible->setIconSize(QSize(30, 12));
+    m_chkBleed->setToolTip(QStringLiteral("塗り足し線（赤い破線）の表示を切り替えます"));
+    m_chkVisible->setToolTip(QStringLiteral("安全圏（緑の実線）の表示を切り替えます"));
+    auto* guideVisibilityOptions = new QWidget(canvasGroup);
+    auto* guideVisibilityLayout = new QHBoxLayout(guideVisibilityOptions);
+    guideVisibilityLayout->setContentsMargins(0, 0, 0, 0);
+    guideVisibilityLayout->setSpacing(6);
+    guideVisibilityLayout->addWidget(m_chkBleed);
+    guideVisibilityLayout->addWidget(m_chkVisible);
+    m_radioCanvasGrid->setChecked(true);
+    backgroundLayout->addWidget(m_radioCanvasGrid);
+    backgroundLayout->addWidget(m_radioCanvasWhite);
+    backgroundLayout->addWidget(m_radioCanvasTransparent);
+    canvasForm->addRow(QStringLiteral("バッジサイズ:"), m_comboDefaultBadgeSize);
+    canvasForm->insertRow(1, m_safetyGuideGroup);
+    canvasForm->addRow(QStringLiteral("ガイド表示:"), guideVisibilityOptions);
+    canvasForm->addRow(makeCanvasSubheading(QStringLiteral("グリッド")));
+    canvasForm->addRow(m_chkGridVisible);
+    canvasForm->addRow(QStringLiteral("間隔:"), m_spinGridSpacing);
+    canvasForm->addRow(m_chkRulersVisible);
+    canvasForm->addRow(m_chkSnapToGrid);
+    canvasForm->addRow(makeCanvasSubheading(QStringLiteral("キャンバス背景")));
+    canvasForm->addRow(backgroundOptions);
+    inspLayout->insertWidget(0, canvasGroup);
+    connect(m_chkGridVisible, &QCheckBox::toggled, this, [this](bool on) {
+        if (m_actGridVisible) {
+            m_actGridVisible->setChecked(on);
+        }
+    });
+    connect(m_chkRulersVisible, &QCheckBox::toggled, this, [this](bool on) {
+        m_appSettings.rulersVisible = on;
+        if (m_designer) {
+            m_designer->setRulersVisible(on);
+        }
+        saveAppSettings();
+    });
+    connect(m_chkSnapToGrid, &QCheckBox::toggled, this, [this](bool on) {
+        if (m_actSnapToGrid) {
+            m_actSnapToGrid->setChecked(on);
+        }
+    });
+    connect(m_actGridVisible, &QAction::toggled, this, [this](bool on) {
+        if (m_chkGridVisible) {
+            const QSignalBlocker blocker(m_chkGridVisible);
+            m_chkGridVisible->setChecked(on);
+        }
+    });
+    connect(m_actSnapToGrid, &QAction::toggled, this, [this](bool on) {
+        if (m_chkSnapToGrid) {
+            const QSignalBlocker blocker(m_chkSnapToGrid);
+            m_chkSnapToGrid->setChecked(on);
+        }
+    });
+    connect(m_spinGridSpacing, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this](double mm) {
+        m_appSettings.gridSpacingMm = mm;
+        if (m_designer) {
+            m_designer->setGridSpacingMm(mm);
+        }
+        saveAppSettings();
+    });
+    connect(m_comboDefaultBadgeSize, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int index) {
+        if (index < 0 || !m_comboDefaultBadgeSize) {
+            return;
+        }
+        m_appSettings.defaultBadgeSizeMm = m_comboDefaultBadgeSize->currentData().toDouble();
+        if (m_selected.isEmpty()) {
+            m_updatingUI = true;
+            m_propW->setValue(m_appSettings.defaultBadgeSizeMm);
+            m_propH->setValue(m_appSettings.defaultBadgeSizeMm);
+            if (m_sizePreset) {
+                m_sizePreset->setCurrentIndex(badgeSizePresetIndex(m_appSettings.defaultBadgeSizeMm,
+                                                                   m_appSettings.defaultBadgeSizeMm));
+            }
+            m_updatingUI = false;
+            m_lastGuideSizeMm = m_appSettings.defaultBadgeSizeMm;
+            if (m_designer) {
+                m_designer->updateGuides(m_lastGuideSizeMm);
+            }
+            updateSafetyGuideHud();
+        }
+        saveAppSettings();
+    });
+    const auto applyCanvasBackground = [this](CanvasBackgroundMode mode) {
+        m_appSettings.canvasBackgroundMode = mode;
+        if (m_designer) {
+            m_designer->setCanvasBackgroundMode(mode);
+        }
+        saveAppSettings();
+    };
+    connect(m_radioCanvasGrid, &QRadioButton::toggled, this, [applyCanvasBackground](bool checked) {
+        if (checked) applyCanvasBackground(CanvasBackgroundMode::PrintGuideGrid);
+    });
+    connect(m_radioCanvasWhite, &QRadioButton::toggled, this, [applyCanvasBackground](bool checked) {
+        if (checked) applyCanvasBackground(CanvasBackgroundMode::White);
+    });
+    connect(m_radioCanvasTransparent, &QRadioButton::toggled, this, [applyCanvasBackground](bool checked) {
+        if (checked) applyCanvasBackground(CanvasBackgroundMode::TransparentCheckerboard);
+    });
 
     // Effects group
     auto* effectGroup = new QGroupBox("エフェクト");
@@ -1839,44 +2355,103 @@ MainWindow::MainWindow(QWidget* parent)
     applyMaterialPreset(0);
 
     // Layout config group
-    auto* layoutGroup = new QGroupBox("用紙設定");
+    auto* layoutGroup = new QGroupBox;
+    layoutGroup->setObjectName(QStringLiteral("paperSettingsGroup"));
     m_layoutGroup = layoutGroup;
-    auto* layoutForm = new QFormLayout(layoutGroup);
+    auto* layoutGroupLayout = new QVBoxLayout(layoutGroup);
+    layoutGroupLayout->setContentsMargins(5, 5, 5, 5);
+    layoutGroupLayout->setSpacing(3);
+    auto* layoutHeader = new QToolButton(layoutGroup);
+    layoutHeader->setObjectName(QStringLiteral("inspectorSectionHeader"));
+    layoutHeader->setText(QStringLiteral("用紙設定"));
+    layoutHeader->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+    layoutHeader->setArrowType(Qt::DownArrow);
+    layoutHeader->setCheckable(true);
+    layoutHeader->setChecked(true);
+    layoutHeader->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+    auto* layoutContents = new QWidget(layoutGroup);
+    auto* layoutForm = new QFormLayout(layoutContents);
     layoutForm->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
-    m_comboPaperSize = new QComboBox;
-    m_comboPaperSize->addItems({
-        "A3 (297 x 420 mm)",
-        "A4 (210 x 297 mm)",
-        "A5 (148 x 210 mm)",
-        "B4 (257 x 364 mm)",
-        "B5 (182 x 257 mm)",
-        "Letter (216 x 279 mm)",
-        "Legal (216 x 356 mm)"
+    layoutGroupLayout->addWidget(layoutHeader);
+    layoutGroupLayout->addWidget(layoutContents);
+    connect(layoutHeader, &QToolButton::toggled, this, [layoutHeader, layoutContents](bool expanded) {
+        layoutContents->setVisible(expanded);
+        layoutHeader->setArrowType(expanded ? Qt::DownArrow : Qt::RightArrow);
     });
+    m_comboPaperSize = new QComboBox;
+    m_comboPaperSize->addItem("A3 (297 x 420 mm)", QSize(297, 420));
+    m_comboPaperSize->addItem("A4 (210 x 297 mm)", QSize(210, 297));
+    m_comboPaperSize->addItem("A5 (148 x 210 mm)", QSize(148, 210));
+    m_comboPaperSize->addItem("B4 (257 x 364 mm)", QSize(257, 364));
+    m_comboPaperSize->addItem("B5 (182 x 257 mm)", QSize(182, 257));
+    m_comboPaperSize->addItem("Letter (216 x 279 mm)", QSize(216, 279));
+    m_comboPaperSize->addItem("Legal (216 x 356 mm)", QSize(216, 356));
     m_comboPaperSize->setCurrentIndex(1);
     m_chkLandscape = new QCheckBox("横向き");
+    m_chkLandscape->setToolTip(QStringLiteral("用紙の向きを切り替えます"));
+    auto* paperDimensionsLabel = new QLabel;
+    paperDimensionsLabel->setObjectName(QStringLiteral("paperDimensions"));
+    paperDimensionsLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    auto* printableDimensionsLabel = new QLabel;
+    printableDimensionsLabel->setObjectName(QStringLiteral("paperDimensions"));
+    printableDimensionsLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
     m_spinPaperMargin = new QDoubleSpinBox;
     m_spinPaperMargin->setSuffix(" mm");
     m_spinPaperMargin->setRange(0.0, 100.0);
     m_spinPaperMargin->setValue(5.0);
+    m_spinPaperMargin->setToolTip(QStringLiteral("用紙の四辺に設定する余白"));
     m_spinPaperSpacing = new QDoubleSpinBox;
     m_spinPaperSpacing->setSuffix(" mm");
     m_spinPaperSpacing->setRange(0.0, 50.0);
     m_spinPaperSpacing->setValue(1.0);
+    m_spinPaperSpacing->setToolTip(QStringLiteral("面付け時に隣り合うバッジの間に設ける間隔"));
     m_chkCutFriendlyLayout = new QCheckBox("切りやすい整列配置");
     layoutForm->addRow("用紙:", m_comboPaperSize);
     layoutForm->addRow(m_chkLandscape);
+    layoutForm->addRow("用紙寸法:", paperDimensionsLabel);
     layoutForm->addRow("余白:", m_spinPaperMargin);
+    layoutForm->addRow("印刷可能範囲:", printableDimensionsLabel);
     layoutForm->addRow("間隔:", m_spinPaperSpacing);
     layoutForm->addRow(m_chkCutFriendlyLayout);
     inspLayout->addWidget(layoutGroup);
 
-    connect(m_comboPaperSize, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this]{ if (!m_isDesigner) requestLayoutRefresh("paper size changed"); });
-    connect(m_chkLandscape, &QCheckBox::toggled, this, [this]{ if (!m_isDesigner) requestLayoutRefresh("orientation changed"); });
-    connect(m_spinPaperMargin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this]{ if (!m_isDesigner) requestLayoutRefresh("margin changed"); });
+    const auto updatePaperDimensions = [this, paperDimensionsLabel, printableDimensionsLabel] {
+        QSize dimensions = m_comboPaperSize->currentData().toSize();
+        if (m_chkLandscape->isChecked()) {
+            dimensions.transpose();
+        }
+        paperDimensionsLabel->setText(QStringLiteral("%1 × %2 mm")
+                                          .arg(dimensions.width())
+                                          .arg(dimensions.height()));
+        const double printableWidth = std::max(0.0, dimensions.width() - 2.0 * m_spinPaperMargin->value());
+        const double printableHeight = std::max(0.0, dimensions.height() - 2.0 * m_spinPaperMargin->value());
+        printableDimensionsLabel->setText(QStringLiteral("%1 × %2 mm")
+                                              .arg(printableWidth, 0, 'f', 1)
+                                              .arg(printableHeight, 0, 'f', 1));
+        m_chkLandscape->setText(m_chkLandscape->isChecked()
+                                    ? QStringLiteral("横向き")
+                                    : QStringLiteral("縦向き"));
+    };
+    connect(m_comboPaperSize, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this, updatePaperDimensions]{
+        updatePaperDimensions();
+        if (!m_isDesigner) requestLayoutRefresh("paper size changed");
+    });
+    connect(m_chkLandscape, &QCheckBox::toggled, this, [this, updatePaperDimensions]{
+        updatePaperDimensions();
+        if (!m_isDesigner) requestLayoutRefresh("orientation changed");
+    });
+    updatePaperDimensions();
+    connect(m_spinPaperMargin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this, updatePaperDimensions]{
+        updatePaperDimensions();
+        if (!m_isDesigner) requestLayoutRefresh("margin changed");
+    });
     connect(m_spinPaperSpacing, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this]{ if (!m_isDesigner) requestLayoutRefresh("spacing changed"); });
     connect(m_chkCutFriendlyLayout, &QCheckBox::toggled, this, [this]{ if (!m_isDesigner) requestLayoutRefresh("cut friendly changed"); });
 
+    inspLayout->removeWidget(m_canvasGroup);
+    inspLayout->insertWidget(0, m_canvasGroup);
+    inspLayout->removeWidget(m_guideGroup);
+    inspLayout->insertWidget(1, m_guideGroup);
     inspLayout->addStretch();
     scroll->setWidget(m_inspector);
 
@@ -1918,6 +2493,7 @@ MainWindow::MainWindow(QWidget* parent)
     m_dockManager->addDockWidgetTabToArea(m_layoutDock, m_dockArea);
     m_dockManager->addDockWidget(ads::RightDockWidgetArea, m_inspectorDock, m_dockArea);
     m_dockManager->addDockWidget(ads::BottomDockWidgetArea, m_logDock, m_dockArea);
+    m_logDock->setVisible(false);
     m_defaultDockState = m_dockManager->saveState(1);
     m_dockManager->addPerspective("designer");
     m_layoutDock->setAsCurrentTab();
@@ -2267,6 +2843,7 @@ void MainWindow::onSelectionChanged() {
     }
 
     setInspectorControlsEnabled(true);
+    updateToolbarsForMode();
     m_updatingUI = true;
     BadgeItem& b = m_selected.first()->badge();
     m_propX->setValue(b.xMm); m_propY->setValue(b.yMm);
@@ -2318,14 +2895,17 @@ void MainWindow::onBadgeDeselected() {
     m_internalEventQueue->clear();
     m_internalEventFlushScheduled = false;
     setInspectorControlsEnabled(false);
+    updateToolbarsForMode();
     m_updatingUI = true;
     m_propX->setValue(0); m_propY->setValue(0);
-    m_propW->setValue(32); m_propH->setValue(32);
+    m_propW->setValue(m_appSettings.defaultBadgeSizeMm);
+    m_propH->setValue(m_appSettings.defaultBadgeSizeMm);
     if (m_propImageScale) {
         m_propImageScale->setValue(100.0);
     }
     if (m_sizePreset) {
-        m_sizePreset->setCurrentIndex(badgeSizePresetIndex(32.0, 32.0));
+        m_sizePreset->setCurrentIndex(badgeSizePresetIndex(m_appSettings.defaultBadgeSizeMm,
+                                                           m_appSettings.defaultBadgeSizeMm));
     }
     m_propRotation->setValue(0);
     m_propText->clear();
@@ -2358,6 +2938,7 @@ void MainWindow::onBadgeDeselected() {
     if (m_comboGlitter) {
         m_comboGlitter->setEnabled(false);
     }
+    m_lastGuideSizeMm = m_appSettings.defaultBadgeSizeMm;
     m_designer->updateGuides(m_lastGuideSizeMm);
     m_updatingUI = false;
     if (m_layerList) {
@@ -2520,12 +3101,31 @@ void MainWindow::onInspectorChanged() {
 }
 
 void MainWindow::setInspectorControlsEnabled(bool on) {
-    if (m_propGroup) m_propGroup->setEnabled(on);
+    const bool showSelectionControls = on && m_isDesigner;
+    if (m_selectionPlaceholder) {
+        m_selectionPlaceholder->setVisible(m_isDesigner && !on);
+    }
+    if (m_propGroup) {
+        m_propGroup->setEnabled(on);
+        m_propGroup->setVisible(showSelectionControls);
+    }
     if (m_checklistGroup) m_checklistGroup->setEnabled(true);
-    if (m_colorGroup) m_colorGroup->setEnabled(on);
-    if (m_layerGroup) m_layerGroup->setEnabled(on);
-    if (m_guideGroup) m_guideGroup->setEnabled(on);
-    if (m_effectGroup) m_effectGroup->setEnabled(on);
+    if (m_colorGroup) {
+        m_colorGroup->setEnabled(on);
+        m_colorGroup->setVisible(showSelectionControls);
+    }
+    if (m_layerGroup) {
+        m_layerGroup->setEnabled(on);
+        m_layerGroup->setVisible(showSelectionControls);
+    }
+    if (m_guideGroup) {
+        m_guideGroup->setEnabled(on);
+        m_guideGroup->setVisible(showSelectionControls);
+    }
+    if (m_effectGroup) {
+        m_effectGroup->setEnabled(on);
+        m_effectGroup->setVisible(showSelectionControls);
+    }
 }
 
 QList<QList<BadgeItem>> MainWindow::currentLayoutPages() const {
@@ -2563,23 +3163,6 @@ void MainWindow::updateLayoutPageUi() {
     }
     if (m_actLayoutPageNext) {
         m_actLayoutPageNext->setEnabled(packedLayout && pageIndex + 1 < pageCount);
-    }
-    if (m_layoutPageCombo) {
-        const QSignalBlocker blocker(m_layoutPageCombo);
-        m_layoutPageCombo->clear();
-        if (packedLayout) {
-            for (int i = 0; i < pageCount; ++i) {
-                m_layoutPageCombo->addItem(QStringLiteral("%1 / %2")
-                                               .arg(layoutPageTitle(i),
-                                                    QString::number(pageCount)));
-            }
-            m_layoutPageCombo->setCurrentIndex(pageIndex);
-            m_layoutPageCombo->setEnabled(true);
-        } else {
-            m_layoutPageCombo->addItem(layoutPageTitle(0));
-            m_layoutPageCombo->setCurrentIndex(0);
-            m_layoutPageCombo->setEnabled(false);
-        }
     }
     if (m_layoutPageThumbList) {
         const QSignalBlocker blocker(m_layoutPageThumbList);
@@ -2847,15 +3430,23 @@ void MainWindow::refreshLayerList() {
     if (!m_layerList) {
         return;
     }
+    const QSignalBlocker blocker(m_layerList);
     const int previousRow = m_layerList->currentRow();
     m_layerList->clear();
     if (m_selected.isEmpty()) {
         m_lastLayerRow = -1;
         return;
     }
-    const auto& layers = m_selected.first()->badge().layers;
-    for (const auto& layer : layers) {
-        auto* item = new QListWidgetItem(layerItemSummary(layer));
+    const auto& badge = m_selected.first()->badge();
+    const auto& layers = badge.layers;
+    for (int row = 0; row < layers.size(); ++row) {
+        const auto& layer = layers[row];
+        auto* item = new QListWidgetItem(layer.name.isEmpty() ? QFileInfo(layer.imagePath).baseName() : layer.name);
+        item->setFlags(item->flags() | Qt::ItemIsUserCheckable | Qt::ItemIsEditable);
+        item->setCheckState(layer.visible ? Qt::Checked : Qt::Unchecked);
+        item->setIcon(QIcon(renderLayerPreviewPixmap(badge, row, m_layerList->palette(), 36)));
+        item->setToolTip(QStringLiteral("チェックで表示を切替、ダブルクリックで名前を変更\n%1")
+                             .arg(layer.imagePath));
         m_layerList->addItem(item);
     }
     if (!layers.isEmpty()) {
@@ -2881,12 +3472,12 @@ void MainWindow::updateLayerPreviewUi() {
     const bool valid = hasSelection && row >= 0 && row < m_selected.first()->badge().layers.size();
     if (!valid) {
         m_layerPreviewLabel->setPixmap({});
-        m_layerPreviewLabel->setText(QStringLiteral("Composite Preview"));
+        m_layerPreviewLabel->setText(QStringLiteral("合成\nプレビュー"));
         return;
     }
 
     const auto& badge = m_selected.first()->badge();
-    const QPixmap preview = renderLayerPreviewPixmap(badge, row, m_layerPreviewLabel->palette(), 72);
+    const QPixmap preview = renderLayerPreviewPixmap(badge, row, m_layerPreviewLabel->palette(), 56);
     m_layerPreviewLabel->setText(QString());
     m_layerPreviewLabel->setPixmap(preview);
 }
@@ -2974,6 +3565,11 @@ void MainWindow::syncLayoutWorkspace(bool refreshDiagnostics) {
 
 void MainWindow::updateToolbarsForMode() {
     const bool designer = m_isDesigner;
+    const bool hasSelection = designer && !m_selected.isEmpty();
+    const bool hasMultipleSelection = designer && m_selected.size() > 1;
+    if (m_toolPalette) {
+        m_toolPalette->setVisible(designer);
+    }
     if (m_designerToolbar) {
         m_designerToolbar->setVisible(designer);
     }
@@ -2987,37 +3583,58 @@ void MainWindow::updateToolbarsForMode() {
         m_actBatchAdd->setEnabled(designer);
     }
     if (m_actDuplicate) {
-        m_actDuplicate->setEnabled(designer);
+        m_actDuplicate->setEnabled(hasSelection);
     }
     if (m_actDelete) {
-        m_actDelete->setEnabled(designer);
+        m_actDelete->setEnabled(hasSelection);
+    }
+    if (m_selectionToolsSeparator) {
+        m_selectionToolsSeparator->setVisible(hasSelection);
+    }
+    for (auto* action : {m_actDelete, m_actDuplicate}) {
+        if (action && m_designerToolbar) {
+            if (auto* button = m_designerToolbar->widgetForAction(action)) {
+                button->setVisible(hasSelection);
+            }
+        }
+    }
+    for (auto* action : {m_actAlignLeft, m_actAlignHCenter, m_actAlignRight,
+                         m_actAlignTop, m_actAlignVCenter, m_actAlignBottom}) {
+        if (action && m_designerToolbar) {
+            if (auto* button = m_designerToolbar->widgetForAction(action)) {
+                button->setVisible(hasMultipleSelection);
+            }
+        }
+    }
+    if (m_duplicateOffsetLabel) {
+        m_duplicateOffsetLabel->setVisible(hasSelection);
+    }
+    if (m_spinDuplicateOffset) {
+        m_spinDuplicateOffset->setVisible(hasSelection);
     }
     if (m_actAlignLeft) {
-        m_actAlignLeft->setEnabled(designer);
+        m_actAlignLeft->setEnabled(hasMultipleSelection);
     }
     if (m_actAlignHCenter) {
-        m_actAlignHCenter->setEnabled(designer);
+        m_actAlignHCenter->setEnabled(hasMultipleSelection);
     }
     if (m_actAlignRight) {
-        m_actAlignRight->setEnabled(designer);
+        m_actAlignRight->setEnabled(hasMultipleSelection);
     }
     if (m_actAlignTop) {
-        m_actAlignTop->setEnabled(designer);
+        m_actAlignTop->setEnabled(hasMultipleSelection);
     }
     if (m_actAlignVCenter) {
-        m_actAlignVCenter->setEnabled(designer);
+        m_actAlignVCenter->setEnabled(hasMultipleSelection);
     }
     if (m_actAlignBottom) {
-        m_actAlignBottom->setEnabled(designer);
+        m_actAlignBottom->setEnabled(hasMultipleSelection);
     }
     if (m_actMixedLayout) {
         m_actMixedLayout->setEnabled(designer);
     }
     if (m_actSendToLayout) {
         m_actSendToLayout->setEnabled(designer);
-    }
-    if (m_actOpenDesignerPerspective) {
-        m_actOpenDesignerPerspective->setVisible(designer);
     }
     if (m_actOpenLayoutPerspective) {
         m_actOpenLayoutPerspective->setVisible(!designer);
@@ -3033,9 +3650,6 @@ void MainWindow::updateToolbarsForMode() {
     }
     if (m_layoutPageLabel) {
         m_layoutPageLabel->setVisible(!designer);
-    }
-    if (m_layoutPageCombo) {
-        m_layoutPageCombo->setVisible(!designer);
     }
     if (m_layoutPageThumbList) {
         m_layoutPageThumbList->setVisible(!designer);
@@ -3055,7 +3669,7 @@ void MainWindow::onSendToLayout() {
     const auto document = projectsync::currentDocument(m_badges, *m_comboPaperSize, *m_chkLandscape, *m_spinPaperMargin, *m_spinPaperSpacing, m_currentFile);
     const double guideSizeMm = !m_selected.isEmpty()
         ? badgeGuideSizeMm(m_selected.first()->badge())
-        : (!m_badges.isEmpty() ? badgeGuideSizeMm(m_badges.first()) : 32.0);
+        : (!m_badges.isEmpty() ? badgeGuideSizeMm(m_badges.first()) : m_appSettings.defaultBadgeSizeMm);
     const QPointF guideCenterScene = m_designer && m_designer->scene()
         ? m_designer->scene()->sceneRect().center()
         : QPointF(0.0, 0.0);
@@ -3138,54 +3752,106 @@ void MainWindow::onShowTransferDebug() {
 void MainWindow::applyTheme(bool dark) {
     m_isDark = dark;
     QPalette pal = dark ? makeEditorDarkPalette() : QApplication::style()->standardPalette();
+    if (!dark) {
+        pal.setColor(QPalette::Highlight, QColor(0x40, 0x59, 0xED));
+        pal.setColor(QPalette::HighlightedText, Qt::white);
+    }
     QApplication::setPalette(pal);
     const QString menuStyle = dark
         ? QStringLiteral(R"(
-            QMenuBar { background: #202a36; color: #edf3f9; border-bottom: 1px solid #3b4b5d; }
-            QMenuBar::item { background: transparent; color: #edf3f9; padding: 6px 10px; }
-            QMenuBar::item:selected { background: #33485f; color: #ffffff; }
-            QMenuBar::item:pressed { background: #2e78d2; color: #ffffff; }
-            QMenu { background: #192430; color: #edf3f9; border: 1px solid #3b4b5d; padding: 4px; }
-            QMenu::item { background: transparent; color: #edf3f9; padding: 6px 28px 6px 30px; }
-            QMenu::item:selected { background: #334d68; color: #ffffff; }
-            QMenu::item:disabled { color: #8290a0; }
+            QMenuBar { background: #202a36; color: #e9eff8; border-bottom: 1px solid #344358; padding: 2px 6px; }
+            QMenuBar::item { background: transparent; padding: 5px 9px; border-radius: 5px; }
+            QMenuBar::item:selected { background: #303f53; }
+            QMenu { background: #263443; color: #e9eff8; border: 1px solid #3b4b5d; padding: 4px; }
+            QMenu::item { padding: 6px 28px 6px 10px; border-radius: 4px; }
+            QMenu::item:selected { background: #315bb8; color: white; }
             QMenu::separator { height: 1px; background: #3b4b5d; margin: 4px 8px; }
         )")
         : QStringLiteral(R"(
-            QMenuBar { background: #f4f6f8; color: #263443; border-bottom: 1px solid #d2d9e0; }
-            QMenuBar::item { background: transparent; color: #263443; padding: 6px 10px; }
-            QMenuBar::item:selected { background: #e2eaf2; color: #17212b; }
-            QMenu { background: #ffffff; color: #263443; border: 1px solid #c7d0da; padding: 4px; }
-            QMenu::item { background: transparent; color: #263443; padding: 6px 28px 6px 30px; }
-            QMenu::item:selected { background: #dceaff; color: #17212b; }
-            QMenu::item:disabled { color: #89939e; }
-            QMenu::separator { height: 1px; background: #d2d9e0; margin: 4px 8px; }
+            QMenuBar { background: #f8f9fc; color: #283249; border-bottom: 1px solid #dce1ed; padding: 2px 6px; }
+            QMenuBar::item { background: transparent; padding: 5px 9px; border-radius: 5px; }
+            QMenuBar::item:selected { background: #edf0f8; }
+            QMenu { background: #ffffff; color: #283249; border: 1px solid #dce1ed; padding: 4px; }
+            QMenu::item { padding: 6px 28px 6px 10px; border-radius: 4px; }
+            QMenu::item:selected { background: #e9edff; color: #354fc0; }
+            QMenu::separator { height: 1px; background: #dce1ed; margin: 4px 8px; }
         )");
     menuBar()->setStyleSheet(menuStyle);
-    for (QMenu* menu : findChildren<QMenu*>()) {
-        menu->setStyleSheet(menuStyle);
-        menu->setPalette(pal);
-    }
-
     const QString toolbarStyle = dark
         ? QStringLiteral(R"(
             QToolBar { background: #202a36; border: 0; spacing: 5px; }
-            QToolBar QToolButton { color: #edf3f9; border: 1px solid transparent;
-                border-radius: 5px; padding: 6px 8px; }
-            QToolBar QToolButton:hover { background: #33485f; }
-            QToolBar QToolButton:checked { background: #2e78d2; border-color: #4c95ef; color: white; }
-            QToolBar QToolButton#sendToLayoutButton { background: #2e78d2;
-                border-color: #4c95ef; color: white; font-weight: 600; }
-            QToolBar QToolButton#sendToLayoutButton:hover { background: #438dea; }
+            QToolBar QToolButton { color: #e9eff8; border: 1px solid transparent;
+                border-radius: 7px; padding: 7px 10px; }
+            QToolBar QToolButton:hover { background: #303f53; border-color: #40536b; }
+            QToolBar#toolPalette { background: #192430; border: 0; border-right: 1px solid #344358; spacing: 8px; }
+            QToolBar#toolPalette QToolButton { min-width: 242px; min-height: 44px; color: #dbe5f3;
+                text-align: left; border: 1px solid transparent; border-radius: 8px; margin: 2px 5px; padding: 8px 9px; }
+            QToolBar#toolPalette QToolButton:checked { background: #293a50; border-color: #6385e8;
+                border-left: 3px solid #6385e8; color: white; }
+            QToolBar#toolPalette QToolButton:hover { background: #293a50; border-color: #405675; }
+            QToolBar#toolPalette QLabel#toolPaletteHeading { color: #7F9BFF; font-weight: 600; padding: 4px 9px; border-bottom: 2px solid #4059ed; }
+            QToolBar#toolPalette QLabel#toolPaletteHint { color: #91a8c4; font-size: 10pt; padding: 0 8px 5px 55px; }
+            QToolBar#toolPalette QGroupBox#toolSelectionPlaceholder { background: transparent; color: #dbe5f3; border: 0; border-top: 1px solid #344358; border-radius: 0; margin: 8px 5px 0 5px; padding: 8px 9px 4px 9px; }
+            QToolBar#toolPalette QGroupBox#toolSelectionPlaceholder::title { color: #dbe5f3; font-weight: 600; subcontrol-origin: margin; left: 4px; padding: 0 5px; }
+            QToolBar#toolPalette QLabel#toolSelectionPlaceholderText { color: #91a8c4; padding: 4px 4px; }
+            QToolBar QToolButton:checked { background: #315bb8; border-color: #6385e8; color: white; }
+            QToolBar QToolButton#designerModeAction:checked { background: #315bb8; }
+            QToolBar QToolButton#layoutModeAction:checked { background: #315bb8; }
+            QToolBar QToolButton#sendToLayoutButton { background: #315bb8;
+                border-color: #6385e8; color: white; font-weight: 600; }
+            QToolBar QToolButton#sendToLayoutButton:hover { background: #426fd0; }
+            QToolBar#workspaceToolbar QToolButton { padding: 8px 11px; }
+            QToolBar#workspaceToolbar QToolButton:hover { background: #303f53; }
+            QToolBar#workspaceToolbar QToolButton#designerModeAction,
+            QToolBar#workspaceToolbar QToolButton#layoutModeAction { padding: 8px 14px; font-weight: 600; }
+            QComboBox#zoomValueCombo { color: #eef2fb; background: #192430;
+                border: 1px solid #3b4b5d; border-radius: 6px; padding: 5px 8px; }
+            QToolBar QLabel#layoutPageCount { color: #edf3f9; padding: 0 8px; }
             QToolBar QListWidget#layoutPageStrip { background: #192430; color: #edf3f9;
                 border: 1px solid #3b4b5d; border-radius: 5px; padding: 1px; }
             QToolBar QListWidget#layoutPageStrip::item { background: transparent; color: #edf3f9;
                 border: 1px solid transparent; border-radius: 3px; padding: 1px; }
-            QToolBar QListWidget#layoutPageStrip::item:selected { background: #334d68;
-                border-color: #4c95ef; color: white; }
+            QToolBar QListWidget#layoutPageStrip::item:selected { background: #334d68; border: 2px solid #4c95ef; border-radius: 5px;
+                color: white; }
         )")
-        : QString();
+        : QStringLiteral(R"(
+            QToolBar { background: #f8f9fc; border: 0; spacing: 5px; }
+            QToolBar QToolButton { color: #283249; border: 1px solid transparent;
+                border-radius: 7px; padding: 7px 10px; }
+            QToolBar QToolButton:hover { background: #edf0f8; border-color: #d9deeb; }
+            QToolBar#toolPalette { background: #202c3d; border: 0; border-right: 1px solid #344358; spacing: 8px; }
+            QToolBar#toolPalette QToolButton { min-width: 242px; min-height: 44px; color: #dbe5f3;
+                text-align: left; border: 1px solid transparent; border-radius: 8px; margin: 2px 5px; padding: 8px 9px; }
+            QToolBar#toolPalette QToolButton:checked { background: #2d3e55; border-color: #6477f2;
+                border-left: 3px solid #6477f2; color: white; }
+            QToolBar#toolPalette QToolButton:hover { background: #2d3e55; border-color: #405675; }
+            QToolBar#toolPalette QLabel#toolPaletteHeading { color: #7F9BFF; font-weight: 600; padding: 4px 9px; border-bottom: 2px solid #4059ed; }
+            QToolBar#toolPalette QLabel#toolPaletteHint { color: #91a8c4; font-size: 10pt; padding: 0 8px 5px 55px; }
+            QToolBar#toolPalette QGroupBox#toolSelectionPlaceholder { background: transparent; color: #dbe5f3; border: 0; border-top: 1px solid #344358; border-radius: 0; margin: 8px 5px 0 5px; padding: 8px 9px 4px 9px; }
+            QToolBar#toolPalette QGroupBox#toolSelectionPlaceholder::title { color: #dbe5f3; font-weight: 600; subcontrol-origin: margin; left: 4px; padding: 0 5px; }
+            QToolBar#toolPalette QLabel#toolSelectionPlaceholderText { color: #91a8c4; padding: 4px 4px; }
+            QToolBar QToolButton:checked { background: #e9edff; border-color: #b8c4ff; color: #354fc0; }
+            QToolBar QToolButton#designerModeAction,
+            QToolBar QToolButton#layoutModeAction { padding: 8px 14px; font-weight: 600; }
+            QToolBar#workspaceToolbar QToolButton#designerModeAction:checked,
+            QToolBar#workspaceToolbar QToolButton#layoutModeAction:checked {
+                background: #4059ed; border-color: #4059ed; color: white; }
+            QToolBar QToolButton#sendToLayoutButton { background: #4258d0;
+                border-color: #4258d0; color: white; font-weight: 600; }
+            QToolBar QToolButton#sendToLayoutButton:hover { background: #3549bc; }
+            QToolBar#workspaceToolbar QToolButton { padding: 8px 11px; }
+            QComboBox#zoomValueCombo { color: #303a54; background: #ffffff;
+                border: 1px solid #dce1ed; border-radius: 6px; padding: 5px 8px; }
+            QToolBar QLabel#layoutPageCount { color: #303a54; padding: 0 8px; }
+            QToolBar QListWidget#layoutPageStrip { background: #ffffff; color: #303a54;
+                border: 1px solid #dce1ed; border-radius: 5px; padding: 1px; }
+            QToolBar QListWidget#layoutPageStrip::item { background: transparent; color: #303a54;
+                border: 1px solid transparent; border-radius: 3px; padding: 1px; }
+            QToolBar QListWidget#layoutPageStrip::item:selected { background: #e9edff; border: 2px solid #4258d0; border-radius: 5px;
+                color: #354fc0; }
+        )");
     if (m_commonToolbar) m_commonToolbar->setStyleSheet(toolbarStyle);
+    if (m_toolPalette) m_toolPalette->setStyleSheet(toolbarStyle);
     if (m_designerToolbar) m_designerToolbar->setStyleSheet(toolbarStyle);
     if (m_layoutToolbar) m_layoutToolbar->setStyleSheet(toolbarStyle);
     if (m_inspector) {
@@ -3193,17 +3859,80 @@ void MainWindow::applyTheme(bool dark) {
             ? QStringLiteral(R"(
                 QWidget#editInspector { background: #202a36; }
                 QWidget#editInspector QGroupBox { background: #263443; border: 1px solid #3b4b5d;
-                    border-radius: 5px; margin-top: 18px; padding: 7px; }
-                QWidget#editInspector QGroupBox::title { color: #e8eef5;
-                    subcontrol-origin: margin; left: 9px; padding: 0 4px; }
+                    border-radius: 8px; margin-top: 16px; padding: 8px; }
+                QWidget#editInspector QGroupBox#pageSettingsGroup { margin-top: 3px; padding: 5px; }
+                QWidget#editInspector QGroupBox#checklistGroup { margin-top: 3px; padding: 5px; }
+                QWidget#editInspector QGroupBox#paperSettingsGroup { margin-top: 3px; padding: 5px; }
+                QWidget#editInspector QLabel#paperDimensions { color: #e8eef5; font-weight: 600; }
+                QWidget#editInspector QLabel#canvasSubheading { color: #cdd8e5; border-bottom: 1px solid #344358; padding-bottom: 3px; }
+                QWidget#editInspector QCheckBox#guideVisibilityToggle { background: #202f40; color: #dbe5f3;
+                    border: 1px solid #3b4b5d; border-radius: 6px; padding: 4px 6px; spacing: 5px; }
+                QWidget#editInspector QCheckBox#guideVisibilityToggle:checked { background: #314b70; border-color: #6385e8; }
+                QWidget#editInspector QCheckBox#guideVisibilityToggle:hover { border-color: #6385e8; }
+                QWidget#editInspector QRadioButton#canvasBackgroundOption { background: #202f40; color: #dbe5f3;
+                    border: 1px solid #3b4b5d; border-radius: 6px; padding: 4px 6px; spacing: 6px; }
+                QWidget#editInspector QRadioButton#canvasBackgroundOption:hover { border-color: #6385e8; }
+                QWidget#editInspector QRadioButton#canvasBackgroundOption:checked { background: #314b70; border-color: #6385e8; color: white; }
+                QWidget#editInspector QGroupBox::title { color: #e8eef5; font-weight: 600;
+                    subcontrol-origin: margin; left: 9px; padding: 0 5px; }
+                QWidget#editInspector QToolButton#inspectorSectionHeader { background: transparent; color: #e8eef5;
+                    border: 0; border-radius: 5px; padding: 7px 5px; text-align: left; font-weight: 600; }
+                QWidget#editInspector QToolButton#inspectorSectionHeader:hover { background: #303f53; }
+                QWidget#editInspector QLabel#adjustmentValue { background: #192532; color: #e8eef5;
+                    border: 1px solid #42556a; border-radius: 5px; padding: 3px 5px; }
+                QWidget#editInspector QSlider::groove:horizontal { height: 5px; background: #42556a; border-radius: 2px; }
+                QWidget#editInspector QSlider::sub-page:horizontal { background: #4b83e6; border-radius: 2px; }
+                QWidget#editInspector QSlider::handle:horizontal { width: 13px; margin: -5px 0;
+                    background: #e8eef5; border: 2px solid #4b83e6; border-radius: 7px; }
                 QWidget#editInspector QDoubleSpinBox, QWidget#editInspector QLineEdit,
-                QWidget#editInspector QComboBox { background: #1a2632; color: #f1f5fa;
-                    border: 1px solid #42556a; border-radius: 4px; min-height: 23px; }
-                QWidget#editInspector QPushButton { background: #33455a; color: #f1f5fa;
-                    border: 1px solid #4a6078; border-radius: 4px; padding: 4px 7px; }
+                QWidget#editInspector QComboBox { background: #192532; color: #f1f5fa;
+                    border: 1px solid #42556a; border-radius: 6px; min-height: 26px; padding: 2px 7px; }
+                QWidget#editInspector QPushButton { background: #344963; color: #f1f5fa;
+                    border: 1px solid #4a6078; border-radius: 6px; padding: 6px 9px; }
                 QWidget#editInspector QPushButton:hover { background: #405a75; }
             )")
-            : QString());
+            : QStringLiteral(R"(
+                QWidget#editInspector { background: #f7f8fb; }
+                QWidget#editInspector QGroupBox { background: #ffffff; color: #27324a;
+                    border: 1px solid #dfe3ec; border-radius: 8px; margin-top: 16px; padding: 8px; }
+                QWidget#editInspector QGroupBox#pageSettingsGroup,
+                QWidget#editInspector QGroupBox#paperSettingsGroup { background: transparent;
+                    border: 0; border-bottom: 1px solid #e3e7ef; border-radius: 0;
+                    margin-top: 3px; padding: 8px 0 10px 0; }
+                QWidget#editInspector QGroupBox#safetyGuideGroup { background: transparent;
+                    border: 0; border-radius: 0; margin-top: 4px; padding: 2px 0 4px 0; }
+                QWidget#editInspector QGroupBox#safetyGuideGroup::title { left: 0; padding: 0 4px; }
+                QWidget#editInspector QGroupBox#checklistGroup { background: transparent;
+                    border: 0; border-bottom: 1px solid #e3e7ef; border-radius: 0;
+                    margin-top: 3px; padding: 2px 0 4px 0; }
+                QWidget#editInspector QLabel#paperDimensions { color: #27324a; font-weight: 600; }
+                QWidget#editInspector QLabel#canvasSubheading { color: #35415a; border-bottom: 1px solid #e3e7ef; padding-bottom: 3px; }
+                QWidget#editInspector QCheckBox#guideVisibilityToggle { background: #f7f8fb; color: #35415a;
+                    border: 1px solid #d6dce8; border-radius: 6px; padding: 4px 6px; spacing: 5px; }
+                QWidget#editInspector QCheckBox#guideVisibilityToggle:checked { background: #e9edff; border-color: #4258d0; }
+                QWidget#editInspector QCheckBox#guideVisibilityToggle:hover { border-color: #aab8de; }
+                QWidget#editInspector QRadioButton#canvasBackgroundOption { background: #f7f8fb; color: #35415a;
+                    border: 1px solid #d6dce8; border-radius: 6px; padding: 4px 6px; spacing: 6px; }
+                QWidget#editInspector QRadioButton#canvasBackgroundOption:hover { border-color: #aab8de; }
+                QWidget#editInspector QRadioButton#canvasBackgroundOption:checked { background: #e9edff; border-color: #4258d0; color: #3547a0; }
+                QWidget#editInspector QGroupBox::title { color: #27324a; font-weight: 600;
+                    subcontrol-origin: margin; left: 9px; padding: 0 5px; }
+                QWidget#editInspector QToolButton#inspectorSectionHeader { background: transparent; color: #27324a;
+                    border: 0; border-radius: 5px; padding: 7px 5px; text-align: left; font-weight: 600; }
+                QWidget#editInspector QToolButton#inspectorSectionHeader:hover { background: #edf0f8; }
+                QWidget#editInspector QLabel#adjustmentValue { background: #f7f8fb; color: #3547a0;
+                    border: 1px solid #d6dce8; border-radius: 5px; padding: 3px 5px; }
+                QWidget#editInspector QSlider::groove:horizontal { height: 5px; background: #d6dce8; border-radius: 2px; }
+                QWidget#editInspector QSlider::sub-page:horizontal { background: #4258d0; border-radius: 2px; }
+                QWidget#editInspector QSlider::handle:horizontal { width: 13px; margin: -5px 0;
+                    background: #ffffff; border: 2px solid #4258d0; border-radius: 7px; }
+                QWidget#editInspector QDoubleSpinBox, QWidget#editInspector QLineEdit,
+                QWidget#editInspector QComboBox { background: #ffffff; color: #27324a;
+                    border: 1px solid #d6dce8; border-radius: 6px; min-height: 26px; padding: 2px 7px; }
+                QWidget#editInspector QPushButton { background: #eef1fa; color: #3547a0;
+                    border: 1px solid #d5dbef; border-radius: 6px; padding: 6px 9px; }
+                QWidget#editInspector QPushButton:hover { background: #e3e9fb; border-color: #bcc8f0; }
+            )")
     }
     if (m_dockStyleManager) {
         m_dockStyleManager->applyTheme(QApplication::palette());
@@ -3217,7 +3946,7 @@ void MainWindow::applyTheme(bool dark) {
     if (m_actTheme) {
         setMaterialIcon(m_actTheme, dark ? QStringLiteral("dark_mode") : QStringLiteral("light_mode"));
     }
-    m_actTheme->setText(dark ? "☀ テーマ切替" : "☾ テーマ切替");
+    m_actTheme->setText(QStringLiteral("テーマ切替"));
     applyWindowsBackdrop();
 }
 
@@ -3253,14 +3982,60 @@ void MainWindow::applyAppSettings(const AppSettings& settings) {
         const QSignalBlocker blocker(m_actSnapToGrid);
         m_actSnapToGrid->setChecked(settings.snapToGrid);
     }
+    if (m_chkGridVisible) {
+        const QSignalBlocker blocker(m_chkGridVisible);
+        m_chkGridVisible->setChecked(settings.gridVisible);
+    }
+    if (m_chkRulersVisible) {
+        const QSignalBlocker blocker(m_chkRulersVisible);
+        m_chkRulersVisible->setChecked(settings.rulersVisible);
+    }
+    if (m_chkSnapToGrid) {
+        const QSignalBlocker blocker(m_chkSnapToGrid);
+        m_chkSnapToGrid->setChecked(settings.snapToGrid);
+    }
+    if (m_spinGridSpacing) {
+        const QSignalBlocker blocker(m_spinGridSpacing);
+        m_spinGridSpacing->setValue(settings.gridSpacingMm);
+    }
+    if (m_comboDefaultBadgeSize) {
+        const QSignalBlocker blocker(m_comboDefaultBadgeSize);
+        const int sizeIndex = m_comboDefaultBadgeSize->findData(settings.defaultBadgeSizeMm);
+        m_comboDefaultBadgeSize->setCurrentIndex(sizeIndex >= 0 ? sizeIndex : 3);
+    }
+    if (m_selected.isEmpty()) {
+        const QSignalBlocker widthBlocker(m_propW);
+        const QSignalBlocker heightBlocker(m_propH);
+        m_propW->setValue(settings.defaultBadgeSizeMm);
+        m_propH->setValue(settings.defaultBadgeSizeMm);
+        if (m_sizePreset) {
+            const QSignalBlocker presetBlocker(m_sizePreset);
+            m_sizePreset->setCurrentIndex(badgeSizePresetIndex(settings.defaultBadgeSizeMm,
+                                                               settings.defaultBadgeSizeMm));
+        }
+    }
+    if (m_radioCanvasGrid && m_radioCanvasWhite && m_radioCanvasTransparent) {
+        const QSignalBlocker gridBlocker(m_radioCanvasGrid);
+        const QSignalBlocker whiteBlocker(m_radioCanvasWhite);
+        const QSignalBlocker transparentBlocker(m_radioCanvasTransparent);
+        m_radioCanvasGrid->setChecked(settings.canvasBackgroundMode == CanvasBackgroundMode::PrintGuideGrid);
+        m_radioCanvasWhite->setChecked(settings.canvasBackgroundMode == CanvasBackgroundMode::White);
+        m_radioCanvasTransparent->setChecked(settings.canvasBackgroundMode == CanvasBackgroundMode::TransparentCheckerboard);
+    }
     if (m_spinDuplicateOffset) {
         const QSignalBlocker blocker(m_spinDuplicateOffset);
         m_spinDuplicateOffset->setValue(std::max(0.0, settings.duplicateOffsetMm));
     }
     if (m_designer) {
         m_designer->setGridVisible(settings.gridVisible);
+        m_designer->setRulersVisible(settings.rulersVisible);
+        m_designer->setCanvasBackgroundMode(settings.canvasBackgroundMode);
         m_designer->setSnapToGrid(settings.snapToGrid);
         m_designer->setGridSpacingMm(settings.gridSpacingMm);
+        if (m_selected.isEmpty()) {
+            m_lastGuideSizeMm = settings.defaultBadgeSizeMm;
+            m_designer->updateGuides(m_lastGuideSizeMm);
+        }
         m_designer->setLightingEnabled(settings.lightingEnabled);
         m_designer->setLightAngle(settings.lightAngle);
         m_designer->setLightIntensity(settings.lightIntensity / 100.0);
@@ -3303,6 +4078,21 @@ void MainWindow::updateTitle() {
     setWindowTitle(name + " - Badge Editor Pro");
 }
 
+void MainWindow::setDesignerZoom(double factor) {
+    if (m_designer) {
+        m_designer->setZoomFactor(factor);
+    }
+}
+
+void MainWindow::updateZoomControl(double factor) {
+    if (!m_zoomCombo) {
+        return;
+    }
+    const QSignalBlocker blocker(m_zoomCombo);
+    const QString text = QString::number(factor * 100.0, 'f', 0) + QLatin1Char('%');
+    m_zoomCombo->setCurrentText(text);
+}
+
 void MainWindow::updateSafetyGuideHud() {
     if (!m_designer) {
         return;
@@ -3312,7 +4102,7 @@ void MainWindow::updateSafetyGuideHud() {
     const int designCount = m_designer->graphicItems().size();
     entries.append({
         QStringLiteral("① デザイン"),
-        designCount > 0 ? QStringLiteral("%1件 / 作業中").arg(designCount) : QStringLiteral("未作成"),
+        designCount > 0 ? QStringLiteral("%1件").arg(designCount) : QStringLiteral("未作成"),
         statusColor(designCount > 0 ? StatusLevel::Good : StatusLevel::Neutral),
     });
 
@@ -3320,13 +4110,13 @@ void MainWindow::updateSafetyGuideHud() {
     const bool packedLayout = m_layoutPreviewMode == LayoutPreviewMode::PackedMixedPages;
     const QString layoutDetail = m_layoutOverflowSummary.isEmpty()
         ? (layoutReady
-               ? QStringLiteral("%1 %2/%3 / %4ページ")
+               ? QStringLiteral("%1 · %2/%3 · %4ページ")
                      .arg(packedLayout ? QStringLiteral("詰め込み済み") : QStringLiteral("確認済み"),
                           QString::number(m_layoutPlacedCount),
                           QString::number(std::max(0, m_layoutSourceCount)),
                           QString::number(std::max(1, m_layoutPageCount)))
                : QStringLiteral("未確認"))
-        : QStringLiteral("%1 (%2/%3 / %4ページ)")
+        : QStringLiteral("%1 · %2/%3 · %4ページ")
               .arg(m_layoutOverflowSummary,
                    QString::number(m_layoutPlacedCount),
                    QString::number(std::max(0, m_layoutSourceCount)),
@@ -3369,19 +4159,25 @@ void MainWindow::updateSafetyGuideHud() {
         : StatusLevel::Neutral;
     const QString colorDetail = !hasImages
         ? QStringLiteral("画像なし")
-        : (hasMissingLinks ? QStringLiteral("リンク不良") : (hasLoadedColorSpace ? QStringLiteral("読み込み済み") : QStringLiteral("色空間未確認")));
+        : (hasMissingLinks ? QStringLiteral("リンク不良") : (hasLoadedColorSpace ? QStringLiteral("確認済み") : QStringLiteral("未確認")));
     entries.append({
         QStringLiteral("③ カラースペース"),
         colorDetail,
         statusColor(colorLevel),
     });
 
-    auto setLabel = [](QLabel* label, const QString& title, const QString& detail, const QColor& color) {
+    auto setLabel = [](QLabel* label, const QString& title, const QString& detail, const QColor& color, bool stacked = false) {
         if (!label) {
             return;
         }
-        const QString fullText = QStringLiteral("%1  %2").arg(title, detail);
-        label->setText(label->fontMetrics().elidedText(fullText, Qt::ElideRight, qMax(290, label->width() - 20)));
+        const QString fullText = stacked
+            ? QStringLiteral("%1\n%2").arg(title, detail)
+            : QStringLiteral("%1  %2").arg(title, detail);
+        label->setText(stacked
+                           ? fullText
+                           : label->fontMetrics().elidedText(fullText,
+                                                             Qt::ElideRight,
+                                                             qMax(290, label->width() - 20)));
         label->setToolTip(fullText);
         QPalette pal = label->palette();
         pal.setColor(QPalette::Window, QColor(color.red(), color.green(), color.blue(), 36));
@@ -3403,15 +4199,11 @@ void MainWindow::updateSafetyGuideHud() {
     const double finishMm = activeGuideSizeMm();
     const double bleedDiameterMm = finishMm + 3.0;
     const double safeDiameterMm = std::max(0.0, finishMm - 4.0);
-    const QColor guideRed(0xEC, 0x79, 0x79);
-    const QColor guideGreen(0x69, 0xD6, 0x8D);
-    const QColor guideNeutral(0xCF, 0xD9, 0xE5);
-    setLabel(m_safetyGuideDesign, QStringLiteral("巻き込み線"),
-             QStringLiteral("直径 %1 mm").arg(bleedDiameterMm, 0, 'f', 1), guideRed);
-    setLabel(m_safetyGuideLayout, QStringLiteral("仕上がり"),
-             QStringLiteral("直径 %1 mm").arg(finishMm, 0, 'f', 1), guideNeutral);
+    const QColor guideTextColor = m_isDark ? QColor(0xE8, 0xEE, 0xF5) : QColor(0x55, 0x62, 0x78);
+    setLabel(m_safetyGuideDesign, QStringLiteral("塗り足し線"),
+             QStringLiteral("直径 %1 mm").arg(bleedDiameterMm, 0, 'f', 1), guideTextColor, true);
     setLabel(m_safetyGuideColor, QStringLiteral("安全圏"),
-             QStringLiteral("直径 %1 mm").arg(safeDiameterMm, 0, 'f', 1), guideGreen);
+             QStringLiteral("直径 %1 mm").arg(safeDiameterMm, 0, 'f', 1), guideTextColor, true);
 }
 
 void MainWindow::dragEnterEvent(QDragEnterEvent* event) {

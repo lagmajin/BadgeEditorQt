@@ -62,6 +62,7 @@ set(SOURCES
 )
 
 set(HEADERS
+    canvasbackgroundmode.h
     constants.h
     mainwindow.h
     dockstylemanager.h

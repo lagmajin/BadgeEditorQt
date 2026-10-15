@@ -136,8 +136,11 @@ void MainWindow::saveAppSettings() {
     QSettings settings;
     settings.setValue("app/darkTheme", m_appSettings.darkTheme);
     settings.setValue("app/gridVisible", m_appSettings.gridVisible);
+    settings.setValue("app/rulersVisible", m_appSettings.rulersVisible);
     settings.setValue("app/snapToGrid", m_appSettings.snapToGrid);
     settings.setValue("app/gridSpacingMm", m_appSettings.gridSpacingMm);
+    settings.setValue("app/defaultBadgeSizeMm", m_appSettings.defaultBadgeSizeMm);
+    settings.setValue("app/canvasBackgroundMode", static_cast<int>(m_appSettings.canvasBackgroundMode));
     settings.setValue("app/lightingEnabled", m_appSettings.lightingEnabled);
     settings.setValue("app/lightAngle", m_appSettings.lightAngle);
     settings.setValue("app/lightIntensity", m_appSettings.lightIntensity);
@@ -153,8 +156,22 @@ void MainWindow::loadAppSettings() {
     AppSettings loaded;
     loaded.darkTheme = settings.value("app/darkTheme", loaded.darkTheme).toBool();
     loaded.gridVisible = settings.value("app/gridVisible", loaded.gridVisible).toBool();
+    loaded.rulersVisible = settings.value("app/rulersVisible", loaded.rulersVisible).toBool();
     loaded.snapToGrid = settings.value("app/snapToGrid", loaded.snapToGrid).toBool();
     loaded.gridSpacingMm = settings.value("app/gridSpacingMm", loaded.gridSpacingMm).toDouble();
+    loaded.defaultBadgeSizeMm = settings.value("app/defaultBadgeSizeMm", loaded.defaultBadgeSizeMm).toDouble();
+    if (m_comboDefaultBadgeSize && m_comboDefaultBadgeSize->findData(loaded.defaultBadgeSizeMm) < 0) {
+        loaded.defaultBadgeSizeMm = 57.0;
+    }
+    if (settings.contains("app/canvasBackgroundMode")) {
+        const int canvasBackgroundMode = settings.value("app/canvasBackgroundMode").toInt();
+        if (canvasBackgroundMode >= static_cast<int>(CanvasBackgroundMode::PrintGuideGrid)
+            && canvasBackgroundMode <= static_cast<int>(CanvasBackgroundMode::TransparentCheckerboard)) {
+            loaded.canvasBackgroundMode = static_cast<CanvasBackgroundMode>(canvasBackgroundMode);
+        }
+    } else if (!loaded.gridVisible) {
+        loaded.canvasBackgroundMode = CanvasBackgroundMode::TransparentCheckerboard;
+    }
     loaded.lightingEnabled = settings.value("app/lightingEnabled", loaded.lightingEnabled).toBool();
     loaded.lightAngle = settings.value("app/lightAngle", loaded.lightAngle).toInt();
     loaded.lightIntensity = settings.value("app/lightIntensity", loaded.lightIntensity).toInt();
