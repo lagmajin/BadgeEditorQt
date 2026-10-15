@@ -7,6 +7,7 @@
 #include <QGraphicsItemGroup>
 #include <QList>
 #include <QString>
+#include <QPointF>
 #include <QFileInfo>
 #include <QColor>
 #include <QDragEnterEvent>
@@ -91,6 +92,7 @@ Q_SIGNALS:
     void eyedropperModeChanged(bool active) W_SIGNAL(eyedropperModeChanged, active);
     void eyedropperColorPicked(const QColor& color) W_SIGNAL(eyedropperColorPicked, color);
     void zoomChanged(double factor) W_SIGNAL(zoomChanged, factor);
+    void imageDropRequested(const QString& path, const QPointF& scenePosition) W_SIGNAL(imageDropRequested, path, scenePosition);
 
 protected:
     void wheelEvent(QWheelEvent* event) override;

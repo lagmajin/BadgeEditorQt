@@ -1031,13 +1031,12 @@ void DesignerWidget::dragMoveEvent(QDragMoveEvent* event) {
 }
 
 void DesignerWidget::dropEvent(QDropEvent* event) {
+    const QPointF scenePosition = mapToScene(event->position().toPoint());
     for (const auto& url : event->mimeData()->urls()) {
-        QString path = url.toLocalFile();
+        const QString path = url.toLocalFile();
         if (isImageFile(path)) {
-            BadgeItem b;
-            b.layers.append(layerFromImagePath(path));
-            b.label = QFileInfo(path).baseName();
-            addBadge(b);
+            emit imageDropRequested(path, scenePosition);
         }
     }
+    event->acceptProposedAction();
 }

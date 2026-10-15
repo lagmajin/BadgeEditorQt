@@ -127,6 +127,11 @@ void MainWindow::onAddTextBadge() {
 }
 
 void MainWindow::onImageDropped(const QString& filePath) {
+    const QPointF center = m_designer->mapToScene(m_designer->viewport()->rect().center());
+    onImageDroppedAt(filePath, center);
+}
+
+void MainWindow::onImageDroppedAt(const QString& filePath, const QPointF& scenePosition) {
     if (ImageProcessor::loadImage(filePath, nullptr).isNull()) {
         showOperationWarning(this,
                              QStringLiteral("画像ドロップ"),
@@ -139,6 +144,9 @@ void MainWindow::onImageDropped(const QString& filePath) {
     BadgeItem b;
     b.widthMm = m_appSettings.defaultBadgeSizeMm;
     b.heightMm = m_appSettings.defaultBadgeSizeMm;
+    const double mmToPx = Constants::kMmToPx;
+    b.xMm = scenePosition.x() / mmToPx - b.widthMm * 0.5;
+    b.yMm = scenePosition.y() / mmToPx - b.heightMm * 0.5;
     b.layers.append(layerFromImagePath(filePath));
     b.clipToCircle = true;
     b.label = QFileInfo(filePath).baseName();

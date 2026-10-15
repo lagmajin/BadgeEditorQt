@@ -106,6 +106,7 @@ private:
     void onBatchAdd();
     void onMixedLayout();
     void onImageDropped(const QString& filePath);
+    void onImageDroppedAt(const QString& filePath, const QPointF& scenePosition);
     void onAutoLayout();
     void onSendToLayout();
     void onClearLayout();

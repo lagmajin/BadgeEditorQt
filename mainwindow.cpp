@@ -59,6 +59,7 @@ import badge.event;
 #include <QPrinter>
 #include <QPrintPreviewDialog>
 #include <QGraphicsScene>
+#include <QWheelEvent>
 #include <QPainter>
 #include <QPainterPath>
 #include <QImage>
@@ -102,6 +103,30 @@ import badge.document;
 import badge.qtbridge;
 
 namespace {
+
+class PanelDoubleSpinBox final : public QDoubleSpinBox {
+public:
+    using QDoubleSpinBox::QDoubleSpinBox;
+
+protected:
+    void wheelEvent(QWheelEvent* event) override { event->ignore(); }
+};
+
+class PanelComboBox final : public QComboBox {
+public:
+    using QComboBox::QComboBox;
+
+protected:
+    void wheelEvent(QWheelEvent* event) override { event->ignore(); }
+};
+
+class PanelSlider final : public QSlider {
+public:
+    using QSlider::QSlider;
+
+protected:
+    void wheelEvent(QWheelEvent* event) override { event->ignore(); }
+};
 
 #ifdef Q_OS_WIN
 #ifndef DWMWA_SYSTEMBACKDROP_TYPE
@@ -1218,7 +1243,7 @@ MainWindow::MainWindow(QWidget* parent)
         zoomOutButton->setToolTip(QStringLiteral("ズームアウト"));
     }
     m_commonToolbar->addSeparator();
-    m_zoomCombo = new QComboBox;
+    m_zoomCombo = new PanelComboBox;
     m_zoomCombo->setObjectName(QStringLiteral("zoomValueCombo"));
     m_zoomCombo->setEditable(true);
     m_zoomCombo->setMinimumWidth(78);
@@ -1295,7 +1320,7 @@ MainWindow::MainWindow(QWidget* parent)
     }
     m_duplicateOffsetLabel = new QLabel(QStringLiteral("複製ずれ"));
     m_designerToolbar->addWidget(m_duplicateOffsetLabel);
-    m_spinDuplicateOffset = new QDoubleSpinBox;
+    m_spinDuplicateOffset = new PanelDoubleSpinBox;
     m_spinDuplicateOffset->setRange(0.0, 50.0);
     m_spinDuplicateOffset->setDecimals(1);
     m_spinDuplicateOffset->setSingleStep(0.5);
@@ -1361,8 +1386,8 @@ MainWindow::MainWindow(QWidget* parent)
     addTextAction->setToolTip(QStringLiteral("文字を入力してバッジを作成"));
     setMaterialIcon(addTextAction, QStringLiteral("text_fields"));
     connect(addTextAction, &QAction::triggered, this, &MainWindow::onAddTextBadge);
-    m_actAddBadge->setText(QStringLiteral("追加"));
-    m_actAddBadge->setToolTip(QStringLiteral("空のバッジを追加"));
+    m_actAddBadge->setText(QStringLiteral("空バッジ"));
+    m_actAddBadge->setToolTip(QStringLiteral("空の円形バッジをキャンバス中央に作成します"));
     m_actBatchAdd->setText(QStringLiteral("一括追加"));
     m_actBatchAdd->setToolTip(QStringLiteral("画像をまとめてバッジとして追加"));
     m_actMixedLayout->setToolTip(QStringLiteral("複数バッジを面付け"));
@@ -1513,6 +1538,7 @@ MainWindow::MainWindow(QWidget* parent)
     // Designer
     m_designer = new DesignerWidget;
     connect(m_designer, &DesignerWidget::zoomChanged, this, &MainWindow::updateZoomControl);
+    connect(m_designer, &DesignerWidget::imageDropRequested, this, &MainWindow::onImageDroppedAt);
     updateZoomControl(m_designer->zoomFactor());
     connect(m_designer, &DesignerWidget::badgeSelected, this, [this](BadgeGraphicItem* item){ onBadgeSelected(item); });
     connect(m_designer, &DesignerWidget::selectionChanged, this, [this]{ onSelectionChanged(); });
@@ -1677,12 +1703,12 @@ MainWindow::MainWindow(QWidget* parent)
     m_propGroup = propGroup;
     auto* propForm = new QFormLayout(propGroup);
     propForm->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
-    m_propX = new QDoubleSpinBox; m_propX->setSuffix(" mm"); m_propX->setRange(0, 2000);
-    m_propY = new QDoubleSpinBox; m_propY->setSuffix(" mm"); m_propY->setRange(0, 2000);
-    m_propW = new QDoubleSpinBox; m_propW->setSuffix(" mm"); m_propW->setRange(2, 200);
-    m_propH = new QDoubleSpinBox; m_propH->setSuffix(" mm"); m_propH->setRange(2, 200);
-    m_propImageScale = new QDoubleSpinBox; m_propImageScale->setSuffix(" %"); m_propImageScale->setRange(10, 500); m_propImageScale->setSingleStep(5); m_propImageScale->setValue(100);
-    m_propRotation = new QSlider(Qt::Horizontal); m_propRotation->setRange(0, 360);
+    m_propX = new PanelDoubleSpinBox; m_propX->setSuffix(" mm"); m_propX->setRange(0, 2000);
+    m_propY = new PanelDoubleSpinBox; m_propY->setSuffix(" mm"); m_propY->setRange(0, 2000);
+    m_propW = new PanelDoubleSpinBox; m_propW->setSuffix(" mm"); m_propW->setRange(2, 200);
+    m_propH = new PanelDoubleSpinBox; m_propH->setSuffix(" mm"); m_propH->setRange(2, 200);
+    m_propImageScale = new PanelDoubleSpinBox; m_propImageScale->setSuffix(" %"); m_propImageScale->setRange(10, 500); m_propImageScale->setSingleStep(5); m_propImageScale->setValue(100);
+    m_propRotation = new PanelSlider(Qt::Horizontal); m_propRotation->setRange(0, 360);
     m_propText = new QLineEdit;
     auto* positionRow = new QWidget(propGroup);
     auto* positionLayout = new QHBoxLayout(positionRow);
@@ -1704,7 +1730,7 @@ MainWindow::MainWindow(QWidget* parent)
     propForm->addRow(sizeRow);
     propForm->addRow("画像倍率:", m_propImageScale);
     // Size preset
-    m_sizePreset = new QComboBox;
+    m_sizePreset = new PanelComboBox;
     m_sizePreset->addItems({
         "カスタム",
         "25mm",
@@ -1754,9 +1780,9 @@ MainWindow::MainWindow(QWidget* parent)
     m_colorGroup = colorGroup;
     auto* colorForm = new QFormLayout(colorGroup);
     colorForm->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
-    m_propBrightness = new QSlider(Qt::Horizontal); m_propBrightness->setRange(-100, 100);
-    m_propContrast = new QSlider(Qt::Horizontal); m_propContrast->setRange(-100, 100);
-    m_propSaturation = new QSlider(Qt::Horizontal); m_propSaturation->setRange(-100, 100);
+    m_propBrightness = new PanelSlider(Qt::Horizontal); m_propBrightness->setRange(-100, 100);
+    m_propContrast = new PanelSlider(Qt::Horizontal); m_propContrast->setRange(-100, 100);
+    m_propSaturation = new PanelSlider(Qt::Horizontal); m_propSaturation->setRange(-100, 100);
     auto addAdjustmentRow = [colorGroup, colorForm](const QString& title, QSlider* slider) {
         auto* row = new QWidget(colorGroup);
         auto* rowLayout = new QHBoxLayout(row);
@@ -1837,11 +1863,11 @@ MainWindow::MainWindow(QWidget* parent)
     layerAdjustments->setSpacing(4);
     auto* layerOpacityLabel = new QLabel("不透明度");
     layerAdjustments->addWidget(layerOpacityLabel);
-    m_sliderLayerOpacity = new QSlider(Qt::Horizontal);
+    m_sliderLayerOpacity = new PanelSlider(Qt::Horizontal);
     m_sliderLayerOpacity->setRange(0, 100);
     m_sliderLayerOpacity->setValue(100);
     layerAdjustments->addWidget(m_sliderLayerOpacity);
-    m_comboLayerBlendMode = new QComboBox;
+    m_comboLayerBlendMode = new PanelComboBox;
     m_comboLayerBlendMode->addItems({"Normal", "Multiply", "Screen", "Overlay", "Soft Light", "Add"});
     layerAdjustments->addWidget(m_comboLayerBlendMode);
     layerDetailsLayout->addLayout(layerAdjustments, 1);
@@ -2058,7 +2084,7 @@ MainWindow::MainWindow(QWidget* parent)
     auto* guideLayout = new QVBoxLayout(guideGroup);
     m_chkBleed = new QCheckBox("塗り足し線を表示"); m_chkBleed->setChecked(true);
     m_chkVisible = new QCheckBox("セーフエリアを表示"); m_chkVisible->setChecked(true);
-    m_spinCutLineOffset = new QDoubleSpinBox;
+    m_spinCutLineOffset = new PanelDoubleSpinBox;
     m_spinCutLineOffset->setRange(-3.9, 20.0);
     m_spinCutLineOffset->setDecimals(1);
     m_spinCutLineOffset->setSingleStep(0.1);
@@ -2102,13 +2128,13 @@ MainWindow::MainWindow(QWidget* parent)
     m_chkRulersVisible->setChecked(true);
     m_chkSnapToGrid = new QCheckBox(QStringLiteral("グリッドにスナップ"));
     m_chkSnapToGrid->setChecked(true);
-    m_spinGridSpacing = new QDoubleSpinBox;
+    m_spinGridSpacing = new PanelDoubleSpinBox;
     m_spinGridSpacing->setRange(0.5, 50.0);
     m_spinGridSpacing->setSingleStep(0.5);
     m_spinGridSpacing->setDecimals(1);
     m_spinGridSpacing->setSuffix(QStringLiteral(" mm"));
     m_spinGridSpacing->setValue(m_appSettings.gridSpacingMm);
-    m_comboDefaultBadgeSize = new QComboBox;
+    m_comboDefaultBadgeSize = new PanelComboBox;
     m_comboDefaultBadgeSize->addItem(QStringLiteral("25 mm"), 25.0);
     m_comboDefaultBadgeSize->addItem(QStringLiteral("32 mm"), 32.0);
     m_comboDefaultBadgeSize->addItem(QStringLiteral("44 mm"), 44.0);
@@ -2300,8 +2326,8 @@ MainWindow::MainWindow(QWidget* parent)
     auto* lightForm = new QFormLayout(lightGroup);
     lightForm->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
     m_chkLighting = new QCheckBox("有効にする");
-    m_sliderLightAngle = new QSlider(Qt::Horizontal); m_sliderLightAngle->setRange(0, 360); m_sliderLightAngle->setValue(315);
-    m_sliderLightIntensity = new QSlider(Qt::Horizontal); m_sliderLightIntensity->setRange(0, 100); m_sliderLightIntensity->setValue(45);
+    m_sliderLightAngle = new PanelSlider(Qt::Horizontal); m_sliderLightAngle->setRange(0, 360); m_sliderLightAngle->setValue(315);
+    m_sliderLightIntensity = new PanelSlider(Qt::Horizontal); m_sliderLightIntensity->setRange(0, 100); m_sliderLightIntensity->setValue(45);
     lightForm->addRow(m_chkLighting);
     lightForm->addRow("向き:", m_sliderLightAngle);
     lightForm->addRow("強さ:", m_sliderLightIntensity);
@@ -2311,7 +2337,7 @@ MainWindow::MainWindow(QWidget* parent)
     auto* glitterForm = new QFormLayout(glitterGroup);
     glitterForm->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
     m_chkGlitter = new QCheckBox("有効にする");
-    m_comboGlitter = new QComboBox;
+    m_comboGlitter = new PanelComboBox;
     m_comboGlitter->addItems({"全面輝き", "星型", "雪型"});
     m_comboGlitter->setEnabled(false);
     glitterForm->addRow(m_chkGlitter);
@@ -2334,11 +2360,11 @@ MainWindow::MainWindow(QWidget* parent)
     auto* materialGroup = new QGroupBox("素材");
     auto* materialForm = new QFormLayout(materialGroup);
     materialForm->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
-    m_comboMaterial = new QComboBox;
+    m_comboMaterial = new PanelComboBox;
     m_comboMaterial->addItems({"標準", "マット", "ホログラム", "パール", "ラメ"});
-    m_sliderSpecular = new QSlider(Qt::Horizontal); m_sliderSpecular->setRange(0, 100);
-    m_sliderEnvReflection = new QSlider(Qt::Horizontal); m_sliderEnvReflection->setRange(0, 100);
-    m_sliderGlitterStrength = new QSlider(Qt::Horizontal); m_sliderGlitterStrength->setRange(0, 100);
+    m_sliderSpecular = new PanelSlider(Qt::Horizontal); m_sliderSpecular->setRange(0, 100);
+    m_sliderEnvReflection = new PanelSlider(Qt::Horizontal); m_sliderEnvReflection->setRange(0, 100);
+    m_sliderGlitterStrength = new PanelSlider(Qt::Horizontal); m_sliderGlitterStrength->setRange(0, 100);
     materialForm->addRow("プリセット:", m_comboMaterial);
     materialForm->addRow("ツヤ:", m_sliderSpecular);
     materialForm->addRow("反射:", m_sliderEnvReflection);
@@ -2387,7 +2413,7 @@ MainWindow::MainWindow(QWidget* parent)
         layoutContents->setVisible(expanded);
         layoutHeader->setArrowType(expanded ? Qt::DownArrow : Qt::RightArrow);
     });
-    m_comboPaperSize = new QComboBox;
+    m_comboPaperSize = new PanelComboBox;
     m_comboPaperSize->addItem("A3 (297 x 420 mm)", QSize(297, 420));
     m_comboPaperSize->addItem("A4 (210 x 297 mm)", QSize(210, 297));
     m_comboPaperSize->addItem("A5 (148 x 210 mm)", QSize(148, 210));
@@ -2404,12 +2430,12 @@ MainWindow::MainWindow(QWidget* parent)
     auto* printableDimensionsLabel = new QLabel;
     printableDimensionsLabel->setObjectName(QStringLiteral("paperDimensions"));
     printableDimensionsLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-    m_spinPaperMargin = new QDoubleSpinBox;
+    m_spinPaperMargin = new PanelDoubleSpinBox;
     m_spinPaperMargin->setSuffix(" mm");
     m_spinPaperMargin->setRange(0.0, 100.0);
     m_spinPaperMargin->setValue(5.0);
     m_spinPaperMargin->setToolTip(QStringLiteral("用紙の四辺に設定する余白"));
-    m_spinPaperSpacing = new QDoubleSpinBox;
+    m_spinPaperSpacing = new PanelDoubleSpinBox;
     m_spinPaperSpacing->setSuffix(" mm");
     m_spinPaperSpacing->setRange(0.0, 50.0);
     m_spinPaperSpacing->setValue(1.0);
